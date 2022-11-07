@@ -18,7 +18,7 @@ kill
 # copy this to command line
 cd /path/to/file/   # example
 pkill api-pack
-sleep 2
+sleep 1
 curl localhost:5500/api-pack > api-pack
 nohup ./api-pack > /dev/null 2>&1 &
 ```
