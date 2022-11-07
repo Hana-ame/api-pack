@@ -21,7 +21,7 @@ def main():
         f.write(s)
     os.system('export PATH=$PATH:/usr/local/go/bin;go build')
     # os.system('go build')
-    os.system('python -m http.server')
+    # os.system('python -m http.server')
 
 def file_digest(f:TextIOWrapper) -> str:
     m = hashlib.sha256()    
