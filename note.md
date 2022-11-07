@@ -23,6 +23,12 @@ curl localhost:5500/api-pack > api-pack
 nohup ./api-pack > /dev/null 2>&1 &
 ```
 
+## infonode.go
+
+原来的helper server。
+peers.
+
+
 ## reflect.go
 
 返回http的头
