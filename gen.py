@@ -34,6 +34,7 @@ def print_main_go(apis:list[tuple[str,str]]) -> str:
     txt = ''
     for path, fun_name in apis:
         txt += f'    http.HandleFunc("/{path[0:8]}/", {fun_name})\n'
+        txt += f'    http.HandleFunc("/{fun_name}/", {fun_name})\n'
     return (f'''package main
 
 import (
