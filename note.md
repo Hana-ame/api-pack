@@ -16,12 +16,20 @@ ps -ef | grep api-pack
 kill 
 
 # copy this to command line
-cd /path/to/file/   # example
+DIR=/path/to/dir
+cd $DIR/api-pack/   
 pkill api-pack
 sleep 1
 curl localhost:5500/api-pack > api-pack
 nohup ./api-pack > /dev/null 2>&1 &
 ```
+
+## kv.go
+
+GET
+POST
+DELETE
+没什么好写的
 
 ## infonode.go
 
