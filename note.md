@@ -15,7 +15,7 @@ api-pack目录下
 ps -ef | grep api-pack
 kill 
 
-# copy this to command line
+# copy this to command line, target server
 DIR=/path/to/dir
 cd $DIR/api-pack/   
 pkill api-pack
