@@ -1,5 +1,6 @@
 package helper
 
 // {
-// 	"/":"Handle123"
+// 	"/": "HandleRoot",
+// 	"/{peer}": "HandlePeer"
 // }
