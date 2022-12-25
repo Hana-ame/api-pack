@@ -1,5 +1,14 @@
 # api-pack
-
+    http.HandleFunc("/43df14f5/", img)
+    http.HandleFunc("/img/", img)
+    http.HandleFunc("/c124a90c/", kv)
+    http.HandleFunc("/kv/", kv)
+    http.HandleFunc("/d9e1b17a/", nodeinfo)
+    http.HandleFunc("/nodeinfo/", nodeinfo)
+    http.HandleFunc("/acccfaca/", reflect)
+    http.HandleFunc("/reflect/", reflect)
+    http.HandleFunc("/8b92d4de/", sign)
+    http.HandleFunc("/sign/", sign)
 ## 更新方法
 
 开启go live
@@ -17,6 +26,7 @@ kill
 
 # copy this to command line, target server
 DIR=/path/to/dir
+DIR=/var/www/moonchan # *_secret_no_comment_*
 cd $DIR/api-pack/   
 pkill api-pack
 sleep 1
