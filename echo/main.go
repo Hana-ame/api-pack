@@ -19,9 +19,12 @@ func App() *fiber.App {
 		// var err error
 		buf := bytes.NewBuffer(nil)
 
+		// c.Method() is /echo/fsdf/sdf
 		if _, err := buf.WriteString(fmt.Sprintf("%s %s\n", c.Method(), c.Path())); err != nil {
 			return err
 		}
+
+		// GET /echo/fsdf/sdf, * = fsdf/sdf
 		if _, err := buf.WriteString(fmt.Sprintf("* = %s\n", c.Params("*"))); err != nil {
 			return err
 		}
