@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/Hana-ame/api-pack/echo"
+	"github.com/Hana-ame/api-pack/proxy"
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -18,6 +19,7 @@ func main() {
 	})
 
 	app.Mount("/echo", echo.App())
+	app.Mount("/proxy", proxy.App())
 
 	app.Listen(":3000")
 }
