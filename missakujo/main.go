@@ -1,13 +1,13 @@
 package missakujo
 
 type DelReqCtx struct {
-	host  string `json:"host"`
-	user  string `json:"user"`
-	token string `json:"token"`
-	since string `json:"since"`
-	until string `json:"until"`
+	Host  string `json:"host"`
+	User  string `json:"user"`
+	Token string `json:"token"`
+	Since string `json:"since"`
+	Until string `json:"until"`
 
-	renoteLessThan int `json:"renoteLessThan"`
+	RenoteLessThan int `json:"renoteLessThan"`
 }
 
 const timeForm = "2006-01-02 15:04:05"
