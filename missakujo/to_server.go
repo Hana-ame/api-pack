@@ -7,6 +7,8 @@ import (
 	"io"
 	"log"
 	"net/http"
+
+	"github.com/andybalholm/brotli"
 )
 
 func getApis(
