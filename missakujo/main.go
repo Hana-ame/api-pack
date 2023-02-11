@@ -1,5 +1,9 @@
 package missakujo
 
+import (
+	"github.com/gofiber/fiber/v2"
+)
+
 type DelReqCtx struct {
 	Host  string `json:"host"`
 	User  string `json:"user"`
@@ -8,10 +12,12 @@ type DelReqCtx struct {
 	Until string `json:"until"`
 
 	RenoteLessThan int `json:"renoteLessThan"`
+
+	TimeOffset int `json:"timeOffset"`
 }
 
 const timeForm = "2006-01-02 15:04:05"
 
-func HandleDelete(delReqCtx *DelReqCtx) {
-
+func App() *fiber.App {
+	return nil
 }

@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"fmt"
 	"os"
 	"time"
 )
@@ -36,6 +37,14 @@ func (f *FileWriter) Log(s string) {
 	f.WriteString("\t")
 	f.WriteString(s)
 	f.WriteString("\n")
+}
+
+func (f *FileWriter) Println(a ...any) error {
+	s := fmt.Sprintln(a...)
+	if _, err := f.WriteString(s); err != nil {
+		return err
+	}
+	return nil
 }
 
 func AppendStringToFile(fn string, s string) error {

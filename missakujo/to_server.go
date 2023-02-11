@@ -7,14 +7,97 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strconv"
+	"time"
 
+	"github.com/Hana-ame/api-pack/utils"
 	"github.com/andybalholm/brotli"
+	"github.com/valyala/fastjson"
 )
+
+func HandleDelete(
+	host string,
+	user string,
+	token string,
+	sinceInt, untilInt int64,
+	renotesLessThan int,
+	deleteRenote, deleteReply string,
+	sessionId string,
+) {
+
+	log, err := utils.NewFileWriter(sessionId + ".txt")
+	if err != nil {
+		log.Log(err.Error())
+		return
+	}
+
+	// sinceInt := since.UnixMilli()
+	// untilInt := until.UnixMilli()
+
+	listNotes, _, deleteNotes := getApis(host, token, user, log)
+
+	for sinceInt < untilInt {
+		payload, err := listNotes(sinceInt, untilInt)
+
+		if err != nil {
+			log.Println(err)
+			return
+		}
+
+		var p fastjson.Parser
+		v, err := p.Parse(string(payload))
+		if err != nil {
+			log.Println(err)
+			return
+		}
+
+		i := 0
+		for i < 10 {
+			no := strconv.Itoa(i)
+			id := v.GetStringBytes(no, "id")
+			log.Println(string(id))
+			if string(id) == "" {
+				return
+			}
+			renoteCount := v.GetInt(no, "renoteCount")
+			createdAtRaw := v.GetStringBytes(no, "createdAt")
+			renoteId := v.GetStringBytes(no, "renoteId")
+			replyId := v.GetStringBytes(no, "replyId")
+
+			createdAt, err := time.Parse(time.RFC3339, string(createdAtRaw))
+			if err != nil {
+				log.Println(err)
+			}
+			if untilInt >= createdAt.UnixMilli() {
+				untilInt = createdAt.UnixMilli() - 1
+			}
+
+			if renoteCount < renotesLessThan &&
+				((string(renoteId) == "" && deleteRenote != `true`) ||
+					deleteRenote == `true`) &&
+				((string(replyId) == "" && deleteReply != `true`) ||
+					deleteReply == `true`) {
+
+				log.Println("deleting "+no+" createdAt", createdAt)
+				payload, err := deleteNotes(string(id))
+				for err != nil || fastjson.GetString(payload, "error", "message") != "" {
+					time.Sleep(time.Second * 2)
+					payload, err = deleteNotes(string(id))
+				}
+				time.Sleep(time.Second * 2)
+			}
+
+			i++
+		}
+	}
+
+}
 
 func getApis(
 	host string,
 	token string,
 	userId string,
+	log *utils.FileWriter,
 ) (
 	func(since, until int64) ([]byte, error),
 	func(noteId string) ([]byte, error),
@@ -32,7 +115,7 @@ func getApis(
 			log.Println(`Marshal Error: `, err)
 			return nil, err
 		}
-		return fetchHandler(deleteNotesEndpoint, body)
+		return fetchHandler(deleteNotesEndpoint, body, log)
 	}
 	showNotes := func(noteId string) ([]byte, error) {
 		data := make(map[string]any)
@@ -43,7 +126,7 @@ func getApis(
 			log.Println(`Marshal Error: `, err)
 			return nil, err
 		}
-		return fetchHandler(showNotesEndpoint, body)
+		return fetchHandler(showNotesEndpoint, body, log)
 	}
 	listNotes := func(since, until int64) ([]byte, error) {
 		data := make(map[string]any)
@@ -56,7 +139,7 @@ func getApis(
 			log.Println(`Marshal Error: `, err)
 			return nil, err
 		}
-		return fetchHandler(listNotesEndpoint, body)
+		return fetchHandler(listNotesEndpoint, body, log)
 	}
 
 	return listNotes, showNotes, deleteNotes
@@ -64,7 +147,7 @@ func getApis(
 
 var Client *http.Client = &http.Client{}
 
-func fetchHandler(url string, body []byte) ([]byte, error) {
+func fetchHandler(url string, body []byte, log *utils.FileWriter) ([]byte, error) {
 	log.Println("fetch", url, string(body))
 	req, err := http.NewRequest(
 		http.MethodPost,
@@ -114,13 +197,5 @@ func getPlainTextReader(body io.ReadCloser, encoding string) io.ReadCloser {
 		return io.NopCloser(reader)
 	default:
 		return body
-	}
-}
-
-func xor(a, b bool) bool {
-	if a == b {
-		return false
-	} else {
-		return true
 	}
 }
