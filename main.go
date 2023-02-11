@@ -10,7 +10,7 @@ import (
 
 func main() {
 
-	fmt.Println("0.1.0.1")
+	fmt.Println("0.2.0")
 
 	app := fiber.New()
 
@@ -20,6 +20,7 @@ func main() {
 
 	app.Mount("/echo", echo.App())
 	app.Mount("/proxy", proxy.App())
+	app.Mount("/missakujo", proxy.App())
 
 	app.Listen(":3000")
 }
