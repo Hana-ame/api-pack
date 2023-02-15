@@ -5,6 +5,7 @@ import (
 
 	"github.com/Hana-ame/api-pack/echo"
 	"github.com/Hana-ame/api-pack/proxy"
+	missakujo "github.com/Hana-ame/missakujo/backend"
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -20,7 +21,8 @@ func main() {
 
 	app.Mount("/echo", echo.App())
 	app.Mount("/proxy", proxy.App())
-	app.Mount("/missakujo", proxy.App())
+	app.Mount("/43df14f5", proxy.App())
+	app.Mount("/missakujo", missakujo.App())
 
 	app.Listen(":3000")
 }
