@@ -14,6 +14,9 @@ type DelReqCtx struct {
 	RenoteLessThan int `json:"renoteLessThan"`
 
 	TimeOffset int `json:"timeOffset"`
+
+	DeleteReply  string `json:"deleteReply"`
+	DeleteRenote string `json:"deleteRenote"`
 }
 
 const timeForm = "2006-01-02 15:04:05"
