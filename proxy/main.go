@@ -7,6 +7,7 @@ import (
 
 const dstBase = "https://moonchan.xyz/img/api/download/"
 
+// how to use stream?
 func App() *fiber.App {
 	app := fiber.New()
 

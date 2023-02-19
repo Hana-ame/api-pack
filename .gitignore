@@ -1,4 +1,6 @@
 api-pack
+api-pack.bin
+
 *.pem
 *.md
 *.json

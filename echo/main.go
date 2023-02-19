@@ -25,7 +25,7 @@ func App() *fiber.App {
 		}
 
 		// GET /echo/fsdf/sdf, * = fsdf/sdf
-		if _, err := buf.WriteString(fmt.Sprintf("* = %s\n", c.Params("*"))); err != nil {
+		if _, err := buf.WriteString(fmt.Sprintf("c.Params('*') = '%s'\n", c.Params("*"))); err != nil {
 			return err
 		}
 
