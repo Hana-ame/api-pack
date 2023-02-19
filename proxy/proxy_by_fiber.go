@@ -5,9 +5,10 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/proxy"
 )
 
-const dstBase = "https://moonchan.xyz/img/api/download/"
+const dstBase = "https://moonchan.xyz/img/api/download"
 
 // how to use stream?
+// nop, maybe try the origin one
 func App() *fiber.App {
 	app := fiber.New()
 
@@ -19,7 +20,7 @@ func App() *fiber.App {
 	app.All("/:id/:fn", func(c *fiber.Ctx) error {
 		id := c.Params("id")
 		fn := c.Params("fn")
-		url := dstBase + id + "/" + fn
+		url := dstBase + "/" + id + "/" + fn
 
 		if err := proxy.Do(c, url); err != nil {
 			return err

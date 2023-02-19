@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"net/http"
 
 	"github.com/Hana-ame/api-pack/echo"
 	"github.com/Hana-ame/api-pack/kv"
@@ -27,6 +28,9 @@ func main() {
 	app.Mount("/missakujo", missakujo.App())
 	app.Mount("/8b92d4de", sign.App())
 	app.Mount("/kv", kv.App())
+
+	http.HandleFunc("/43df14f5", proxy.Img)
+	go http.ListenAndServe("127.111.111.112:8080", nil)
 
 	err := app.Listen("127.111.111.111:8080")
 	// err := app.Listen(":3000")

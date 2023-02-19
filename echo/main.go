@@ -29,6 +29,7 @@ func App() *fiber.App {
 			return err
 		}
 
+		// TODO: this should be sorted for easier to read.
 		for k, v := range c.GetReqHeaders() {
 			if _, err := buf.WriteString(fmt.Sprintf("%s: %s\n", k, v)); err != nil {
 				return err
