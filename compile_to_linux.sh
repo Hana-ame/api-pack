@@ -5,3 +5,5 @@ export CGO_ENABLED=0
 
 go build 
 go build -o api-pack.bin
+
+

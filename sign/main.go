@@ -21,12 +21,14 @@ import (
 func getKeys() (*rsa.PrivateKey, *rsa.PublicKey) {
 	privateKeyPem, err := ioutil.ReadFile("privateKey.pem")
 	if err != nil {
-		panic(err)
+		fmt.Fprintf(os.Stderr, "Error from signing: %s\n", err)
+		return nil, nil
 	}
 	block, _ := pem.Decode(privateKeyPem)
 	privateKey, err := x509.ParsePKCS8PrivateKey(block.Bytes)
 	if err != nil {
-		panic(err)
+		fmt.Fprintf(os.Stderr, "Error from signing: %s\n", err)
+		return nil, nil
 	}
 	return privateKey.(*rsa.PrivateKey), &privateKey.(*rsa.PrivateKey).PublicKey
 }

@@ -7,7 +7,6 @@ import (
 	"github.com/Hana-ame/api-pack/echo"
 	"github.com/Hana-ame/api-pack/kv"
 	"github.com/Hana-ame/api-pack/proxy"
-	"github.com/Hana-ame/api-pack/sign"
 	missakujo "github.com/Hana-ame/missakujo/backend"
 	"github.com/gofiber/fiber/v2"
 )
@@ -26,7 +25,7 @@ func main() {
 	app.Mount("/proxy", proxy.App())
 	app.Mount("/43df14f5", proxy.App())
 	app.Mount("/missakujo", missakujo.App())
-	app.Mount("/8b92d4de", sign.App())
+	// app.Mount("/8b92d4de", sign.App())
 	app.Mount("/kv", kv.App())
 
 	http.HandleFunc("/43df14f5", proxy.Img)
