@@ -14,7 +14,7 @@ import (
 
 func main() {
 
-	fmt.Println("0.5.2")
+	fmt.Println("v0.5.3")
 
 	go exproxy.Main("127.111.111.113:8080")
 

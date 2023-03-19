@@ -17,7 +17,7 @@ import (
 
 const (
 	TRUE_HOST = "exhentai.org"
-	COOKIE    = `ipb_member_id=4761956; ipb_pass_hash=16f4dc00b025b2e51f59e2a2365d4490; yay=louder; igneous=fb28508a0; ls=dm_1`
+	COOKIE    = `ipb_member_id=4761956; ipb_pass_hash=16f4dc00b025b2e51f59e2a2365d4490; yay=louder; igneous=fb28508a0; sl=dm_1`
 )
 
 var host map[string]([]string)
