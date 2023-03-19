@@ -5,15 +5,18 @@ import (
 	"net/http"
 
 	"github.com/Hana-ame/api-pack/echo"
+	"github.com/Hana-ame/api-pack/exproxy"
 	"github.com/Hana-ame/api-pack/kv"
-	"github.com/Hana-ame/api-pack/proxy"
+	ipx "github.com/Hana-ame/api-pack/proxy"
 	missakujo "github.com/Hana-ame/missakujo/backend"
 	"github.com/gofiber/fiber/v2"
 )
 
 func main() {
 
-	fmt.Println("0.4.0")
+	fmt.Println("0.5.2")
+
+	go exproxy.Main("127.111.111.113:8080")
 
 	app := fiber.New()
 
@@ -22,13 +25,13 @@ func main() {
 	})
 
 	app.Mount("/echo", echo.App())
-	app.Mount("/proxy", proxy.App())
-	app.Mount("/43df14f5", proxy.App())
+	app.Mount("/proxy", ipx.App())
+	app.Mount("/43df14f5", ipx.App())
 	app.Mount("/missakujo", missakujo.App())
 	// app.Mount("/8b92d4de", sign.App())
 	app.Mount("/kv", kv.App())
 
-	http.HandleFunc("/43df14f5", proxy.Img)
+	http.HandleFunc("/43df14f5", ipx.Img)
 	go http.ListenAndServe("127.111.111.112:8080", nil)
 
 	err := app.Listen("127.111.111.111:8080")
