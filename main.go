@@ -14,10 +14,17 @@ import (
 
 func main() {
 
-	fmt.Println("v0.5.3")
+	fmt.Println("v0.5.5")
 
+	// exhentai proxy
 	go exproxy.Main("127.111.111.113:8080")
+	go exproxy.S("127.111.111.114:8080")
 
+	// img proxy use stream
+	http.HandleFunc("/43df14f5", ipx.Img)
+	go http.ListenAndServe("127.111.111.112:8080", nil)
+
+	// use fiber.
 	app := fiber.New()
 
 	app.Get("/", func(c *fiber.Ctx) error {
@@ -30,9 +37,6 @@ func main() {
 	app.Mount("/missakujo", missakujo.App())
 	// app.Mount("/8b92d4de", sign.App())
 	app.Mount("/kv", kv.App())
-
-	http.HandleFunc("/43df14f5", ipx.Img)
-	go http.ListenAndServe("127.111.111.112:8080", nil)
 
 	err := app.Listen("127.111.111.111:8080")
 	// err := app.Listen(":3000")

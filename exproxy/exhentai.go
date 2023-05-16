@@ -9,6 +9,7 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	"net/http/cookiejar"
 	"regexp"
 	"strings"
 
@@ -25,6 +26,20 @@ var cookie string
 var trueHost string
 var ipArr []string
 var re *regexp.Regexp
+
+var client *http.Client = func() *http.Client {
+	jar, _ := cookiejar.New(nil)
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}
+	return &http.Client{
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+		Transport: tr,
+		Jar:       jar,
+	}
+}()
 
 func Main(listen string) {
 
@@ -43,8 +58,11 @@ func Main(listen string) {
 		"178.175.132.22",
 	}
 
-	http.HandleFunc("/", httpHandler(trueHost))
-	err := http.ListenAndServe(listen, nil)
+	handler := http.NewServeMux()
+	handler.HandleFunc("/", httpHandler(trueHost))
+	server := &http.Server{Addr: listen, Handler: handler}
+
+	err := server.ListenAndServe()
 
 	log.Println(err)
 }
@@ -77,15 +95,15 @@ func getPlainTextReader(body io.ReadCloser, encoding string) io.ReadCloser {
 	}
 }
 func makeRequestWithoutSNI(w http.ResponseWriter, r *http.Request, trueHost string) []byte {
-	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-	}
-	client := &http.Client{
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
-		Transport: tr,
-	}
+	// tr := &http.Transport{
+	// 	TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	// }
+	// client := &http.Client{
+	// 	CheckRedirect: func(req *http.Request, via []*http.Request) error {
+	// 		return http.ErrUseLastResponse
+	// 	},
+	// 	Transport: tr,
+	// }
 
 	newUrl := r.URL
 	newUrl.Host = getIPLocaly(trueHost) // IP
@@ -131,6 +149,7 @@ func makeRequestWithoutSNI(w http.ResponseWriter, r *http.Request, trueHost stri
 		}
 
 		textReplaced := strings.Replace(string(text), "https://exhentai.org/", "/", -1)
+		textReplaced = strings.Replace(textReplaced, "https://s.exhentai.org/", "https://s-ex.moonchan.xyz/", -1)
 		if trueHost == "exhentai.org" && strings.HasPrefix(r.URL.Path, `/s/`) {
 			textReplaced = addWaterFallViewButton(textReplaced)
 		}

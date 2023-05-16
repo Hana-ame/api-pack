@@ -2,11 +2,13 @@ module github.com/Hana-ame/api-pack
 
 go 1.19
 
-require github.com/gofiber/fiber/v2 v2.42.0
+require (
+	github.com/Hana-ame/missakujo v1.0.3-backend
+	github.com/andybalholm/brotli v1.0.4
+	github.com/gofiber/fiber/v2 v2.42.0
+)
 
 require (
-	github.com/Hana-ame/missakujo v1.0.3-backend // indirect
-	github.com/andybalholm/brotli v1.0.4 // indirect
 	github.com/google/uuid v1.3.0 // indirect
 	github.com/klauspost/compress v1.15.15 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
@@ -21,7 +23,5 @@ require (
 	github.com/valyala/fasthttp v1.44.0 // indirect
 	github.com/valyala/fastjson v1.6.4 // indirect
 	github.com/valyala/tcplisten v1.0.0 // indirect
-	golang.org/x/mod v0.7.0 // indirect
 	golang.org/x/sys v0.5.0 // indirect
-	golang.org/x/tools v0.4.0 // indirect
 )
