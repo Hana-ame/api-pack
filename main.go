@@ -14,7 +14,7 @@ import (
 
 func main() {
 
-	fmt.Println("v0.5.5")
+	fmt.Println("v0.5.6")
 
 	// exhentai proxy
 	go exproxy.Main("127.111.111.113:8080")

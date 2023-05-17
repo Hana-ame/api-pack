@@ -15,12 +15,25 @@ func S(listen string) {
 		newUrl.Host = "s.exhentai.org"
 		newUrl.Scheme = "https"
 
-		req, err := http.NewRequest("GET", newUrl.String(), nil)
+		req, err := http.NewRequest(r.Method, newUrl.String(), r.Body)
 		if err != nil {
 			fmt.Println(`Error On NewRequest`)
 			return
 		}
-		req.Header.Set("Cookie", COOKIE)
+		for k, v := range r.Header {
+			switch k {
+			case "Cookie":
+				w.Header().Add(k, COOKIE)
+			case "Origin":
+				w.Header().Add(k, "https://exhentai.org")
+			case "Referer":
+				w.Header().Add(k, "https://exhentai.org/")
+			default:
+				w.Header().Set(k, v[0])
+			}
+		}
+		// log.Println(r.Header)
+		// log.Println(w.Header())
 
 		resp, err := client.Do(req)
 		if err != nil {
@@ -31,8 +44,14 @@ func S(listen string) {
 
 		statusCode := resp.StatusCode
 		for k, v := range resp.Header {
-			w.Header().Set(k, v[0])
+			switch k {
+			case "Access-Control-Allow-Origin":
+				w.Header().Add(k, "https://ex.moonchan.xyz")
+			default:
+				w.Header().Set(k, v[0])
+			}
 		}
+		// log.Println(resp.Header)
 
 		w.WriteHeader(statusCode)
 		io.Copy(w, resp.Body)

@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"math/rand"
 	"net/http"
@@ -142,7 +141,7 @@ func makeRequestWithoutSNI(w http.ResponseWriter, r *http.Request, trueHost stri
 		strings.HasPrefix(contentType, "text/css") {
 
 		body := getPlainTextReader(resp.Body, resp.Header.Get("Content-Encoding"))
-		text, err := ioutil.ReadAll(body)
+		text, err := io.ReadAll(body)
 		if err != nil {
 			fmt.Println(`Error On Read Body`, err)
 			return nil
