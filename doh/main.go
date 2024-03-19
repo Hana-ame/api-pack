@@ -3,6 +3,8 @@ package doh
 import (
 	"api-pack/Tools/myfetch"
 	"net/http"
+	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -61,5 +63,23 @@ func init() {
 		defer resp.Body.Close()
 
 		c.DataFromReader(http.StatusOK, resp.ContentLength, resp.Header.Get("Content-Type"), resp.Body, nil)
+	})
+
+	// timestamps
+	router.GET("/timestamp", func(c *gin.Context) {
+		ts := float64(time.Now().UnixNano()) * (float64(65536) / float64(1_000_000))
+		c.String(http.StatusOK, strconv.Itoa(int(ts)))
+	})
+	router.GET("/timestamp/s", func(c *gin.Context) {
+		ts := (time.Now().UnixNano()) / 1e9
+		c.String(http.StatusOK, strconv.Itoa(int(ts)))
+	})
+	router.GET("/timestamp/ms", func(c *gin.Context) {
+		ts := (time.Now().UnixNano()) / 1e6
+		c.String(http.StatusOK, strconv.Itoa(int(ts)))
+	})
+	router.GET("/timestamp/us", func(c *gin.Context) {
+		ts := (time.Now().UnixNano()) / 1e3
+		c.String(http.StatusOK, strconv.Itoa(int(ts)))
 	})
 }

@@ -2,3 +2,6 @@ api-pack
 *.pem
 *.md
 *.json
+
+*.exe
+gin-pack
