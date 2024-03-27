@@ -2,7 +2,9 @@ package doh
 
 import (
 	"api-pack/Tools/myfetch"
+	"api-pack/functions"
 	"net/http"
+	"path"
 	"strconv"
 	"time"
 
@@ -82,4 +84,9 @@ func init() {
 		ts := (time.Now().UnixNano()) / 1e3
 		c.String(http.StatusOK, strconv.Itoa(int(ts)))
 	})
+
+	// spy pic
+	router.GET("/1x1", functions.FileHandler(func() string {
+		return path.Join("/root", "1x1.png")
+	}))
 }
