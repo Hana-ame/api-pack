@@ -1,3 +1,9 @@
 [submodule "Tools"]
 	path = Tools
 	url = https://github.com/Hana-ame/Tools.git
+[submodule "nyaa-proxy"]
+	path = nyaa-proxy
+	url = https://github.com/Hana-ame/nyaa-proxy.git
+[submodule "sukebei-proxy"]
+	path = sukebei-proxy
+	url = https://github.com/Hana-ame/nyaa-proxy.git
