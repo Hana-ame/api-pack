@@ -89,4 +89,7 @@ func init() {
 	router.GET("/1x1", functions.FileHandler(func() string {
 		return path.Join("/root", "1x1.png")
 	}))
+
+	// spy pic
+	router.GET("/echo", functions.Echo)
 }
