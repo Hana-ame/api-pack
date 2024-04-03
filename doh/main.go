@@ -32,15 +32,7 @@ func init() {
 		requestURL.Host = "dns.cloudflare.com"
 		requestURL.Path = "/dns-query"
 
-		header := make(map[string]string)
-		for k, v := range c.Request.Header {
-			if len(v) < 1 {
-				continue
-			}
-			header[k] = v[0]
-		}
-
-		resp, err := myfetch.Fetch(http.MethodGet, requestURL.String(), header, nil)
+		resp, err := myfetch.Fetch(http.MethodGet, requestURL.String(), c.Request.Header, nil)
 		if err != nil {
 			c.AbortWithError(500, err)
 			return
@@ -50,6 +42,7 @@ func init() {
 
 		c.DataFromReader(http.StatusOK, resp.ContentLength, resp.Header.Get("Content-Type"), resp.Body, nil)
 	})
+
 	router.POST("/doh", func(c *gin.Context) {
 		// resp, err := http.Get("https://dns.cloudflare.com/dns-query")
 		requestURL := c.Request.URL
