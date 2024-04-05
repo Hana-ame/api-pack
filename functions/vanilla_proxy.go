@@ -2,12 +2,21 @@ package functions
 
 import (
 	"api-pack/Tools/myfetch"
+	"net/http"
 
 	"github.com/gin-gonic/gin"
 )
 
-// 没测试
-func ListenAndServe(host string, path func(path string) string) func(c *gin.Context) {
+func isSkip(key string) bool {
+	return key == "access-control-allow-origin" ||
+		key == "access-control-allow-credentials" ||
+		key == "content-security-policy" ||
+		key == "content-security-policy-report-only" ||
+		key == "clear-site-data"
+}
+
+// 不能用，path不行
+func Proxy(host string, path func(path string) string, extraHeaders http.Header) func(c *gin.Context) {
 	// return this function
 	return func(c *gin.Context) {
 		// path function
@@ -20,11 +29,15 @@ func ListenAndServe(host string, path func(path string) string) func(c *gin.Cont
 		url := c.Request.URL
 		url.Scheme = "https" // 给https访问但是被nginx反代的时候这里是啥。
 		url.Host = host
-		url.Path = path(c.Request.URL.Path)
+		url.Path = path(c.Request.URL.String())
+
+		for k, vs := range extraHeaders {
+			c.Request.Header[k] = vs
+		}
 
 		resp, err := myfetch.Fetch(c.Request.Method, url.String(), c.Request.Header, nil)
 		if err != nil {
-			c.AbortWithError(500, err)
+			c.AbortWithError(http.StatusInternalServerError, err)
 			return
 		}
 
@@ -32,13 +45,17 @@ func ListenAndServe(host string, path func(path string) string) func(c *gin.Cont
 
 		extraHeaders := make(map[string]string)
 		for k, vs := range resp.Header {
+			if isSkip(k) {
+				continue
+			}
 			for i, v := range vs {
 				if i > 0 {
-					continue
+					break
 				}
 				extraHeaders[k] = v
 			}
 		}
+		extraHeaders["access-control-allow-origin"] = "*"
 
 		c.DataFromReader(resp.StatusCode, resp.ContentLength, resp.Header.Get("Content-Type"), resp.Body, extraHeaders)
 	}
