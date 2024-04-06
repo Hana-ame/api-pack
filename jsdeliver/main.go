@@ -14,5 +14,5 @@ func Router() *gin.Engine {
 
 func init() {
 	router = gin.Default()
-	router.GET("/*whatever", functions.Proxy("www.jsdelivr.com", nil, nil))
+	router.GET("/*any", functions.Proxy("www.jsdelivr.com", nil, nil))
 }
