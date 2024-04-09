@@ -77,6 +77,10 @@ func init() {
 		ts := (time.Now().UnixNano()) / 1e3
 		c.String(http.StatusOK, strconv.Itoa(int(ts)))
 	})
+	router.GET("/timestamp/ns", func(c *gin.Context) {
+		ts := (time.Now().UnixNano())
+		c.String(http.StatusOK, strconv.Itoa(int(ts)))
+	})
 
 	// spy pic
 	router.GET("/1x1", functions.FileHandler(func() string {
@@ -85,4 +89,5 @@ func init() {
 
 	// spy pic
 	router.GET("/echo", functions.Echo)
+	router.GET("/icon/:host", functions.Icon)
 }
