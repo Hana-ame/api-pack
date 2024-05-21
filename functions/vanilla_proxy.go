@@ -15,16 +15,18 @@ func isSkip(key string) bool {
 		key == "clear-site-data"
 }
 
+func ProxyPath(path string) string {
+	return path
+}
+
 // 不能用，path行了，mime不行。
 func Proxy(host string, path func(path string) string, extraHeaders http.Header) func(c *gin.Context) {
+	if path == nil {
+		path = ProxyPath
+	}
 	// return this function
 	return func(c *gin.Context) {
-		// path function
-		if path == nil {
-			path = func(path string) string {
-				return path
-			}
-		}
+
 		// generate url
 		url := c.Request.URL
 		url.Scheme = "https" // 给https访问但是被nginx反代的时候这里是啥。

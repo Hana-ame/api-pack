@@ -5,10 +5,23 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/http"
 	"sort"
 
 	"github.com/gin-gonic/gin"
 )
+
+func EchoJSON(c *gin.Context) {
+
+	o := orderedmap.New()
+	for k, v := range c.Request.Header {
+		o.Set(k, v)
+	}
+	o.SortKeys(sort.Strings)
+
+	c.JSONP(http.StatusOK, o)
+
+}
 
 func Echo(c *gin.Context) {
 
