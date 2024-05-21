@@ -90,4 +90,5 @@ func init() {
 	// spy pic
 	router.GET("/echo", functions.Echo)
 	router.GET("/icon/:host", functions.Icon)
+	router.POST("/icon/:host", functions.CreateIcon)
 }

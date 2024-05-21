@@ -6,9 +6,18 @@ import (
 	_ "api-pack/nyaa-proxy"
 	_ "api-pack/sukebei-proxy"
 	"log"
+
+	"github.com/joho/godotenv"
 )
 
 func main() {
+	{
+		err := godotenv.Load()
+		if err != nil {
+			log.Fatal("Error loading .env file")
+		}
+	}
+
 	go func() {
 		err := jsdeliver.Router().Run("127.111.111.200:8080")
 		log.Println(err)

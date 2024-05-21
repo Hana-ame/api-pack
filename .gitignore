@@ -1,6 +1,7 @@
 api-pack
 *.pem
 *.json
+.env
 
 *.exe
 *.bin
