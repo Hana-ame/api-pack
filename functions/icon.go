@@ -10,7 +10,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/mat/besticon/v3/ico"
 	"github.com/nfnt/resize"
-	"gorm.io/gorm"
 )
 
 type myKV struct {
@@ -19,11 +18,7 @@ type myKV struct {
 }
 
 // init a db
-var iconDB = func() *MyDBInterface {
-	db := NewDBInterface("ginpack/icons.db", &gorm.Config{})
-	db.AutoMigrate(new(myKV))
-	return db
-}()
+var iconDB *MyDBInterface
 
 func Icon(c *gin.Context) {
 	host := c.Param("host")

@@ -1,3 +1,4 @@
+// 记得用不了。
 package jsdeliver
 
 import (
