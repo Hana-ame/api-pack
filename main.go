@@ -8,6 +8,8 @@ import (
 	"fmt"
 
 	_ "github.com/joho/godotenv/autoload"
+
+	_ "api-pack/files/autorun"
 )
 
 func main() {

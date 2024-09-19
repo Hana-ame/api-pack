@@ -13,7 +13,9 @@ import (
 
 func main() {
 	r := gin.Default()
-	r.GET("/ws", wsHandler)
+	r.GET("/ws/server", ServerHandler)
+	r.GET("/ws", ClientWsHandler)
+	r.GET("/api/:sha1sum/:filename", ClientRESTHandler)
 	r.GET("/ping", func(c *gin.Context) {
 		c.JSON(200, gin.H{
 			"message": "pong",
