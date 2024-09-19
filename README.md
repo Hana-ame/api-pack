@@ -11,3 +11,6 @@ package's name should not be `main`
 
 
 其实应该能写出通用 jarloader的， 懒得写了。先放着吧。
+
+
+老要`go get`干脆写一起好

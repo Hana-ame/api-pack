@@ -6,3 +6,6 @@ api-pack
 *.exe
 *.bin
 gin-pack
+
+
+*.db
