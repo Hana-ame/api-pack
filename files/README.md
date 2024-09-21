@@ -1,3 +1,6 @@
+websocket反代传输用的，另一半在Tools/wsmux里面
+websocket的客户端还没做，在Tools/
+
 指令
 ```sh
 go  test -timeout 300m -run ^TestXxx$ api-pack/files -v

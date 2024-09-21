@@ -49,8 +49,15 @@ func ServerHandler(c *gin.Context) {
 	server = nil
 }
 
-// TODO
+// not tested
 func ClientWsHandler(c *gin.Context) {
+	if server == nil {
+		c.AbortWithError(http.StatusBadGateway, fmt.Errorf("server not ready"))
+		return
+	}
+
+	sha1sum := c.Param("sha1sum")
+
 	// 升级HTTP连接为WebSocket连接
 	ws, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
@@ -59,10 +66,10 @@ func ClientWsHandler(c *gin.Context) {
 	}
 	defer ws.Close()
 
-	_, data, _ := ws.ReadMessage()
+	// _, sha1sum, _ := ws.ReadMessage() // sha1sum
 	muc, _ := server.Dial()
 	// buf := make([]byte, 1024)
-	muc.Write(data)
+	muc.Write([]byte(sha1sum))
 	defer muc.Close()
 
 	for {

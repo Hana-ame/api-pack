@@ -11,12 +11,15 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/mat/besticon/v3 v3.18.0
 	github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646
-	golang.org/x/sys v0.18.0
+	golang.org/x/sys v0.25.0
 	gorm.io/driver/postgres v1.5.7
 	gorm.io/gorm v1.25.10
 )
 
 require (
+	github.com/antchfx/htmlquery v1.3.2 // indirect
+	github.com/antchfx/xpath v1.3.1 // indirect
+	github.com/buckket/go-blurhash v1.1.0 // indirect
 	github.com/bytedance/sonic v1.11.2 // indirect
 	github.com/chenzhuoyu/base64x v0.0.0-20230717121745-296ad89f973d // indirect
 	github.com/chenzhuoyu/iasm v0.9.1 // indirect
@@ -28,6 +31,7 @@ require (
 	github.com/go-playground/universal-translator v0.18.1 // indirect
 	github.com/go-playground/validator/v10 v10.19.0 // indirect
 	github.com/goccy/go-json v0.10.2 // indirect
+	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/google/uuid v1.5.0 // indirect
 	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/hashicorp/yamux v0.1.1 // indirect
@@ -50,10 +54,10 @@ require (
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/ugorji/go/codec v1.2.12 // indirect
 	golang.org/x/arch v0.7.0 // indirect
-	golang.org/x/crypto v0.21.0 // indirect
+	golang.org/x/crypto v0.27.0 // indirect
 	golang.org/x/image v0.15.0 // indirect
-	golang.org/x/net v0.22.0 // indirect
-	golang.org/x/text v0.14.0 // indirect
+	golang.org/x/net v0.29.0 // indirect
+	golang.org/x/text v0.18.0 // indirect
 	golang.org/x/xerrors v0.0.0-20231012003039-104605ab7028 // indirect
 	google.golang.org/protobuf v1.33.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect

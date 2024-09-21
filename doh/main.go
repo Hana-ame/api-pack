@@ -1,6 +1,7 @@
 package doh
 
 import (
+	"api-pack/Tools/handlerFunc"
 	"api-pack/Tools/myfetch"
 	"api-pack/functions"
 	"net/http"
@@ -20,6 +21,7 @@ func Router() *gin.Engine {
 func init() {
 	router = gin.Default()
 
+	// get ip
 	router.GET("/", func(c *gin.Context) {
 		ip := c.GetHeader("CF-Connecting-IP")
 		c.String(http.StatusOK, ip)
@@ -50,7 +52,7 @@ func init() {
 		requestURL.Host = "dns.cloudflare.com"
 		requestURL.Path = "/dns-query"
 
-		resp, err := http.Post("https://moonchan.xyz/doh", c.ContentType(), c.Request.Body)
+		resp, err := http.Post(requestURL.String(), c.ContentType(), c.Request.Body)
 		if err != nil {
 			c.AbortWithError(500, err)
 			return
@@ -83,13 +85,14 @@ func init() {
 	})
 
 	// spy pic
-	router.GET("/1x1", functions.FileHandler(func() string {
+	router.GET("/1x1", handlerFunc.FileHandler(func() string {
 		return path.Join("/root", "1x1.png")
 	}))
 
 	// spy pic
-	router.GET("/echo", functions.Echo)
-	router.GET("/echo.json", functions.EchoJSON)
+	router.GET("/echo", handlerFunc.Echo)
+	router.GET("/echo.json", handlerFunc.EchoJSON)
+
 	router.GET("/icon/:host", functions.Icon)
-	router.POST("/icon/:host", functions.CreateIcon)
+	// router.POST("/icon/:host", functions.CreateIcon)
 }

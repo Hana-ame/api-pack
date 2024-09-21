@@ -9,7 +9,7 @@ import (
 func init() {
 	r := gin.Default()
 	r.GET("/ws/server", files.ServerHandler)
-	r.GET("/ws", files.ClientWsHandler)
+	r.GET("/ws/:sha1sum", files.ClientWsHandler)
 	r.GET("/api/:sha1sum/:filename", files.ClientRESTHandler)
 	r.GET("/ping", func(c *gin.Context) {
 		c.JSON(200, gin.H{

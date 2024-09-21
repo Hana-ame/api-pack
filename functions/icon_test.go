@@ -1,7 +1,6 @@
 package functions
 
 import (
-	"fmt"
 	"testing"
 )
 
@@ -10,11 +9,11 @@ func TestGetIcon(t *testing.T) {
 	getIcon(url)
 }
 
-func TestPostUrl(t *testing.T) {
-	var a any
-	a = getIconUrl("moonchan.xyz")
-	fmt.Println(a)
-	updateIconUrl("moonchan.xyz", "overrided..")
-	a = getIconUrl("moonchan.xyz")
-	fmt.Println(a)
-}
+// func TestPostUrl(t *testing.T) {
+// 	var a any
+// 	a = getIconUrl("moonchan.xyz")
+// 	fmt.Println(a)
+// 	updateIconUrl("moonchan.xyz", "overrided..")
+// 	a = getIconUrl("moonchan.xyz")
+// 	fmt.Println(a)
+// }

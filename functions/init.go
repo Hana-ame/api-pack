@@ -13,6 +13,7 @@ func init() {
 		}
 	}()
 
+	// 两个参数都没用的。
 	iconDB = NewDBInterface("ginpack/icons.db", &gorm.Config{})
 	iconDB.AutoMigrate(new(myKV))
 }
