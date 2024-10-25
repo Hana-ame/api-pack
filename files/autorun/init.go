@@ -1,7 +1,7 @@
 package autorun
 
 import (
-	"api-pack/files"
+	"github.com/Hana-ame/api-pack/files"
 
 	"github.com/gin-gonic/gin"
 )

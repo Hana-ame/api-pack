@@ -1,7 +1,7 @@
 package functions
 
 import (
-	"api-pack/Tools/myfetch"
+	"github.com/Hana-ame/api-pack/Tools/myfetch"
 	"net/http"
 
 	"github.com/gin-gonic/gin"

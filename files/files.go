@@ -1,10 +1,11 @@
 package files
 
 import (
-	db "api-pack/Tools/db_filehash"
 	"io"
 	"net/http"
 	"os"
+
+	db "github.com/Hana-ame/api-pack/Tools/db_filehash"
 
 	"path/filepath"
 

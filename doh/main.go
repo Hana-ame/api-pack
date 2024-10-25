@@ -1,9 +1,9 @@
 package doh
 
 import (
-	"api-pack/Tools/handlerFunc"
-	"api-pack/Tools/myfetch"
-	"api-pack/functions"
+	"github.com/Hana-ame/api-pack/Tools/handlerFunc"
+	"github.com/Hana-ame/api-pack/Tools/myfetch"
+	"github.com/Hana-ame/api-pack/functions"
 	"net/http"
 	"path"
 	"strconv"

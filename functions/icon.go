@@ -1,9 +1,9 @@
 package functions
 
 import (
-	tools "api-pack/Tools"
-	"api-pack/Tools/myfetch"
 	"fmt"
+	tools "github.com/Hana-ame/api-pack/Tools"
+	"github.com/Hana-ame/api-pack/Tools/myfetch"
 	"image"
 	"image/png"
 	"net/http"
