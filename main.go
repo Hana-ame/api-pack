@@ -15,7 +15,7 @@ func main() {
 	// go jsdeliver.Router().Run("127.111.111.200:8080")
 	// go doh.Router().Run("127.111.111.120:8080")
 
-	google.Router().Run("127.24.10.25:8080")
+	google.Router().Run("0.0.0.0:8080")
 	// stuck
 	// sucker := make(chan struct{})
 	// <-sucker

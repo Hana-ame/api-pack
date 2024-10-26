@@ -8,7 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-const HOST = "https://www.google.com"
+const HOST = "https://www.google.com.hk"
 const COOKIE_FILE = "cookie.txt"
 
 var router *gin.Engine
@@ -23,7 +23,7 @@ func init() {
 
 	router.Any("/*path", func(c *gin.Context) {
 		method := c.Request.Method
-		path := c.Param("name")
+		path := c.Request.URL.String()
 		headers := c.Request.Header
 		body, err := c.GetRawData()
 		if err != nil {
@@ -31,8 +31,9 @@ func init() {
 			return
 		}
 		requestHeaders := make(mycurl.Headers, 0).LoadFromHttpHeader(headers)
-		status, responseHeaders, resp, err := mycurl.Curl(method, c.Request.UserAgent(), requestHeaders, COOKIE_FILE, HOST+path, bytes.NewReader(body),
-			"--interface", "2001:470:c:6c::5")
+		status, responseHeaders, resp, err := mycurl.Curl(method, c.Request.UserAgent(), requestHeaders, COOKIE_FILE, HOST+path, (body),
+			"-L")
+		// "--interface", "2001:470:c:6c::5")
 		if err != nil {
 			c.AbortWithError(http.StatusBadGateway, err)
 			return
