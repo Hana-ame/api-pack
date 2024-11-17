@@ -40,14 +40,14 @@ func main() {
 		// o.Set("referer", referer)
 		// o.Set("cookie", cookie)
 		header := tools.NewHeader(nil)
-		header.Add("Accept", c.GetHeader("Accept"))
-		header.Add("Authorization", c.GetHeader("Authorization"))
-		header.Add("Content-Type", c.GetHeader("X-Content-Type"))
-		header.Add("Content-Length", c.GetHeader("X-Content-Length"))
+		// header.Add("Accept", c.GetHeader("Accept")) 这个也能pass
+		// header.Add("Authorization", c.GetHeader("Authorization")) 这个能pass
+		// header.Add("Content-Type", c.GetHeader("X-Content-Type")) 这个只是判断是不是简单请求
+		// header.Add("Content-Length", c.GetHeader("X-Content-Length")) 这个要来干嘛
 		header.Add("Host", c.GetHeader("X-Host"))
 		header.Add("Origin", c.GetHeader("X-Origin"))
 		header.Add("Referer", c.GetHeader("X-Referer"))
-		header.Add("Cookie", c.GetHeader("X-Cookie"))
+		// header.Add("Cookie", c.GetHeader("X-Cookie")) // 这个是candidates传的
 
 		resp, err := myfetch.Fetch(c.Request.Method, "https://"+host+path,
 			(header.Header), c.Request.Body)
