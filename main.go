@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/http"
+	"slices"
 
 	tools "github.com/Hana-ame/api-pack/Tools"
 	myfetch "github.com/Hana-ame/api-pack/Tools/my_fetch"
@@ -58,6 +59,14 @@ func main() {
 
 		// 为什么自带的方法这么贵物
 		for k, vs := range resp.Header {
+			if slices.Contains([]string{
+				"access-control-allow-origin",
+			}, k) {
+				continue
+			}
+			if c.Writer.Header().Get(k) != "" {
+				continue
+			}
 			for _, v := range vs {
 				c.Writer.Header().Add(k, v)
 			}
