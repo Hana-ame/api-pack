@@ -2,7 +2,6 @@ package main
 
 import (
 	"net/http"
-	"slices"
 
 	tools "github.com/Hana-ame/api-pack/Tools"
 	myfetch "github.com/Hana-ame/api-pack/Tools/my_fetch"
@@ -11,6 +10,12 @@ import (
 )
 
 func main() {
+
+	go ExhProxy()
+	go SProxy()
+	go NyaaProxy()
+	go SukebeiProxy()
+
 	// 创建 Gin 引擎
 	r := gin.Default()
 
@@ -23,47 +28,42 @@ func main() {
 			defer c.Request.Body.Close()
 		}
 
+		// 读取 URL 参数
 		path := c.Request.URL.String()
-		host := c.GetHeader("X-Host")
+
+		host := tools.NewSlice(
+			c.Query("proxy_host"),
+			c.GetHeader("X-Host"),
+		).FirstNonDefaultValue("")
 		if host == "" {
 			c.AbortWithStatus(http.StatusNoContent)
 			return
 		}
-		// origin := c.GetHeader("X-Origin")
-		// referer := c.GetHeader("X-Referer")
-		// cookie := c.GetHeader("X-Cookie")
 
-		// o := orderedmap.New()
-		// o.Set("path", path)
-		// o.Set("host", host)
-		// o.Set("origin", origin)
-		// o.Set("referer", referer)
-		// o.Set("cookie", cookie)
 		header := tools.NewHeader(nil)
-		// header.Add("Accept", c.GetHeader("Accept")) 这个也能pass
-		// header.Add("Authorization", c.GetHeader("Authorization")) 这个能pass
-		// header.Add("Content-Type", c.GetHeader("X-Content-Type")) 这个只是判断是不是简单请求
-		// header.Add("Content-Length", c.GetHeader("X-Content-Length")) 这个要来干嘛
-		header.Add("Host", c.GetHeader("X-Host"))
+
+		header.Add("Host", host)
+		header.Add("Origin", c.Query("proxy_origin"))
 		header.Add("Origin", c.GetHeader("X-Origin"))
+		header.Add("Referer", c.Query("proxy_referer"))
 		header.Add("Referer", c.GetHeader("X-Referer"))
+		header.Set("Cookie", tools.NewSlice(
+			c.Query("proxy_cookie"),
+			c.GetHeader("X-Cookie"),
+			header.Get("Cookie"),
+		).FirstNonDefaultValue(""))
 		// header.Add("Cookie", c.GetHeader("X-Cookie")) // 这个是candidates传的
 
 		resp, err := myfetch.Fetch(c.Request.Method, "https://"+host+path,
 			(header.Header), c.Request.Body)
 		if err != nil {
-			c.AbortWithError(http.StatusInternalServerError, err)
+			c.AbortWithError(http.StatusBadRequest, err)
 			return
 		}
 		defer resp.Body.Close()
 
 		// 为什么自带的方法这么贵物
 		for k, vs := range resp.Header {
-			if slices.Contains([]string{
-				"access-control-allow-origin",
-			}, k) {
-				continue
-			}
 			if c.Writer.Header().Get(k) != "" {
 				continue
 			}
@@ -71,7 +71,12 @@ func main() {
 				c.Writer.Header().Add(k, v)
 			}
 		}
-		c.DataFromReader(http.StatusOK, resp.ContentLength, resp.Header.Get("Content-Type"), resp.Body, nil)
+		c.DataFromReader(resp.StatusCode, resp.ContentLength, resp.Header.Get("Content-Type"), resp.Body, map[string]string{
+			"X-Host":    host,
+			"X-Origin":  header.Get("Origin"),
+			"X-Referer": header.Get("Referer"),
+			"X-Cookie":  header.Get("Cookie"),
+		})
 	})
 
 	// 启动服务器
