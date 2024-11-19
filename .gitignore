@@ -4,3 +4,4 @@ api-pack
 *.json
 
 api-pack-new
+__debug_bin*

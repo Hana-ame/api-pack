@@ -3,17 +3,35 @@ package main
 import (
 	"bytes"
 	"io"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
 
 	tools "github.com/Hana-ame/api-pack/Tools"
+	"github.com/Hana-ame/api-pack/Tools/debug"
 	myfetch "github.com/Hana-ame/api-pack/Tools/my_fetch"
+	"github.com/Hana-ame/api-pack/Tools/my_fetch/my_if"
 	middleware "github.com/Hana-ame/api-pack/Tools/my_gin_middleware"
 	"github.com/gin-gonic/gin"
 )
 
 func ExhProxy() {
+	debug.LogLevel = debug.Fatal
+
+	prefix := "2001:470:c:6c:"
+
+	ips := []net.IP{my_if.NewAddr(prefix), my_if.NewAddr(prefix)}
+	ipidx := 0
+
+	my_if.AddAddr(ips[ipidx].String())
+	cp := myfetch.NewClientPool([]*http.Client{
+		myfetch.NewV6Client(ips[ipidx]),
+	})
+
+	mf := myfetch.NewFetcher(nil, cp)
+
+	// gin
 	r := gin.Default()
 
 	// 设置 CORS 头
@@ -37,25 +55,40 @@ func ExhProxy() {
 		header := tools.NewHeader(c.Request.Header)
 		header.Set("Cookie", "ipb_member_id=5698562; ipb_pass_hash=154e574fd19294c32f905fe187cbdad1; yay=louder; igneous=5eevdxac75hpx71cv")
 
-		resp, err := myfetch.Fetch(
+		resp, err := mf.Fetch(
 			c.Request.Method, "https://"+host+path,
 			(header.Header), c.Request.Body)
 		if err != nil {
+			debug.E("why", err.Error())
+			c.Header("X-Error", err.Error())
 			c.AbortWithError(http.StatusBadRequest, err)
 			return
 		}
 		defer resp.Body.Close()
 
+		if mf.Count() > 1000 {
+			ipidx = (ipidx + 1) % len(ips)
+			my_if.DelAddr(ips[ipidx].String())
+			ips[ipidx] = my_if.NewAddr(prefix)
+			my_if.AddAddr(ips[ipidx].String())
+			newCp := myfetch.NewClientPool([]*http.Client{myfetch.NewV6Client(ips[ipidx])})
+			mf.SetClientPool(newCp)
+		}
+
 		// resp 获得 text
 		// 需要override https://exhentai.org/s/, https://exhentai.org/g/
 		body, err := myfetch.ResponseToReader(resp)
 		if err != nil {
+			debug.E("why", err.Error())
+			c.Header("X-Error", err.Error())
 			c.AbortWithError(http.StatusBadGateway, err)
 			return
 		}
 
 		data, err := io.ReadAll(body)
 		if err != nil {
+			debug.E("why", err.Error())
+			c.Header("X-Error", err.Error())
 			c.AbortWithError(http.StatusBadGateway, err)
 			return
 		}
@@ -65,6 +98,7 @@ func ExhProxy() {
 		// data = bytes.ReplaceAll(data, []byte("https://exhentai.org/z/"), []byte("https://"+"ex.nmbyd1.top"+"/z/"))
 		// data = bytes.ReplaceAll(data, []byte("https://exhentai.org/img/"), []byte("https://"+"ex.nmbyd1.top"+"/img/"))
 		data = bytes.ReplaceAll(data, []byte("https://exhentai.org"), []byte("https://"+"ex.nmbyd1.top"))
+		c.Header("X-Debug", c.GetHeader("Host"))
 		data = bytes.ReplaceAll(data, []byte("https://s.exhentai.org"), []byte("https://s-ex.moonchan.xyz"))
 		if strings.HasPrefix(path, `/s/`) {
 			data = []byte(addWaterFallViewButton(string(data)))
@@ -85,7 +119,9 @@ func ExhProxy() {
 
 		// log.Println(string(data[:1024]))
 		if len(data) == 0 {
-			c.AbortWithStatus(http.StatusBadGateway)
+			debug.E("why", resp.Status)
+			c.Header("X-Error", resp.Status)
+			c.AbortWithStatus(resp.StatusCode)
 			return
 		}
 
@@ -150,7 +186,6 @@ func SProxy() {
 			}
 		}
 
-		// 为什么会报多写。
 		c.DataFromReader(resp.StatusCode, resp.ContentLength, resp.Header.Get("Content-Type"), resp.Body, map[string]string{
 			"X-Host":    host,
 			"X-Origin":  header.Get("Origin"),

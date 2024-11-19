@@ -20,7 +20,23 @@ func NyaaProxy() {
 	var client *http.Client = func() *http.Client {
 		jar, _ := cookiejar.New(nil)
 		u, _ := url.Parse("nyaa.si")
-		jar.SetCookies(u, []*http.Cookie{})
+		jar.SetCookies(u, []*http.Cookie{{
+			Name:  "__ddg1_",
+			Value: "NJm1gjWf3g8gHO4Pnsfo",
+			Path:  "/",
+		}, {
+			Name:  "__ddg8_",
+			Value: "DTC69NGk8W8EhWY0",
+			Path:  "/",
+		}, {
+			Name:  "__ddg9_",
+			Value: "45.130.22.56",
+			Path:  "/",
+		}, {
+			Name:  "__ddg10_",
+			Value: "1732013313",
+			Path:  "/",
+		}})
 		tr := &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 		}
@@ -88,6 +104,8 @@ func NyaaProxy() {
 				c.Writer.Header().Add(k, v)
 			}
 		}
+		c.Writer.Header().Del("X-Forward-For")
+		c.Writer.Header().Del("X-Forwarded-Proto")
 
 		// log.Println(string(data[:1024]))
 		if len(data) == 0 {
