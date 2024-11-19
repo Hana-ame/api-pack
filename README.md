@@ -4,7 +4,7 @@
 
 
 
-> import "api-pack/nyaa-proxy" is a program, not an importable packagego list
+> import "github.com/Hana-ame/api-pack/nyaa-proxy" is a program, not an importable packagego list
 
 package's name should not be `main`
 

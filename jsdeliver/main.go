@@ -2,7 +2,7 @@
 package jsdeliver
 
 import (
-	"api-pack/functions"
+	"github.com/Hana-ame/api-pack/functions"
 
 	"github.com/gin-gonic/gin"
 )

@@ -1,7 +1,7 @@
 package files
 
 import (
-	db "api-pack/Tools/db_filehash"
+	db "github.com/Hana-ame/api-pack/Tools/db_filehash"
 
 	_ "github.com/mattn/go-sqlite3"
 

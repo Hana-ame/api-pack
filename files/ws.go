@@ -8,7 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 
-	wsmux "api-pack/Tools/ws_mux"
+	wsmux "github.com/Hana-ame/api-pack/Tools/ws_mux"
 )
 
 var upgrader = websocket.Upgrader{
