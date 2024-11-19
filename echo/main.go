@@ -3,6 +3,7 @@ package echo
 import (
 	"bytes"
 	"fmt"
+	"sort"
 
 	"github.com/gofiber/fiber/v2"
 )
@@ -30,8 +31,15 @@ func App() *fiber.App {
 		}
 
 		// TODO: this should be sorted for easier to read.
-		for k, v := range c.GetReqHeaders() {
-			if _, err := buf.WriteString(fmt.Sprintf("%s: %s\n", k, v)); err != nil {
+		headers := c.GetReqHeaders()
+		keys := make([]string, 0, len(headers))
+		for k := range headers {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+
+		for _, k := range keys {
+			if _, err := buf.WriteString(fmt.Sprintf("%s: %s\n", k, headers[k])); err != nil {
 				return err
 			}
 		}
