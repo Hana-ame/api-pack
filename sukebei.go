@@ -77,7 +77,7 @@ func SukebeiProxy() {
 			return
 		}
 
-		data = bytes.ReplaceAll(data, []byte("https://"+host), []byte("https://"+c.GetHeader("Host")))
+		data = bytes.ReplaceAll(data, []byte("https://"+host), []byte{})
 
 		// 为什么自带的方法这么贵物
 		c.Writer.Header().Set("Content-Encoding", "identity")

@@ -1,3 +1,6 @@
+// 在 .env 中设置 EXHENTAI_PROXY_COOKIE 项目以更新Cookie
+// 默认 "ipb_member_id=5698562; ipb_pass_hash=154e574fd19294c32f905fe187cbdad1; yay=louder; igneous=5eevdxac75hpx71cv"
+
 package main
 
 import (
@@ -6,6 +9,8 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
+	"os"
 	"strconv"
 	"strings"
 
@@ -15,6 +20,7 @@ import (
 	"github.com/Hana-ame/api-pack/Tools/my_fetch/my_if"
 	middleware "github.com/Hana-ame/api-pack/Tools/my_gin_middleware"
 	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
 	"golang.org/x/net/html"
 
 	"github.com/antchfx/htmlquery"
@@ -37,9 +43,14 @@ func findOneAndSelectAttr(top *html.Node, expr string, name string) (v string, e
 }
 
 func ExhProxy() {
+	godotenv.Load(".env")
+
 	debug.LogLevel = debug.Fatal
 
-	prefix := "2001:470:c:6c:"
+	prefix := tools.NewSlice(
+		os.Getenv("EXHENTAI_PROXY_PREFIX"),
+		"2001:470:c:6c:",
+	).FirstNonDefaultValue("")
 
 	ips := []net.IP{my_if.NewAddr(prefix), my_if.NewAddr(prefix)}
 	ipidx := 0
@@ -69,11 +80,28 @@ func ExhProxy() {
 		path := c.Request.URL.String()
 
 		if strings.HasPrefix(path, "/api") {
-			c.AbortWithStatus(http.StatusServiceUnavailable)
+			c.AbortWithStatus(http.StatusGone)
 			return
 		}
 
-		if strings.HasPrefix(path, "/fullimage") {
+		// 遗留问题, image这个path重定向到用param的请求
+		if strings.HasPrefix(path, "/image") {
+			path := strings.TrimPrefix(path, "/image")
+			parsedURL, err := url.Parse(path)
+			if err != nil {
+				c.Header("X-Error", parsedURL.String())
+				c.AbortWithStatus(http.StatusBadRequest)
+				return
+			}
+			query := parsedURL.Query()
+			query.Set("redirect_to", "image")
+			parsedURL.RawQuery = query.Encode()
+
+			c.Redirect(http.StatusMovedPermanently, parsedURL.String())
+			return
+		}
+
+		if strings.HasPrefix(path, "/fullimg") {
 			c.AbortWithStatus(http.StatusForbidden)
 			return
 		}
@@ -81,7 +109,14 @@ func ExhProxy() {
 		host := "exhentai.org"
 
 		header := tools.NewHeader(c.Request.Header)
-		header.Set("Cookie", "ipb_member_id=5698562; ipb_pass_hash=154e574fd19294c32f905fe187cbdad1; yay=louder; igneous=5eevdxac75hpx71cv")
+		header.Set(
+			"Cookie",
+			tools.NewSlice(
+				c.GetHeader("X-Cookie"),
+				os.Getenv("EXHENTAI_PROXY_COOKIE"),
+				"ipb_member_id=5698562; ipb_pass_hash=154e574fd19294c32f905fe187cbdad1; yay=louder; igneous=5eevdxac75hpx71cv",
+			).FirstNonDefaultValue(""),
+		)
 
 		resp, err := mf.Fetch(
 			c.Request.Method, "https://"+host+path,
@@ -125,7 +160,7 @@ func ExhProxy() {
 		// data = bytes.ReplaceAll(data, []byte("https://exhentai.org/s/"), []byte("https://"+"ex.nmbyd1.top"+"/s/"))
 		// data = bytes.ReplaceAll(data, []byte("https://exhentai.org/z/"), []byte("https://"+"ex.nmbyd1.top"+"/z/"))
 		// data = bytes.ReplaceAll(data, []byte("https://exhentai.org/img/"), []byte("https://"+"ex.nmbyd1.top"+"/img/"))
-		data = bytes.ReplaceAll(data, []byte("https://exhentai.org"), []byte("https://"+"ex.nmbyd1.top"))
+		data = bytes.ReplaceAll(data, []byte("https://exhentai.org"), []byte{})
 		c.Header("X-Debug", c.GetHeader("Host"))
 		data = bytes.ReplaceAll(data, []byte("https://s.exhentai.org"), []byte("https://s-ex.moonchan.xyz"))
 		if strings.HasPrefix(path, `/s/`) {
@@ -149,6 +184,7 @@ func ExhProxy() {
 		// 没经过类型检查
 		if c.Query("redirect_to") == "image" {
 			if !strings.HasPrefix(path, "/s/") {
+				c.Header("X-Error", path)
 				c.AbortWithStatus(http.StatusServiceUnavailable)
 				return
 			}
@@ -166,7 +202,7 @@ func ExhProxy() {
 
 		// log.Println(string(data[:1024]))
 		if len(data) == 0 {
-			debug.E("why", resp.Status)
+			debug.E("why", resp.Status) // 304
 			c.Header("X-Error", resp.Status)
 			c.AbortWithStatus(resp.StatusCode)
 			return
