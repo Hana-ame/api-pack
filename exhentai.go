@@ -9,6 +9,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/cookiejar"
 	"net/url"
 	"os"
 	"strconv"
@@ -42,6 +43,25 @@ func findOneAndSelectAttr(top *html.Node, expr string, name string) (v string, e
 	return
 }
 
+var jar = func() *cookiejar.Jar {
+	jar, _ := cookiejar.New(nil)
+	u, _ := url.Parse("exhentai.org")
+	jar.SetCookies(u, []*http.Cookie{{
+		Name:  "ipb_member_id",
+		Value: "5698562",
+		Path:  "/",
+	}, {
+		Name:  "ipb_pass_hash",
+		Value: "154e574fd19294c32f905fe187cbdad1",
+		Path:  "/",
+	}, {
+		Name:  "igneous",
+		Value: "5eevdxac75hpx71cv",
+		Path:  "/",
+	}})
+	return jar
+}()
+
 func ExhProxy() {
 	godotenv.Load(".env")
 
@@ -57,7 +77,7 @@ func ExhProxy() {
 
 	my_if.AddAddr(ips[ipidx].String())
 	cp := myfetch.NewClientPool([]*http.Client{
-		myfetch.NewV6Client(ips[ipidx]),
+		myfetch.NewV6Client(ips[ipidx], jar),
 	})
 
 	mf := myfetch.NewFetcher(nil, cp)
@@ -106,6 +126,11 @@ func ExhProxy() {
 			return
 		}
 
+		if strings.HasPrefix(path, "/archiver.php") {
+			c.AbortWithStatus(http.StatusForbidden)
+			return
+		}
+
 		host := "exhentai.org"
 
 		header := tools.NewHeader(c.Request.Header)
@@ -124,17 +149,17 @@ func ExhProxy() {
 		if err != nil {
 			debug.E("why", err.Error())
 			c.Header("X-Error", err.Error())
-			c.AbortWithError(http.StatusBadRequest, err)
+			c.AbortWithError(http.StatusBadGateway, err)
 			return
 		}
 		defer resp.Body.Close()
 
-		if mf.Count() > 1000 {
+		if mf.Count() > 250 {
 			ipidx = (ipidx + 1) % len(ips)
 			my_if.DelAddr(ips[ipidx].String())
 			ips[ipidx] = my_if.NewAddr(prefix)
 			my_if.AddAddr(ips[ipidx].String())
-			newCp := myfetch.NewClientPool([]*http.Client{myfetch.NewV6Client(ips[ipidx])})
+			newCp := myfetch.NewClientPool([]*http.Client{myfetch.NewV6Client(ips[ipidx], jar)})
 			mf.SetClientPool(newCp)
 		}
 
@@ -166,6 +191,7 @@ func ExhProxy() {
 		if strings.HasPrefix(path, `/s/`) {
 			data = []byte(addWaterFallViewButton(string(data)))
 		}
+		data = addFloatingIframeAtRightBottom(data)
 
 		// 为什么自带的方法这么贵物
 		c.Writer.Header().Set("Content-Encoding", "identity")
@@ -342,4 +368,65 @@ func addWaterFallViewButton(html string) string {
 	  }
 	document.getElementById("waterfall").addEventListener("click", execWaterfall, false); 
 	</script>`, 1)
+}
+
+func addFloatingIframeAtRightBottom(html []byte) []byte {
+	html = bytes.Replace(html,
+		[]byte("</head>"),
+		[]byte(`
+	<style>
+		#moonchan-floating-iframe {
+			position: fixed;
+			bottom: 20px; /* 距离底部的距离 */
+			right: 20px; /* 距离右侧的距离 */
+			width: 300px; /* 根据需要调整宽度 */
+			height: 200px; /* 根据需要调整高度 */
+			border: 2px solid #ccc; /* 边框样式 */
+			border-radius: 8px; /* 圆角边框 */
+			box-shadow: 0 0 10px rgba(0, 0, 0, 0.2); /* 阴影效果 */
+			z-index: 100000; /* 确保在最上层 */
+			overflow: hidden; /* 确保内容不超出边框 */
+		}       
+		#moonchan-close-button {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background-color: red; /* 按钮颜色 */
+            color: white; /* 字体颜色 */
+            border: none;
+            border-radius: 50%;
+            width: 25px;
+            height: 25px;
+            cursor: pointer;
+            font-size: 18px;
+            line-height: 25px; /* 垂直居中 */
+            text-align: center;
+        }
+	</style>
+</head>`), 1)
+	html = bytes.Replace(html,
+		[]byte("<body>"),
+		[]byte(`<body>
+    <div id="moonchan-floating-iframe">
+        <button id="moonchan-close-button" onclick="moonchanCloseIframe()">×</button>
+        <iframe src="https://moonchan.xyz/iframe.html" style="border: none; width: 100%; height: calc(100% - 30px);"></iframe>
+    </div>
+
+    <script>
+        // 检查 localStorage 中的值
+        if (localStorage.getItem('iframeClosed') !== 'true') {
+            document.getElementById('moonchan-floating-iframe').style.display = 'block';
+        } else {
+            document.getElementById('moonchan-floating-iframe').style.display = 'none';
+        }
+
+        function moonchanCloseIframe() {
+            const iframeContainer = document.getElementById('moonchan-floating-iframe');
+            iframeContainer.style.display = 'none'; // 隐藏 iframe
+            localStorage.setItem('iframeClosed', 'true'); // 设置 localStorage 标记
+        }
+    </script>
+
+`), 1)
+	return html
 }

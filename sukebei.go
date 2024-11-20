@@ -78,6 +78,10 @@ func SukebeiProxy() {
 		}
 
 		data = bytes.ReplaceAll(data, []byte("https://"+host), []byte{})
+		// remove ad
+		data = bytes.ReplaceAll(data, []byte(`a.magsrv.com`), []byte(`localhost`))
+		data = bytes.ReplaceAll(data, []byte(`<div id="dd4ce992-766a-4df0-a01d-86f13e43fd61"></div>`), []byte{})
+		data = bytes.ReplaceAll(data, []byte(`<div id="e7a3ddb6-efae-4f74-a719-607fdf4fa1a1"></div>`), []byte{})
 
 		// 为什么自带的方法这么贵物
 		c.Writer.Header().Set("Content-Encoding", "identity")
