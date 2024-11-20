@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -14,6 +15,7 @@ import (
 	"github.com/Hana-ame/api-pack/Tools/my_fetch/my_if"
 	middleware "github.com/Hana-ame/api-pack/Tools/my_gin_middleware"
 	"github.com/gin-gonic/gin"
+	"golang.org/x/net/html"
 
 	"github.com/antchfx/htmlquery"
 )
@@ -57,6 +59,9 @@ func ExhProxy() {
 
 	// 定义一个简单的 GET 路由
 	r.Any("/*any", func(c *gin.Context) {
+		c.Header("X-Debug-Request-Host", c.Request.Host)     // 要设置 Host $http_host
+		c.Header("X-Debug-Header-Host", c.GetHeader("Host")) // never
+
 		if c.Request.Body != nil {
 			defer c.Request.Body.Close()
 		}
@@ -65,6 +70,11 @@ func ExhProxy() {
 
 		if strings.HasPrefix(path, "/api") {
 			c.AbortWithStatus(http.StatusServiceUnavailable)
+			return
+		}
+
+		if strings.HasPrefix(path, "/fullimage") {
+			c.AbortWithStatus(http.StatusForbidden)
 			return
 		}
 
@@ -150,7 +160,8 @@ func ExhProxy() {
 			}
 
 			image, err := findOneAndSelectAttr(doc, "//img[@id='img']", "src")
-			return c.Redirect(image, http.StatusFound) 
+			c.Redirect(http.StatusFound, image)
+			return
 		}
 
 		// log.Println(string(data[:1024]))

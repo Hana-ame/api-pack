@@ -59,6 +59,9 @@ func NyaaProxy() {
 
 	// 定义一个简单的 GET 路由
 	r.Any("/*any", func(c *gin.Context) {
+		c.Header("X-Debug-Request-Host", c.Request.Host)     // 要设置 Host $http_host
+		c.Header("X-Debug-Header-Host", c.GetHeader("Host")) // never
+
 		if c.Request.Body != nil {
 			defer c.Request.Body.Close()
 		}
@@ -109,7 +112,7 @@ func NyaaProxy() {
 
 		// log.Println(string(data[:1024]))
 		if len(data) == 0 {
-			c.AbortWithStatus(http.StatusBadGateway)
+			c.AbortWithStatus(resp.StatusCode)
 			return
 		}
 

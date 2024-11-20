@@ -24,6 +24,9 @@ func main() {
 
 	// 定义一个简单的 GET 路由
 	r.Any("/*any", func(c *gin.Context) {
+		c.Header("X-Debug-Request-Host", c.Request.Host)     // 要设置 Host $http_host
+		c.Header("X-Debug-Header-Host", c.GetHeader("Host")) // never
+
 		if c.Request.Body != nil {
 			defer c.Request.Body.Close()
 		}
@@ -36,8 +39,13 @@ func main() {
 			c.GetHeader("X-Host"),
 		).FirstNonDefaultValue("")
 		if host == "" {
+			c.Header("X-Error", "host not found")
 			c.AbortWithStatus(http.StatusNoContent)
 			return
+		}
+		if c.Request.Host == host {
+			c.Header("X-Error", c.Request.Host)
+			c.AbortWithStatus(http.StatusLoopDetected)
 		}
 
 		header := tools.NewHeader(nil)
@@ -57,6 +65,7 @@ func main() {
 		resp, err := myfetch.Fetch(c.Request.Method, "https://"+host+path,
 			(header.Header), c.Request.Body)
 		if err != nil {
+			c.Header("X-Error", err.Error())
 			c.AbortWithError(http.StatusBadRequest, err)
 			return
 		}
@@ -71,6 +80,7 @@ func main() {
 				c.Writer.Header().Add(k, v)
 			}
 		}
+
 		c.DataFromReader(resp.StatusCode, resp.ContentLength, resp.Header.Get("Content-Type"), resp.Body, map[string]string{
 			"X-Host":    host,
 			"X-Origin":  header.Get("Origin"),
