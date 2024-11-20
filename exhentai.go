@@ -14,7 +14,25 @@ import (
 	"github.com/Hana-ame/api-pack/Tools/my_fetch/my_if"
 	middleware "github.com/Hana-ame/api-pack/Tools/my_gin_middleware"
 	"github.com/gin-gonic/gin"
+
+	"github.com/antchfx/htmlquery"
 )
+
+const InnerText string = "INNER_TEXT"
+
+func findOneAndSelectAttr(top *html.Node, expr string, name string) (v string, err error) {
+	elem := htmlquery.FindOne(top, expr)
+	if elem == nil {
+		err = errors.New(expr + ":" + name + "is null")
+		return
+	}
+	if name == InnerText {
+		v = htmlquery.InnerText(elem)
+	} else {
+		v = htmlquery.SelectAttr(elem, name)
+	}
+	return
+}
 
 func ExhProxy() {
 	debug.LogLevel = debug.Fatal
@@ -115,6 +133,24 @@ func ExhProxy() {
 			for _, v := range vs {
 				c.Writer.Header().Add(k, v)
 			}
+		}
+
+		// 获得param，redirect_to=image
+		// 没经过类型检查
+		if c.Query("redirect_to") == "image" {
+			if !strings.HasPrefix(path, "/s/") {
+				c.AbortWithStatus(http.StatusServiceUnavailable)
+				return
+			}
+			doc, err := htmlquery.Parse(bytes.NewReader(data))
+			if err != nil {
+				c.Header("X-Error", err.Error())
+				c.AbortWithStatus(http.StatusBadGateway)
+				return
+			}
+
+			image, err := findOneAndSelectAttr(doc, "//img[@id='img']", "src")
+			return c.Redirect(image, http.StatusFound) 
 		}
 
 		// log.Println(string(data[:1024]))
