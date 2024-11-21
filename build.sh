@@ -27,4 +27,6 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
+# ~/script/ssh-vps.sh "pkill api-pack-new; rm -f api-pack-new; mv temp api-pack-new; nohup ./api-pack-new &"
+
 echo "done"

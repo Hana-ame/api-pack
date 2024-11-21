@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/http"
+	"slices"
 	"strings"
 
 	tools "github.com/Hana-ame/api-pack/Tools"
@@ -73,7 +74,7 @@ func main() {
 		defer resp.Body.Close()
 
 		// 为什么自带的方法这么贵物
-		exposeHeaders := make([]string, len(resp.Header))
+		exposeHeaders := make([]string, 0, len(resp.Header))
 		for k, vs := range resp.Header {
 			exposeHeaders = append(exposeHeaders, k)
 			if c.Writer.Header().Get(k) != "" {
@@ -83,6 +84,7 @@ func main() {
 				c.Writer.Header().Add(k, v)
 			}
 		}
+		slices.Sort(exposeHeaders)
 		c.Writer.Header().Add("Access-Control-Expose-Headers", strings.Join(exposeHeaders, ", "))
 
 		c.DataFromReader(resp.StatusCode, resp.ContentLength, resp.Header.Get("Content-Type"), resp.Body, map[string]string{

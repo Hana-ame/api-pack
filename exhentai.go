@@ -14,6 +14,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	tools "github.com/Hana-ame/api-pack/Tools"
 	"github.com/Hana-ame/api-pack/Tools/debug"
@@ -162,7 +163,10 @@ func ExhProxy() {
 
 		if mf.Count() > 250 {
 			ipidx = (ipidx + 1) % len(ips)
-			my_if.DelAddr(ips[ipidx].String())
+			defer func(ip string) {
+				time.Sleep(60 * time.Second)
+				my_if.DelAddr(ip)
+			}(ips[ipidx].String())
 			ips[ipidx] = my_if.NewAddr(prefix)
 			my_if.AddAddr(ips[ipidx].String())
 			newCp := myfetch.NewClientPool([]*http.Client{myfetch.NewV6Client(ips[ipidx], jar)})
