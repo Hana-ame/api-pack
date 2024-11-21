@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/http"
+	"strings"
 
 	tools "github.com/Hana-ame/api-pack/Tools"
 	myfetch "github.com/Hana-ame/api-pack/Tools/my_fetch"
@@ -72,7 +73,9 @@ func main() {
 		defer resp.Body.Close()
 
 		// 为什么自带的方法这么贵物
+		exposeHeaders := make([]string, len(resp.Header))
 		for k, vs := range resp.Header {
+			exposeHeaders = append(exposeHeaders, k)
 			if c.Writer.Header().Get(k) != "" {
 				continue
 			}
@@ -80,6 +83,7 @@ func main() {
 				c.Writer.Header().Add(k, v)
 			}
 		}
+		c.Writer.Header().Add("Access-Control-Expose-Headers", strings.Join(exposeHeaders, ", "))
 
 		c.DataFromReader(resp.StatusCode, resp.ContentLength, resp.Header.Get("Content-Type"), resp.Body, map[string]string{
 			"X-Host":    host,

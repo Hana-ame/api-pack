@@ -43,24 +43,27 @@ func findOneAndSelectAttr(top *html.Node, expr string, name string) (v string, e
 	return
 }
 
-var jar = func() *cookiejar.Jar {
-	jar, _ := cookiejar.New(nil)
-	u, _ := url.Parse("exhentai.org")
-	jar.SetCookies(u, []*http.Cookie{{
-		Name:  "ipb_member_id",
-		Value: "5698562",
-		Path:  "/",
-	}, {
-		Name:  "ipb_pass_hash",
-		Value: "154e574fd19294c32f905fe187cbdad1",
-		Path:  "/",
-	}, {
-		Name:  "igneous",
-		Value: "5eevdxac75hpx71cv",
-		Path:  "/",
-	}})
-	return jar
-}()
+// 大概可以，没试过
+//
+//	var jar = func() *cookiejar.Jar {
+//		jar, _ := cookiejar.New(nil)
+//		u, _ := url.Parse("exhentai.org")
+//		jar.SetCookies(u, []*http.Cookie{{
+//			Name:  "ipb_member_id",
+//			Value: "5698562",
+//			Path:  "/",
+//		}, {
+//			Name:  "ipb_pass_hash",
+//			Value: "154e574fd19294c32f905fe187cbdad1",
+//			Path:  "/",
+//		}, {
+//			Name:  "igneous",
+//			Value: "5eevdxac75hpx71cv",
+//			Path:  "/",
+//		}})
+//		return jar
+//	}()
+var jar *cookiejar.Jar = nil
 
 func ExhProxy() {
 	godotenv.Load(".env")
@@ -84,6 +87,9 @@ func ExhProxy() {
 
 	// gin
 	r := gin.Default()
+
+	// 设置block
+	r.Use(middleware.BlockMiddleware())
 
 	// 设置 CORS 头
 	r.Use(middleware.CORSMiddleware())

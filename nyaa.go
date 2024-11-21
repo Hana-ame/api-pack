@@ -54,6 +54,9 @@ func NyaaProxy() {
 
 	r := gin.Default()
 
+	// 设置block
+	r.Use(middleware.BlockMiddleware())
+
 	// 设置 CORS 头
 	r.Use(middleware.CORSMiddleware())
 
