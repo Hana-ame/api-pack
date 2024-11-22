@@ -17,7 +17,7 @@ fi
 # 使用 SCP 传输文件到远程服务器
 ~/script/scp.sh -P26275 api-pack-new root@bwh.moonchan.xyz:~/temp
 exit 0
-# pkill api-pack-new; rm -f api-pack-new; mv temp api-pack-new; nohup ./api-pack-new &
+# ls temp && { pkill api-pack-new; rm -f api-pack-new; mv temp api-pack-new; ls -l api-pack-new; nohup ./api-pack-new & } 
 
 ~/script/scp.sh api-pack-new root@vps.moonchan.xyz:~/temp
 

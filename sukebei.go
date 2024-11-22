@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
+	"slices"
 	"strconv"
 
 	tools "github.com/Hana-ame/api-pack/Tools"
@@ -39,7 +40,7 @@ func SukebeiProxy() {
 	r := gin.Default()
 
 	// 设置block
-	r.Use(middleware.BlockMiddleware())
+	// r.Use(middleware.BlockMiddleware())
 
 	// 设置 CORS 头
 	r.Use(middleware.CORSMiddleware())
@@ -58,6 +59,12 @@ func SukebeiProxy() {
 		host := "sukebei.nyaa.si"
 
 		header := tools.NewHeader(c.Request.Header)
+
+		// 如果不在 "CN", "" 中的任意一个。
+		if !slices.Contains([]string{"CN", ""}, c.Request.Header.Get("Cf-Ipcountry")) {
+			c.Redirect(http.StatusFound, "https://"+host+path)
+			return
+		}
 
 		resp, err := mf.Fetch(
 			c.Request.Method, "https://"+host+path,
