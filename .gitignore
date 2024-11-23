@@ -2,6 +2,7 @@ api-pack
 *.pem
 *.md
 *.json
+*.env
 
 api-pack-new
 __debug_bin*
