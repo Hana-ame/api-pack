@@ -12,6 +12,7 @@ import (
 	"net/http/cookiejar"
 	"net/url"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -148,7 +149,30 @@ func ExhProxy() {
 			return
 		}
 
-	}, middleware.BlockMiddleware(), func(c *gin.Context) {
+	}, func(c *gin.Context) {
+
+		// 获取请求中的 Cookie
+		cookie, err := c.Cookie("pass")
+
+		// 如果 Cookie 包含 pass=pass，直接继续处理请求
+		if err == nil && cookie == "pass" {
+			return
+		}
+
+		if c.Query("redirect_to") != "" {
+			return
+		}
+
+		// 如果不在 "CN", "" 中的任意一个。
+		if !slices.Contains([]string{"CN", ""}, c.Request.Header.Get("Cf-Ipcountry")) {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
+				"message":      "禁止访问",
+				"Cf-Ipcountry": c.Request.Header.Get("Cf-Ipcountry"),
+			})
+			return
+		}
+
+	}, func(c *gin.Context) {
 		c.Header("X-Debug-Request-Host", c.Request.Host)     // 要设置 Host $http_host
 		c.Header("X-Debug-Header-Host", c.GetHeader("Host")) // never
 

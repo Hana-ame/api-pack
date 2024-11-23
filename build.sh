@@ -30,3 +30,7 @@ fi
 # ~/script/ssh-vps.sh "pkill api-pack-new; rm -f api-pack-new; mv temp api-pack-new; nohup ./api-pack-new &"
 
 echo "done"
+
+
+#  inet6 2001:470:c:6c:5e91:ce30:f0bc:14
+#  inet6 2001:470:c:6c:50ca:ade3:f0bc:15
