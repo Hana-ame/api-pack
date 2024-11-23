@@ -459,7 +459,7 @@ func addFloatingIframeAtRightBottom(html []byte) []byte {
 	html = bytes.Replace(html,
 		[]byte("<body>"),
 		[]byte(`<body>
-    <div id="moonchan-floating-iframe">
+    <div id="moonchan-floating-iframe" style="display: none;">
         <button id="moonchan-close-button" onclick="moonchanCloseIframe()">×</button>
         <iframe src="https://moonchan.xyz/iframe.html" style="border: none; width: 100%; height: calc(100% - 30px);"></iframe>
     </div>
@@ -468,8 +468,6 @@ func addFloatingIframeAtRightBottom(html []byte) []byte {
         // 检查 localStorage 中的值
         if (localStorage.getItem('iframeClosed') !== 'true') {
             document.getElementById('moonchan-floating-iframe').style.display = 'block';
-        } else {
-            document.getElementById('moonchan-floating-iframe').style.display = 'none';
         }
 
         function moonchanCloseIframe() {
