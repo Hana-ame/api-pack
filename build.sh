@@ -32,5 +32,5 @@ fi
 echo "done"
 
 
-#  inet6 2001:470:c:6c:5e91:ce30:f0bc:14
-#  inet6 2001:470:c:6c:50ca:ade3:f0bc:15
+#  ifconfig sit1 inet6 del  2001:470:c:6c:5e91:ce30:f0bc:14/64
+#  ifconfig sit1 inet6 del  2001:470:c:6c:50ca:ade3:f0bc:15/64

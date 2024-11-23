@@ -164,7 +164,7 @@ func ExhProxy() {
 		}
 
 		// 如果不在 "CN", "" 中的任意一个。
-		if !slices.Contains([]string{"CN", ""}, c.Request.Header.Get("Cf-Ipcountry")) {
+		if !slices.Contains([]string{"CN"}, c.Request.Header.Get("Cf-Ipcountry")) {
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
 				"message":      "禁止访问",
 				"Cf-Ipcountry": c.Request.Header.Get("Cf-Ipcountry"),
