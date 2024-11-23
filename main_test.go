@@ -27,3 +27,7 @@ func TestXxx111(t *testing.T) {
 
 	r.Run("127.24.11.23:8080")
 }
+
+func TestExhProxy(t *testing.T) {
+	ExhProxy()
+}

@@ -44,6 +44,19 @@ func findOneAndSelectAttr(top *html.Node, expr string, name string) (v string, e
 	return
 }
 
+func findAll(top *html.Node, expr, name string) (v []string) {
+	elemArray := htmlquery.Find(top, expr)
+	v = make([]string, len(elemArray))
+	for i, e := range elemArray {
+		if name == InnerText {
+			v[i] = htmlquery.InnerText(e)
+		} else {
+			v[i] = htmlquery.SelectAttr(e, name)
+		}
+	}
+	return
+}
+
 // 大概可以，没试过
 //
 //	var jar = func() *cookiejar.Jar {
@@ -84,36 +97,43 @@ func ExhProxy() {
 		myfetch.NewV6Client(ips[ipidx], jar),
 	})
 
+	// cp = nil // debug
 	mf := myfetch.NewFetcher(nil, cp)
 
 	// gin
 	r := gin.Default()
 
 	// 设置block
-	r.Use(middleware.BlockMiddleware())
+	// r.Use(middleware.BlockMiddleware()) // 改到下面
 
 	// 设置 CORS 头
 	r.Use(middleware.CORSMiddleware())
 
 	// 定义一个简单的 GET 路由
 	r.Any("/*any", func(c *gin.Context) {
-		c.Header("X-Debug-Request-Host", c.Request.Host)     // 要设置 Host $http_host
-		c.Header("X-Debug-Header-Host", c.GetHeader("Host")) // never
 
-		if c.Request.Body != nil {
-			defer c.Request.Body.Close()
-		}
-		// 读取 URL 参数
-		path := c.Request.URL.String()
-
-		if strings.HasPrefix(path, "/api") {
+		if strings.HasPrefix(c.Request.URL.String(), "/api") {
 			c.AbortWithStatus(http.StatusGone)
 			return
 		}
 
+		if strings.HasPrefix(c.Request.URL.String(), "/fullimg") {
+			c.AbortWithStatus(http.StatusForbidden)
+			return
+		}
+
+		if strings.HasPrefix(c.Request.URL.String(), "/archiver.php") {
+			c.AbortWithStatus(http.StatusForbidden)
+			return
+		}
+
+		if strings.HasPrefix(c.Request.URL.String(), "/static/") {
+			c.Redirect(http.StatusFound, "https://moonchan.xyz"+c.Request.URL.String())
+		}
+
 		// 遗留问题, image这个path重定向到用param的请求
-		if strings.HasPrefix(path, "/image") {
-			path := strings.TrimPrefix(path, "/image")
+		if strings.HasPrefix(c.Request.URL.String(), "/image") {
+			path := strings.TrimPrefix(c.Request.URL.String(), "/image")
 			parsedURL, err := url.Parse(path)
 			if err != nil {
 				c.Header("X-Error", parsedURL.String())
@@ -128,15 +148,15 @@ func ExhProxy() {
 			return
 		}
 
-		if strings.HasPrefix(path, "/fullimg") {
-			c.AbortWithStatus(http.StatusForbidden)
-			return
-		}
+	}, middleware.BlockMiddleware(), func(c *gin.Context) {
+		c.Header("X-Debug-Request-Host", c.Request.Host)     // 要设置 Host $http_host
+		c.Header("X-Debug-Header-Host", c.GetHeader("Host")) // never
 
-		if strings.HasPrefix(path, "/archiver.php") {
-			c.AbortWithStatus(http.StatusForbidden)
-			return
+		if c.Request.Body != nil {
+			defer c.Request.Body.Close()
 		}
+		// 读取 URL 参数
+		path := c.Request.URL.String()
 
 		host := "exhentai.org"
 
@@ -218,12 +238,7 @@ func ExhProxy() {
 
 		// 获得param，redirect_to=image
 		// 没经过类型检查
-		if c.Query("redirect_to") == "image" {
-			if !strings.HasPrefix(path, "/s/") {
-				c.Header("X-Error", path)
-				c.AbortWithStatus(http.StatusServiceUnavailable)
-				return
-			}
+		if strings.HasPrefix(path, "/s/") && c.Query("redirect_to") == "image" {
 			doc, err := htmlquery.Parse(bytes.NewReader(data))
 			if err != nil {
 				c.Header("X-Error", err.Error())
@@ -236,7 +251,34 @@ func ExhProxy() {
 			return
 		}
 
-		// log.Println(string(data[:1024]))
+		if strings.HasPrefix(path, "/g/") && c.Query("redirect_to") == "cover" {
+			doc, err := htmlquery.Parse(bytes.NewReader(data))
+			if err != nil {
+				c.Header("X-Error", err.Error())
+				c.AbortWithStatus(http.StatusBadGateway)
+				return
+			}
+			hrefArray := findAll(doc, "//a", "href")
+			for _, href := range hrefArray {
+				if strings.HasPrefix(href, "/s/") {
+					parsedURL, err := url.Parse(href)
+					if err != nil {
+						c.Header("X-Error", parsedURL.String())
+						c.AbortWithStatus(http.StatusBadRequest)
+						return
+					}
+					query := parsedURL.Query()
+					query.Set("redirect_to", "image")
+					parsedURL.RawQuery = query.Encode()
+
+					c.Redirect(http.StatusFound, parsedURL.String())
+					return
+				}
+			}
+			c.AbortWithStatus(http.StatusNotFound)
+			return
+		}
+
 		if len(data) == 0 {
 			debug.E("why", resp.Status) // 304
 			c.Header("X-Error", resp.Status)
