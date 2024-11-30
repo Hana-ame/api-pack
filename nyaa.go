@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"slices"
 	"strconv"
+	"strings"
 
 	tools "github.com/Hana-ame/api-pack/Tools"
 	myfetch "github.com/Hana-ame/api-pack/Tools/my_fetch"
@@ -90,6 +91,15 @@ func NyaaProxy() {
 			return
 		}
 		defer resp.Body.Close()
+
+		if strings.HasPrefix(path, "/download") {
+			c.DataFromReader(resp.StatusCode, resp.ContentLength, resp.Header.Get("Content-Type"), resp.Body, map[string]string{
+				"X-Host":    host,
+				"X-Origin":  header.Get("Origin"),
+				"X-Referer": header.Get("Referer"),
+				"X-Cookie":  header.Get("Cookie"),
+			})
+		}
 
 		body, err := myfetch.ResponseToReader(resp)
 		if err != nil {

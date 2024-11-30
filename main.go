@@ -38,6 +38,7 @@ func main() {
 			c.Query("proxy_host"),
 			c.GetHeader("X-Host"),
 		).FirstNonDefaultValue("")
+
 		if host == "" {
 			c.Header("X-Error", "host not found")
 			c.AbortWithStatus(http.StatusNoContent)
@@ -66,7 +67,7 @@ func main() {
 			(header.Header), c.Request.Body)
 		if err != nil {
 			c.Header("X-Error", err.Error())
-			c.AbortWithError(http.StatusBadRequest, err)
+			c.AbortWithError(http.StatusBadGateway, err)
 			return
 		}
 		defer resp.Body.Close()

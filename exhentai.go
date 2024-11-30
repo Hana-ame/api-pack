@@ -130,6 +130,8 @@ func ExhProxy() {
 
 		if strings.HasPrefix(c.Request.URL.String(), "/static/") {
 			c.Redirect(http.StatusFound, "https://moonchan.xyz"+c.Request.URL.String())
+			c.Abort()
+			return
 		}
 
 		// 遗留问题, image这个path重定向到用param的请求
@@ -146,6 +148,7 @@ func ExhProxy() {
 			parsedURL.RawQuery = query.Encode()
 
 			c.Redirect(http.StatusMovedPermanently, parsedURL.String())
+			c.Abort()
 			return
 		}
 
@@ -217,6 +220,17 @@ func ExhProxy() {
 			mf.SetClientPool(newCp)
 		}
 
+		if strings.HasPrefix(path, "/torrent") {
+			c.DataFromReader(resp.StatusCode, resp.ContentLength, resp.Header.Get("Content-Type"), resp.Body, map[string]string{
+				"X-Host":    host,
+				"X-Origin":  header.Get("Origin"),
+				"X-Referer": header.Get("Referer"),
+				"X-Cookie":  header.Get("Cookie"),
+			})
+			c.Abort()
+			return
+		}
+
 		// resp 获得 text
 		// 需要override https://exhentai.org/s/, https://exhentai.org/g/
 		body, err := myfetch.ResponseToReader(resp)
@@ -272,6 +286,7 @@ func ExhProxy() {
 
 			image, err := findOneAndSelectAttr(doc, "//img[@id='img']", "src")
 			c.Redirect(http.StatusFound, image)
+			c.Abort()
 			return
 		}
 
@@ -296,6 +311,7 @@ func ExhProxy() {
 					parsedURL.RawQuery = query.Encode()
 
 					c.Redirect(http.StatusFound, parsedURL.String())
+					c.Abort()
 					return
 				}
 			}
