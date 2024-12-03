@@ -93,12 +93,21 @@ func NyaaProxy() {
 		defer resp.Body.Close()
 
 		if strings.HasPrefix(path, "/download") {
+			for k, vs := range resp.Header {
+				if c.Writer.Header().Get(k) != "" {
+					continue
+				}
+				for _, v := range vs {
+					c.Writer.Header().Add(k, v)
+				}
+			}
 			c.DataFromReader(resp.StatusCode, resp.ContentLength, resp.Header.Get("Content-Type"), resp.Body, map[string]string{
 				"X-Host":    host,
 				"X-Origin":  header.Get("Origin"),
 				"X-Referer": header.Get("Referer"),
 				"X-Cookie":  header.Get("Cookie"),
 			})
+			return
 		}
 
 		body, err := myfetch.ResponseToReader(resp)

@@ -221,6 +221,14 @@ func ExhProxy() {
 		}
 
 		if strings.HasPrefix(path, "/torrent") {
+			for k, vs := range resp.Header {
+				if c.Writer.Header().Get(k) != "" {
+					continue
+				}
+				for _, v := range vs {
+					c.Writer.Header().Add(k, v)
+				}
+			}
 			c.DataFromReader(resp.StatusCode, resp.ContentLength, resp.Header.Get("Content-Type"), resp.Body, map[string]string{
 				"X-Host":    host,
 				"X-Origin":  header.Get("Origin"),
@@ -423,11 +431,19 @@ func addWaterFallViewButton(html string) string {
 	  ">
 			下拉式
 	  </button>
+	  <button id="waterfall2" style="
+			width: 100%;    
+			height: 100%;
+			font-size: x-large;
+	  ">
+			下拉式
+	  </button>
 	</div>
   <script type="text/javascript">
 	async function execWaterfall(){
 		console.log('!');
 		document.getElementById("waterfall").remove();
+		document.getElementById("waterfall2").remove();
 		let pn = document.createElement('div');
 		let lp = location.href;
 		let ln = location.href;
@@ -458,7 +474,18 @@ func addWaterFallViewButton(html string) string {
 		let p = document.createElement('p');
 		p.innerHTML = hn;
 	  }
+	async function execWaterfall2(){
+		// 获取当前 URL 的路径
+		const currentPath = window.location.pathname;
+
+		// 定义新的连接
+		const newUrl = 'https://page.moonchan.xyz/#' + currentPath;
+
+		// 跳转到新的连接
+		window.location.href = newUrl;
+	  }
 	document.getElementById("waterfall").addEventListener("click", execWaterfall, false); 
+	document.getElementById("waterfall2").addEventListener("click", execWaterfall2, false); 
 	</script>`, 1)
 }
 
