@@ -152,6 +152,50 @@ func ExhProxy() {
 			return
 		}
 
+		// 如果写在img标签的src里面，那么request的accept头会有
+		// 这里其实没有parse。要写吗。如果不行回头再找。要找吗。
+		// 不行，炸了，以后折腾。
+		// indexImage := strings.Index(c.GetHeader("Accept"), "image")
+		// indexHtml := strings.Index(c.GetHeader("Accept"), "html")
+		// if c.Query("redirect_to") == "" && uint(indexHtml) <= uint(indexImage) {
+		// 	path := c.Request.URL.String()
+		// 	if strings.HasPrefix(path, "/s/") {
+		// 		parsedURL, err := url.Parse(path)
+		// 		if err != nil {
+		// 			c.Header("X-Error", parsedURL.String())
+		// 			c.AbortWithStatus(http.StatusBadRequest)
+		// 			return
+		// 		}
+		// 		query := parsedURL.Query()
+		// 		query.Set("redirect_to", "image")
+		// 		parsedURL.RawQuery = query.Encode()
+
+		// 		c.Redirect(http.StatusFound, parsedURL.String())
+		// 		c.Abort()
+		// 		return
+		// 	} else if strings.HasPrefix(path, "/g/") {
+		// 		parsedURL, err := url.Parse(path)
+		// 		if err != nil {
+		// 			c.Header("X-Error", parsedURL.String())
+		// 			c.AbortWithStatus(http.StatusBadRequest)
+		// 			return
+		// 		}
+		// 		query := parsedURL.Query()
+		// 		query.Set("redirect_to", "cover")
+		// 		parsedURL.RawQuery = query.Encode()
+
+		// 		c.Redirect(http.StatusFound, parsedURL.String())
+		// 		c.Abort()
+		// 		return
+		// 	} else {
+		// 		redirectURL := "https://moonchan.xyz/favicon.ico"
+
+		// 		c.Redirect(http.StatusFound, redirectURL)
+		// 		c.Abort()
+		// 		return
+		// 	}
+		// }
+
 	}, func(c *gin.Context) {
 
 		// 获取请求中的 Cookie
@@ -266,6 +310,10 @@ func ExhProxy() {
 		data = bytes.ReplaceAll(data, []byte("https://s.exhentai.org"), []byte("https://s-ex.moonchan.xyz"))
 		if strings.HasPrefix(path, `/s/`) {
 			data = []byte(addWaterFallViewButton(string(data)))
+		} else if strings.HasPrefix(path, "/g/") {
+			// nothing here
+		} else {
+			data = addReloadCoverButton(data)
 		}
 		data = addFloatingIframeAtRightBottom(data)
 
@@ -407,6 +455,66 @@ func SProxy() {
 	// 启动服务器
 	r.Run("127.25.23.3:8080") // 在 8080 端口启动服务
 
+}
+
+func addReloadCoverButton(html []byte) []byte {
+	html = bytes.Replace(html, []byte("<body>"), []byte(`<body>
+	<div style="
+	  height: 60px;
+	  width: 100px;
+	  text-align: center;
+	  /* background-color: violet; */
+	  position: fixed;
+	  right: 20px; 
+	  top: 20px;
+	  z-index: 99;
+	  display: table-cell;
+	  vertical-align: middle;
+	  /* float: right; */
+	">
+	  <button id="reload-cover" style="
+			width: 100%;    
+			height: 100%;
+			font-size: x-large;
+			display: none;
+	  ">
+			重新加载封面
+	  </button>
+	</div>
+`), 1)
+
+	html = bytes.Replace(html, []byte("</body>"), []byte(`<script type="text/javascript">
+	// 获取所有class为gl3t的元素
+	var gl3tElements = document.getElementsByClassName('gl3t');
+
+	if (gl3tElements.length > 0) 
+		document.getElementById('reload-cover').style.display = 'block';
+
+	async function execReload() {
+		var gl3tElements = document.getElementsByClassName('gl3t');
+		// 遍历每个gl3t元素
+		for (var i = 0; i < gl3tElements.length; i++) {
+			// 获取当前元素中的所有a标签
+			var links = gl3tElements[i].getElementsByTagName('a');
+			for (var j = 0; j < links.length; j++) {
+				// 获取a标签的href
+				var href = links[j].href;
+				console.log(links[j]);
+				// 获取当前a标签中的img标签
+				var imgs = links[j].getElementsByTagName('img');
+				for (var k = 0; k < imgs.length; k++) {
+					// 修改img的src属性
+					imgs[k].src = href + '?redirect_to=cover';
+				}
+			}
+		}
+	}
+	document.getElementById("reload-cover").addEventListener("click", execReload, false); 
+
+	</script>
+</body>`), 1)
+
+	return html
 }
 
 func addWaterFallViewButton(html string) string {
