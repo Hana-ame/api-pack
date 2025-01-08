@@ -6,6 +6,7 @@ package main
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -22,6 +23,7 @@ import (
 	myfetch "github.com/Hana-ame/api-pack/Tools/my_fetch"
 	"github.com/Hana-ame/api-pack/Tools/my_fetch/my_if"
 	middleware "github.com/Hana-ame/api-pack/Tools/my_gin_middleware"
+	streams "github.com/Hana-ame/api-pack/Tools/my_streams"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 	"golang.org/x/net/html"
@@ -80,10 +82,200 @@ func findAll(top *html.Node, expr, name string) (v []string) {
 //	}()
 var jar *cookiejar.Jar = nil
 
+// 妹有v6,毙了
+func EhProxy() {
+	godotenv.Load(".env")
+
+	// debug.LogLevel = debug.Fatal
+
+	// prefix := tools.NewSlice(
+	// 	os.Getenv("EXHENTAI_PROXY_PREFIX"),
+	// 	"2001:470:c:6c:",
+	// ).FirstNonDefaultValue("")
+
+	// ips := []net.IP{my_if.NewAddr(prefix), my_if.NewAddr(prefix)}
+	// ipidx := 0
+
+	// my_if.AddAddr(ips[ipidx].String())
+	// cp := myfetch.NewClientPool([]*http.Client{
+	// 	myfetch.NewV6Client(ips[ipidx], jar),
+	// })
+
+	// cp = nil // debug
+	// mf := myfetch.NewFetcher(nil, cp)
+
+	// gin
+	r := gin.Default()
+
+	// 设置block
+	// r.Use(middleware.BlockMiddleware()) // 改到下面
+
+	// 设置 CORS 头
+	r.Use(middleware.CORSMiddleware())
+
+	// 定义一个简单的 GET 路由
+	r.Any("/*any", func(c *gin.Context) {
+		// 禁止访问存档
+		// if strings.HasPrefix(c.Request.URL.String(), "/archiver.php") {
+		// 	c.AbortWithStatus(http.StatusForbidden)
+		// 	return
+		// }
+
+	}, func(c *gin.Context) {
+		// 禁止非大陆访问
+
+		// 获取请求中的 Cookie
+		cookie, err := c.Cookie("pass")
+
+		// 如果 Cookie 包含 pass=pass，直接继续处理请求
+		if err == nil && cookie == "pass" {
+			return
+		}
+
+		if c.Query("redirect_to") != "" {
+			return
+		}
+
+		// 如果不在 "CN", "" 中的任意一个。
+		if !slices.Contains([]string{"CN"}, c.Request.Header.Get("Cf-Ipcountry")) {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
+				"message":      "禁止访问",
+				"Cf-Ipcountry": c.Request.Header.Get("Cf-Ipcountry"),
+			})
+			return
+		}
+
+	}, func(c *gin.Context) {
+		c.Header("X-Debug-Request-Host", c.Request.Host)     // 要设置 Host $http_host
+		c.Header("X-Debug-Header-Host", c.GetHeader("Host")) // never
+
+		if c.Request.Body != nil {
+			defer c.Request.Body.Close()
+		}
+		// 读取 URL 参数
+		path := c.Request.URL.String()
+
+		host := "exhentai.org"
+
+		header := tools.NewHeader(c.Request.Header)
+		header.Set(
+			"Cookie",
+			tools.NewSlice(
+				c.GetHeader("X-Cookie"),
+				os.Getenv("EXHENTAI_PROXY_COOKIE"),
+				"ipb_member_id=5698562; ipb_pass_hash=154e574fd19294c32f905fe187cbdad1; yay=louder; igneous=5eevdxac75hpx71cv",
+			).FirstNonDefaultValue(""),
+		)
+
+		resp, err := myfetch.Fetch(
+			c.Request.Method, "https://"+host+path,
+			(header.Header), c.Request.Body)
+		if err != nil {
+			debug.E("why", err.Error())
+			c.Header("X-Error", err.Error())
+			c.AbortWithError(http.StatusBadGateway, err)
+			return
+		}
+		defer resp.Body.Close()
+
+		// if mf.Count() > 250 {
+		// 	ipidx = (ipidx + 1) % len(ips)
+		// 	defer func(ip string) {
+		// 		time.Sleep(60 * time.Second)
+		// 		my_if.DelAddr(ip)
+		// 	}(ips[ipidx].String())
+		// 	ips[ipidx] = my_if.NewAddr(prefix)
+		// 	my_if.AddAddr(ips[ipidx].String())
+		// 	newCp := myfetch.NewClientPool([]*http.Client{myfetch.NewV6Client(ips[ipidx], jar)})
+		// 	mf.SetClientPool(newCp)
+		// }
+
+		if strings.HasPrefix(path, "/torrent") {
+			for k, vs := range resp.Header {
+				if c.Writer.Header().Get(k) != "" {
+					continue
+				}
+				for _, v := range vs {
+					c.Writer.Header().Add(k, v)
+				}
+			}
+			c.DataFromReader(resp.StatusCode, resp.ContentLength, resp.Header.Get("Content-Type"), resp.Body, map[string]string{
+				"X-Host":    host,
+				"X-Origin":  header.Get("Origin"),
+				"X-Referer": header.Get("Referer"),
+				"X-Cookie":  header.Get("Cookie"),
+			})
+			c.Abort()
+			return
+		}
+
+		// resp 获得 text
+		// 需要override https://exhentai.org/s/, https://exhentai.org/g/
+		body, err := myfetch.ResponseToReader(resp)
+		if err != nil {
+			debug.E("why", err.Error())
+			c.Header("X-Error", err.Error())
+			c.AbortWithError(http.StatusBadGateway, err)
+			return
+		}
+
+		data, err := io.ReadAll(body)
+		if err != nil {
+			debug.E("why", err.Error())
+			c.Header("X-Error", err.Error())
+			c.AbortWithError(http.StatusBadGateway, err)
+			return
+		}
+		data = bytes.ReplaceAll(data, []byte("https://exhentai.org"), []byte{})
+
+		if strings.HasPrefix(path, `/s/`) {
+			data = []byte(addWaterFallViewButton(string(data)))
+		} else if strings.HasPrefix(path, "/g/") {
+			// nothing here
+		} else {
+			data = addReloadCoverButton(data)
+		}
+		data = addFloatingIframeAtRightBottom(data)
+
+		// 为什么自带的方法这么贵物
+		c.Writer.Header().Set("Content-Encoding", "identity")
+		// 和最后的方法到底用哪个。
+		c.Writer.Header().Set("Content-Length", strconv.Itoa(len(data)))
+		for k, vs := range resp.Header {
+			if c.Writer.Header().Get(k) != "" {
+				continue
+			}
+			for _, v := range vs {
+				c.Writer.Header().Add(k, v)
+			}
+		}
+
+		if len(data) == 0 {
+			debug.E("why", resp.Status) // 304
+			c.Header("X-Error", resp.Status)
+			c.AbortWithStatus(resp.StatusCode)
+			return
+		}
+
+		// 为什么会报多写。
+		c.DataFromReader(resp.StatusCode, int64(len(data)), resp.Header.Get("Content-Type"), bytes.NewReader(data), map[string]string{
+			"X-Host":    host,
+			"X-Origin":  header.Get("Origin"),
+			"X-Referer": header.Get("Referer"),
+			"X-Cookie":  header.Get("Cookie"),
+		})
+
+	})
+
+	// 启动服务器
+	r.Run("127.25.23.6:8080") // 在 8080 端口启动服务
+
+}
+
 func ExhProxy() {
 	godotenv.Load(".env")
 
-	debug.LogLevel = debug.Fatal
+	// debug.LogLevel = debug.Fatal
 
 	prefix := tools.NewSlice(
 		os.Getenv("EXHENTAI_PROXY_PREFIX"),
@@ -119,13 +311,20 @@ func ExhProxy() {
 		}
 
 		if strings.HasPrefix(c.Request.URL.String(), "/fullimg") {
-			c.AbortWithStatus(http.StatusForbidden)
-			return
+			// 如果 Cookie 包含 pass=pass，直接继续处理请求
+			if cookie, err := c.Cookie("pass"); err != nil || cookie == "pass" {
+				c.AbortWithStatus(http.StatusForbidden)
+				return
+			}
 		}
 
 		if strings.HasPrefix(c.Request.URL.String(), "/archiver.php") {
-			c.AbortWithStatus(http.StatusForbidden)
-			return
+			// 如果 Cookie 包含 pass=pass，直接继续处理请求
+			if cookie, err := c.Cookie("pass"); err != nil || cookie == "pass" {
+				c.AbortWithStatus(http.StatusForbidden)
+				return
+			}
+
 		}
 
 		if strings.HasPrefix(c.Request.URL.String(), "/static/") {
@@ -229,7 +428,7 @@ func ExhProxy() {
 		// 读取 URL 参数
 		path := c.Request.URL.String()
 
-		host := "exhentai.org"
+		const host = "exhentai.org"
 
 		header := tools.NewHeader(c.Request.Header)
 		header.Set(
@@ -255,7 +454,7 @@ func ExhProxy() {
 		if mf.Count() > 250 {
 			ipidx = (ipidx + 1) % len(ips)
 			defer func(ip string) {
-				time.Sleep(60 * time.Second)
+				time.Sleep(240 * time.Second)
 				my_if.DelAddr(ip)
 			}(ips[ipidx].String())
 			ips[ipidx] = my_if.NewAddr(prefix)
@@ -301,6 +500,11 @@ func ExhProxy() {
 			return
 		}
 
+		if len(data) == 0 {
+			c.AbortWithStatus(resp.StatusCode) // 304 not modified
+			return
+		}
+
 		// data = bytes.ReplaceAll(data, []byte("https://exhentai.org/g/"), []byte("https://"+"ex.nmbyd1.top"+"/g/"))
 		// data = bytes.ReplaceAll(data, []byte("https://exhentai.org/s/"), []byte("https://"+"ex.nmbyd1.top"+"/s/"))
 		// data = bytes.ReplaceAll(data, []byte("https://exhentai.org/z/"), []byte("https://"+"ex.nmbyd1.top"+"/z/"))
@@ -317,19 +521,6 @@ func ExhProxy() {
 		}
 		data = addFloatingIframeAtRightBottom(data)
 
-		// 为什么自带的方法这么贵物
-		c.Writer.Header().Set("Content-Encoding", "identity")
-		// 和最后的方法到底用哪个。
-		c.Writer.Header().Set("Content-Length", strconv.Itoa(len(data)))
-		for k, vs := range resp.Header {
-			if c.Writer.Header().Get(k) != "" {
-				continue
-			}
-			for _, v := range vs {
-				c.Writer.Header().Add(k, v)
-			}
-		}
-
 		// 获得param，redirect_to=image
 		// 没经过类型检查
 		if strings.HasPrefix(path, "/s/") && c.Query("redirect_to") == "image" {
@@ -342,6 +533,83 @@ func ExhProxy() {
 
 			image, err := findOneAndSelectAttr(doc, "//img[@id='img']", "src")
 			c.Redirect(http.StatusFound, image)
+			c.Abort()
+			return
+		}
+
+		if strings.HasPrefix(path, "/s/") && c.Query("redirect_to") == "origin" {
+			doc, err := htmlquery.Parse(bytes.NewReader(data))
+			if err != nil {
+				c.Header("X-Error", err.Error())
+				c.AbortWithStatus(http.StatusInternalServerError)
+				return
+			}
+
+			arr := findAll(doc, "//a", "href")
+			// fmt.Println(arr) // it's ok
+
+			gallery, err := streams.First(arr, func(s string) bool {
+				return strings.HasPrefix(s, "/g/")
+			})
+			if err != nil {
+				c.Header("X-Error", err.Error())
+				debug.E("origin", err.Error())
+				c.AbortWithStatus(http.StatusInternalServerError)
+				return
+			}
+
+			fullimg, err := streams.First(arr, func(s string) bool {
+				return strings.HasPrefix(s, "/fullimg")
+			})
+			if err != nil {
+				c.Header("X-Error", err.Error())
+				image, _ := findOneAndSelectAttr(doc, "//img[@id='img']", "src")
+				c.Redirect(http.StatusFound, image)
+				c.Abort()
+				return
+			}
+			// debug.I("origin", gallery, fullimg)
+			o, err := myfetch.URLToJSON("https://ehwv.moonchan.xyz" + gallery + "?redirect_to=json")
+			if err != nil {
+				c.Header("X-Error", err.Error())
+				c.AbortWithStatus(http.StatusInternalServerError)
+				return
+			}
+			// blob, e := json.Marshal(o)
+			// fmt.Println(string(blob), e)
+
+			if isWithinThreeMonths(o.GetOrDefault("date", "2000-01-01").(string)) {
+				debug.I("origin", o.GetOrDefault("date", "notfound"))
+				resp, err := mf.Fetch(http.MethodGet, "https://"+host+fullimg,
+					(header.Header), nil)
+				if err != nil {
+					// debug.I("origin", err.Error())
+					c.Header("X-Error", err.Error())
+					// c.AbortWithStatus(http.StatusInternalServerError)
+					// return
+				}
+				// l, _ := resp.Location()
+				// debug.I("origin", l.String())
+
+				c.Redirect(http.StatusFound, resp.Header.Get("Location"))
+				return
+			}
+
+			c.AbortWithStatus(http.StatusForbidden)
+			return
+		}
+
+		if strings.HasPrefix(path, "/g/") && c.Query("redirect_to") == "json" {
+			doc, err := htmlquery.Parse(bytes.NewReader(data))
+			if err != nil {
+				c.Header("X-Error", err.Error())
+				c.AbortWithStatus(http.StatusInternalServerError)
+				return
+			}
+			date, _ := findOneAndSelectAttr(doc, `//*[@id="gdd"]/table/tbody/tr[1]/td[2]`, InnerText)
+			c.JSON(http.StatusOK, map[string]string{
+				"date": date,
+			})
 			c.Abort()
 			return
 		}
@@ -375,11 +643,17 @@ func ExhProxy() {
 			return
 		}
 
-		if len(data) == 0 {
-			debug.E("why", resp.Status) // 304
-			c.Header("X-Error", resp.Status)
-			c.AbortWithStatus(resp.StatusCode)
-			return
+		// 为什么自带的方法这么贵物
+		c.Writer.Header().Set("Content-Encoding", "identity")
+		// 和最后的方法到底用哪个。
+		c.Writer.Header().Set("Content-Length", strconv.Itoa(len(data)))
+		for k, vs := range resp.Header {
+			if c.Writer.Header().Get(k) != "" {
+				continue
+			}
+			for _, v := range vs {
+				c.Writer.Header().Add(k, v)
+			}
 		}
 
 		// 为什么会报多写。
@@ -491,6 +765,8 @@ func addReloadCoverButton(html []byte) []byte {
 		document.getElementById('reload-cover').style.display = 'block';
 
 	async function execReload() {
+		window.stop();
+
 		var gl3tElements = document.getElementsByClassName('gl3t');
 		// 遍历每个gl3t元素
 		for (var i = 0; i < gl3tElements.length; i++) {
@@ -654,4 +930,20 @@ func addFloatingIframeAtRightBottom(html []byte) []byte {
 
 `), 1)
 	return html
+}
+
+func isWithinThreeMonths(dateStr string) bool {
+	layout := "2006-01-02 15:04"
+	parsedDate, err := time.Parse(layout, dateStr)
+	if err != nil {
+		// 处理解析错误，例如返回 false 或 panic
+		fmt.Println("解析日期字符串失败:", err)
+		return false
+	}
+
+	now := time.Now()
+	threeMonthsAgo := now.AddDate(0, -3, 0)
+
+	// 比较 parsedDate 是否在 threeMonthsAgo 之后 (或相等)
+	return parsedDate.After(threeMonthsAgo) || parsedDate.Equal(threeMonthsAgo)
 }

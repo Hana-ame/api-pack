@@ -15,11 +15,15 @@ if [ $? -ne 0 ]; then
 fi
 
 # 使用 SCP 传输文件到远程服务器
+# 发送到bwh
 ~/script/scp.sh -P26275 api-pack-new root@bwh.moonchan.xyz:~/temp
 # exit 0
 # ls temp && { pkill api-pack-new; rm -f api-pack-new; mv temp api-pack-new; ls -l api-pack-new; nohup ./api-pack-new & } 
 
-~/script/scp.sh api-pack-new root@vps.moonchan.xyz:~/temp
+# 发送到vps
+# ~/script/scp.sh api-pack-new root@vps.moonchan.xyz:~/temp
+
+
 
 # 检查 SCP 是否成功
 if [ $? -ne 0 ]; then
@@ -32,10 +36,14 @@ fi
 echo "done"
 
 
-#  ifconfig sit1 inet6 del  2001:470:c:6c:5e91:ce30:f0bc:14/64
-#  ifconfig sit1 inet6 del  2001:470:c:6c:50ca:ade3:f0bc:15/64
+#  ifconfig sit1 inet6 del  2001:470:c:6c:babe:c98e:1161:e26b/64
+#  ifconfig sit1 inet6 del  2001:470:c:6c:c6bf:4514:1161:e26a/64
+#  ifconfig sit1 inet6 del  2001:470:c:6c:2f15:169f:1161:e269/64
 
 exit 0
 
 # 彼得。
 ls temp && { pkill api-pack-new; rm -f api-pack-new; mv temp api-pack-new; ls -l api-pack-new; nohup ./api-pack-new & } 
+ls bak && { pkill api-pack-new; rm -f api-pack-new; mv bak api-pack-new; ls -l api-pack-new; nohup ./api-pack-new & } 
+
+pkill api-pack-new; nohup ./api-pack-new & 

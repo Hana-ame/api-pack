@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	tools "github.com/Hana-ame/api-pack/Tools"
+	"github.com/Hana-ame/api-pack/Tools/debug"
 	myfetch "github.com/Hana-ame/api-pack/Tools/my_fetch"
 	middleware "github.com/Hana-ame/api-pack/Tools/my_gin_middleware"
 	"github.com/gin-gonic/gin"
@@ -11,11 +12,13 @@ import (
 
 func main() {
 
-	go ExhProxy()
-	go SProxy()
-	go NyaaProxy()
-	go SukebeiProxy()
+	debug.LogLevel = debug.Trace
 
+	go ExhProxy()     //127.25.23.2:8080
+	go SProxy()       //127.25.23.3:8080
+	go NyaaProxy()    //127.25.23.4:8080
+	go SukebeiProxy() //127.25.23.5:8080
+	go EhProxy()      //127.25.23.6:8080
 	// 创建 Gin 引擎
 	r := gin.Default()
 
@@ -63,7 +66,9 @@ func main() {
 		).FirstNonDefaultValue(""))
 		// header.Add("Cookie", c.GetHeader("X-Cookie")) // 这个是candidates传的
 
-		resp, err := myfetch.Fetch(c.Request.Method, "https://"+host+path,
+		scheme := tools.NewSlice(c.Query("proxy_scheme"), c.GetHeader("X-Scheme"), "https").FirstNonDefaultValue("")
+
+		resp, err := myfetch.Fetch(c.Request.Method, scheme+"://"+host+path,
 			(header.Header), c.Request.Body)
 		if err != nil {
 			c.Header("X-Error", err.Error())
