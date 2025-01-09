@@ -28,7 +28,7 @@ func TestXxx(t *testing.T) {
 			os.Getenv("EXHENTAI_PROXY_COOKIE"),
 			"pass=pass",
 			"ipb_member_id=5698562; ipb_pass_hash=154e574fd19294c32f905fe187cbdad1; yay=louder; igneous=5eevdxac75hpx71cv",
-		).FirstNonDefaultValue(""),
+		).FirstUnequal(""),
 	)
 
 	resp, err := myfetch.Fetch(
@@ -83,7 +83,7 @@ func TestFetchDateOfGallery(t *testing.T) {
 			os.Getenv("EXHENTAI_PROXY_COOKIE"),
 			"pass=pass",
 			"ipb_member_id=5698562; ipb_pass_hash=154e574fd19294c32f905fe187cbdad1; yay=louder; igneous=5eevdxac75hpx71cv",
-		).FirstNonDefaultValue(""),
+		).FirstUnequal(""),
 	)
 
 	resp, err := myfetch.Fetch(

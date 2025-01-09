@@ -40,7 +40,7 @@ func main() {
 		host := tools.NewSlice(
 			c.Query("proxy_host"),
 			c.GetHeader("X-Host"),
-		).FirstNonDefaultValue("")
+		).FirstUnequal("")
 
 		if host == "" {
 			c.Header("X-Error", "host not found")
@@ -63,10 +63,10 @@ func main() {
 			c.Query("proxy_cookie"),
 			c.GetHeader("X-Cookie"),
 			header.Get("Cookie"),
-		).FirstNonDefaultValue(""))
+		).FirstUnequal(""))
 		// header.Add("Cookie", c.GetHeader("X-Cookie")) // 这个是candidates传的
 
-		scheme := tools.NewSlice(c.Query("proxy_scheme"), c.GetHeader("X-Scheme"), "https").FirstNonDefaultValue("")
+		scheme := tools.NewSlice(c.Query("proxy_scheme"), c.GetHeader("X-Scheme"), "https").FirstUnequal("")
 
 		resp, err := myfetch.Fetch(c.Request.Method, scheme+"://"+host+path,
 			(header.Header), c.Request.Body)

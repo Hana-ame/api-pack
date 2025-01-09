@@ -91,7 +91,7 @@ func EhProxy() {
 	// prefix := tools.NewSlice(
 	// 	os.Getenv("EXHENTAI_PROXY_PREFIX"),
 	// 	"2001:470:c:6c:",
-	// ).FirstNonDefaultValue("")
+	// ).FirstUnequal("")
 
 	// ips := []net.IP{my_if.NewAddr(prefix), my_if.NewAddr(prefix)}
 	// ipidx := 0
@@ -164,7 +164,7 @@ func EhProxy() {
 				c.GetHeader("X-Cookie"),
 				os.Getenv("EXHENTAI_PROXY_COOKIE"),
 				"ipb_member_id=5698562; ipb_pass_hash=154e574fd19294c32f905fe187cbdad1; yay=louder; igneous=5eevdxac75hpx71cv",
-			).FirstNonDefaultValue(""),
+			).FirstUnequal(""),
 		)
 
 		resp, err := myfetch.Fetch(
@@ -280,7 +280,7 @@ func ExhProxy() {
 	prefix := tools.NewSlice(
 		os.Getenv("EXHENTAI_PROXY_PREFIX"),
 		"2001:470:c:6c:",
-	).FirstNonDefaultValue("")
+	).FirstUnequal("")
 
 	ips := []net.IP{my_if.NewAddr(prefix), my_if.NewAddr(prefix)}
 	ipidx := 0
@@ -437,7 +437,7 @@ func ExhProxy() {
 				c.GetHeader("X-Cookie"),
 				os.Getenv("EXHENTAI_PROXY_COOKIE"),
 				"ipb_member_id=5698562; ipb_pass_hash=154e574fd19294c32f905fe187cbdad1; yay=louder; igneous=5eevdxac75hpx71cv",
-			).FirstNonDefaultValue(""),
+			).FirstUnequal(""),
 		)
 
 		resp, err := mf.Fetch(
@@ -600,7 +600,7 @@ func ExhProxy() {
 				}
 				// l, _ := resp.Location()
 				// debug.I("origin", l.String())
-
+				mf.AddCount(50)
 				c.Redirect(http.StatusFound, resp.Header.Get("Location"))
 				return
 			}
