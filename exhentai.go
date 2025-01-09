@@ -569,7 +569,17 @@ func ExhProxy() {
 				return
 			}
 			// debug.I("origin", gallery, fullimg)
-			o, err := myfetch.URLToJSON("https://ehwv.moonchan.xyz" + gallery + "?redirect_to=json")
+			galleryURL, err := url.Parse("https://" + c.Request.Host + gallery)
+			if err != nil {
+				c.Header("X-Error", err.Error())
+				c.AbortWithStatus(http.StatusInternalServerError)
+				return
+			}
+			query := galleryURL.Query()
+			query.Set("redirect_to", "json")
+			galleryURL.RawQuery = query.Encode()
+
+			o, err := myfetch.URLToJSON(galleryURL.String())
 			if err != nil {
 				c.Header("X-Error", err.Error())
 				c.AbortWithStatus(http.StatusInternalServerError)
