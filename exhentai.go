@@ -304,6 +304,9 @@ func ExhProxy() {
 
 	// 定义一个简单的 GET 路由
 	r.Any("/*any", func(c *gin.Context) {
+		// 封禁列表
+		// archive, fullimg, uconfig
+		// 国内且pass != pass
 
 		if strings.HasPrefix(c.Request.URL.String(), "/api") {
 			c.AbortWithStatus(http.StatusGone)
@@ -351,6 +354,16 @@ func ExhProxy() {
 			return
 		}
 
+		if strings.HasPrefix(c.Request.URL.String(), "/uconfig.php") {
+			// 如果 Cookie 包含 pass=pass，直接继续处理请求
+			if cookie, err := c.Cookie("pass"); err != nil || cookie == "pass" {
+				c.String(http.StatusOK, "哪个小天才整天改设置里的filter改得搜索搜不出东西的")
+				c.Abort()
+				return
+			}
+
+		}
+
 		// 如果写在img标签的src里面，那么request的accept头会有
 		// 这里其实没有parse。要写吗。如果不行回头再找。要找吗。
 		// 不行，炸了，以后折腾。
@@ -396,6 +409,7 @@ func ExhProxy() {
 		// }
 
 	}, func(c *gin.Context) {
+		// 单纯封禁非中国
 
 		// 获取请求中的 Cookie
 		cookie, err := c.Cookie("pass")
@@ -412,7 +426,7 @@ func ExhProxy() {
 		// 如果不在 "CN", "" 中的任意一个。
 		if !slices.Contains([]string{"CN"}, c.Request.Header.Get("Cf-Ipcountry")) {
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
-				"message":      "禁止访问",
+				"message":      "禁止访问, 请关闭代理/翻墙工具",
 				"Cf-Ipcountry": c.Request.Header.Get("Cf-Ipcountry"),
 			})
 			return
@@ -617,6 +631,7 @@ func ExhProxy() {
 				return
 			}
 			date, _ := findOneAndSelectAttr(doc, `//*[@id="gdd"]/table/tbody/tr[1]/td[2]`, InnerText)
+			// imageArray, _ := findAll(doc, `//a[@]`) // 不做了
 			c.JSON(http.StatusOK, map[string]string{
 				"date": date,
 			})
@@ -644,7 +659,7 @@ func ExhProxy() {
 					query.Set("redirect_to", "image")
 					parsedURL.RawQuery = query.Encode()
 
-					c.Redirect(http.StatusFound, parsedURL.String())
+					c.Redirect(http.StatusMovedPermanently, parsedURL.String())
 					c.Abort()
 					return
 				}
@@ -681,7 +696,13 @@ func ExhProxy() {
 
 }
 
+// 不知道为啥用不了。
 func SProxy() {
+
+	// gin.SetMode("release")
+	// r := gin.New()
+	// r.Use(gin.Recovery())
+
 	r := gin.Default()
 
 	// 设置 CORS 头
@@ -708,6 +729,14 @@ func SProxy() {
 		host := "s.exhentai.org"
 
 		header := tools.NewHeader(c.Request.Header)
+		header.Set(
+			"Cookie",
+			tools.NewSlice(
+				c.GetHeader("X-Cookie"),
+				os.Getenv("EXHENTAI_PROXY_COOKIE"),
+				"ipb_member_id=5698562; ipb_pass_hash=154e574fd19294c32f905fe187cbdad1; yay=louder; igneous=5eevdxac75hpx71cv",
+			).FirstUnequal(""),
+		)
 
 		resp, err := myfetch.Fetch(
 			c.Request.Method, "https://"+host+path,
@@ -796,6 +825,9 @@ func addReloadCoverButton(html []byte) []byte {
 		}
 	}
 	document.getElementById("reload-cover").addEventListener("click", execReload, false); 
+
+	// if (gl3tElements.length > 0) 
+	// 	execReload();
 
 	</script>
 </body>`), 1)

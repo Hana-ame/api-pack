@@ -2,6 +2,9 @@ package main
 
 import (
 	"net/http"
+	"os"
+
+	_ "github.com/joho/godotenv/autoload"
 
 	tools "github.com/Hana-ame/api-pack/Tools"
 	"github.com/Hana-ame/api-pack/Tools/debug"
@@ -14,11 +17,19 @@ func main() {
 
 	debug.LogLevel = debug.Trace
 
-	go ExhProxy()     //127.25.23.2:8080
-	go SProxy()       //127.25.23.3:8080
+	if os.Getenv("SEX_PROXY") == "ON" {
+		go SProxy() //127.25.23.3:8080
+	}
+	if os.Getenv("EX_PROXY") == "ON" {
+		go ExhProxy() //127.25.23.2:8080
+	}
+
 	go NyaaProxy()    //127.25.23.4:8080
 	go SukebeiProxy() //127.25.23.5:8080
-	go EhProxy()      //127.25.23.6:8080
+	// go EhProxy()      //127.25.23.6:8080
+	go GroqProxy() //127.25.2.9:8080
+
+	//127.24.11.16:8080
 	// 创建 Gin 引擎
 	r := gin.Default()
 
