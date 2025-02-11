@@ -696,14 +696,16 @@ func ExhProxy() {
 
 }
 
-// 不知道为啥用不了。
+// 要cookie，但是为森么还是不行。
 func SProxy() {
 
-	// gin.SetMode("release")
-	// r := gin.New()
-	// r.Use(gin.Recovery())
+	// 使用 gin.New() 创建新的 Gin 实例，避免默认的日志中间件
+	r := gin.New()
 
-	r := gin.Default()
+	// 添加 Recovery 中间件（可选）
+	r.Use(gin.Recovery())
+
+	// r := gin.Default()
 
 	// 设置 CORS 头
 	r.Use(middleware.CORSMiddleware())
@@ -717,7 +719,7 @@ func SProxy() {
 		path := c.Request.URL.String()
 
 		if strings.HasPrefix(path, "/api") {
-			c.AbortWithStatus(http.StatusServiceUnavailable)
+			c.AbortWithStatus(http.StatusForbidden)
 			return
 		}
 
@@ -737,6 +739,16 @@ func SProxy() {
 				"ipb_member_id=5698562; ipb_pass_hash=154e574fd19294c32f905fe187cbdad1; yay=louder; igneous=5eevdxac75hpx71cv",
 			).FirstUnequal(""),
 		)
+
+		if c.Request.Method == http.MethodGet {
+			resp, err := myfetch.Fetch(
+				http.MethodHead, "https://ehgt.org"+path,
+				(header.Header), c.Request.Body)
+			if err == nil && resp.StatusCode == http.StatusOK {
+				c.Redirect(http.StatusMovedPermanently, "https://ehgt.org"+path)
+				return
+			}
+		}
 
 		resp, err := myfetch.Fetch(
 			c.Request.Method, "https://"+host+path,

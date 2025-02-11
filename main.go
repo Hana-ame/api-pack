@@ -17,17 +17,22 @@ func main() {
 
 	debug.LogLevel = debug.Trace
 
-	if os.Getenv("SEX_PROXY") == "ON" {
+	if os.Getenv("SEX_PROXY") != "" {
 		go SProxy() //127.25.23.3:8080
 	}
-	if os.Getenv("EX_PROXY") == "ON" {
+	if os.Getenv("EX_PROXY") != "" {
 		go ExhProxy() //127.25.23.2:8080
 	}
-
-	go NyaaProxy()    //127.25.23.4:8080
-	go SukebeiProxy() //127.25.23.5:8080
+	if os.Getenv("NYAA_PROXY") != "" {
+		go NyaaProxy() //127.25.23.4:8080
+	}
+	if os.Getenv("SUKEBEI_PROXY") != "" {
+		go SukebeiProxy() //127.25.23.5:8080
+	}
+	if os.Getenv("GROQ_PROXY") != "" {
+		go GroqProxy() //127.25.2.9:8080
+	}
 	// go EhProxy()      //127.25.23.6:8080
-	go GroqProxy() //127.25.2.9:8080
 
 	//127.24.11.16:8080
 	// 创建 Gin 引擎
@@ -54,6 +59,10 @@ func main() {
 		).FirstUnequal("")
 
 		if host == "" {
+			if path == "/favicon.ico" {
+				c.Redirect(http.StatusFound, "https://moonchan.xyz/favicon.ico")
+				return
+			}
 			c.Header("X-Error", "host not found")
 			c.AbortWithStatus(http.StatusNoContent)
 			return

@@ -41,14 +41,7 @@ func GroqProxy() {
 		defer resp.Body.Close()
 
 		// 必须有，不然会乱码
-		for k, vs := range resp.Header {
-			// if c.Writer.Header().Get(k) != "" {
-			// 	continue
-			// }
-			for _, v := range vs {
-				c.Writer.Header().Add(k, v)
-			}
-		}
+		tools.CopyHeader(c, resp.Header)
 
 		c.DataFromReader(resp.StatusCode, resp.ContentLength, resp.Header.Get("Content-Type"), resp.Body, map[string]string{})
 

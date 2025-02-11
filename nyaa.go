@@ -54,7 +54,13 @@ func NyaaProxy() {
 	cp := myfetch.NewClientPool([]*http.Client{client})
 	mf := myfetch.NewFetcher(nil, cp)
 
-	r := gin.Default()
+	// 使用 gin.New() 创建新的 Gin 实例，避免默认的日志中间件
+	r := gin.New()
+
+	// 添加 Recovery 中间件（可选）
+	r.Use(gin.Recovery())
+
+	// r := gin.Default()
 
 	// 设置block
 	// r.Use(middleware.BlockMiddleware())

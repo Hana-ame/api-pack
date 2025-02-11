@@ -124,3 +124,48 @@ func TestRedirect(t *testing.T) {
 	r, _ := myfetch.Fetch(http.MethodGet, "https://exhentai.org/fullimg/3187006/1/89vy64cac5l/1_1736268765.png", nil, nil)
 	fmt.Println(r)
 }
+
+func TestSEX(t *testing.T) {
+	header := tools.NewHeader(nil)
+	header.Set(
+		"Cookie",
+		tools.NewSlice(
+			os.Getenv("EXHENTAI_PROXY_COOKIE"),
+			"pass=pass",
+			"ipb_member_id=5698562; ipb_pass_hash=154e574fd19294c32f905fe187cbdad1; yay=louder; igneous=5eevdxac75hpx71cv",
+		).FirstUnequal(""),
+	)
+	{
+		resp, err := myfetch.Fetch(http.MethodHead, "https://ehgt.org/w/01/751/41751-sbrofetg.webp", header.Header, nil)
+		fmt.Println(err)
+		fmt.Println(resp)
+		for k, v := range resp.Header {
+			for _, vv := range v {
+				fmt.Println(k, vv)
+			}
+		}
+	}
+	{
+		resp, err := myfetch.Fetch(http.MethodGet, "https://s.exhentai.org/w/01/751/41751-sbrofetg.webp", header.Header, nil)
+		fmt.Println(err)
+		fmt.Println(resp)
+		for k, v := range resp.Header {
+			for _, vv := range v {
+				fmt.Println(k, vv)
+			}
+		}
+	}
+	// resp, err := myfetch.Fetch(http.MethodGet, "https://s.exhentai.org/w/01/751/41751-sbrofetg.webp", header.Header, nil)
+	// fmt.Println(err)
+	// fmt.Println(resp)
+	//
+	//	for k, v := range resp.Header {
+	//		for _, vv := range v {
+	//			fmt.Println(k, vv)
+	//		}
+	//	}
+}
+
+func TestSEXgin(t *testing.T) {
+	SProxy()
+}
