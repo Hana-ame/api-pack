@@ -744,14 +744,17 @@ func SProxy() {
 			resp, err := myfetch.Fetch(
 				http.MethodHead, "https://ehgt.org"+path,
 				(header.Header), c.Request.Body)
-			if err == nil && resp.StatusCode == http.StatusOK {
-				c.Redirect(http.StatusMovedPermanently, "https://ehgt.org"+path)
-				return
+			if err == nil {
+				defer resp.Body.Close()
+				if resp.StatusCode == http.StatusOK {
+					c.Redirect(http.StatusMovedPermanently, "https://ehgt.org"+path)
+					return
+				}
 			}
 		}
 
 		resp, err := myfetch.Fetch(
-			c.Request.Method, "https://"+host+path,
+			c.Request.Method, "https://"+"s.exhentai.org"+path,
 			(header.Header), c.Request.Body)
 		if err != nil {
 			c.AbortWithError(http.StatusBadRequest, err)
@@ -759,14 +762,15 @@ func SProxy() {
 		}
 		defer resp.Body.Close()
 
-		for k, vs := range resp.Header {
-			if c.Writer.Header().Get(k) != "" {
-				continue
-			}
-			for _, v := range vs {
-				c.Writer.Header().Add(k, v)
-			}
-		}
+		// for k, vs := range resp.Header {
+		// 	if c.Writer.Header().Get(k) != "" {
+		// 		continue
+		// 	}
+		// 	for _, v := range vs {
+		// 		c.Writer.Header().Add(k, v)
+		// 	}
+		// }
+		tools.CopyHeader(c, resp.Header)
 
 		c.DataFromReader(resp.StatusCode, resp.ContentLength, resp.Header.Get("Content-Type"), resp.Body, map[string]string{
 			"X-Host":    host,
