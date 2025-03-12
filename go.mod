@@ -3,6 +3,7 @@ module github.com/Hana-ame/api-pack
 go 1.23.3
 
 require (
+	github.com/Hana-ame/httpsig v1.2.1
 	github.com/andybalholm/brotli v1.1.1
 	github.com/antchfx/htmlquery v1.3.3
 	github.com/fatih/color v1.18.0

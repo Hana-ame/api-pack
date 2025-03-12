@@ -16,6 +16,7 @@ func GroqProxy() {
 
 	// 设置 CORS 头
 	r.Use(middleware.CORSMiddleware())
+	r.Use(middleware.ProxyMiddleware())
 
 	// 定义一个简单的 GET 路由
 	r.Any("/*any", func(c *gin.Context) {

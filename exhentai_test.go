@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"testing"
@@ -168,4 +169,13 @@ func TestSEX(t *testing.T) {
 
 func TestSEXgin(t *testing.T) {
 	SProxy()
+}
+
+func TestReferer(t *testing.T) {
+	referer := "https://page.moonchan.xyz"
+	if tools.Match(url.Parse(referer)).Result().Host == "page.moonchan.xyz" {
+		fmt.Println(tools.Match(url.Parse(referer)).Result().Host)
+	}
+	fmt.Println(tools.Match(url.Parse(referer)).Result().Host)
+
 }

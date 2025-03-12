@@ -272,7 +272,7 @@ func EhProxy() {
 
 }
 
-func ExhProxy() {
+func ExhProxy() { // 就是这个
 	godotenv.Load(".env")
 
 	// debug.LogLevel = debug.Fatal
@@ -301,6 +301,7 @@ func ExhProxy() {
 
 	// 设置 CORS 头
 	r.Use(middleware.CORSMiddleware())
+	r.Use(middleware.ProxyMiddleware())
 
 	// 定义一个简单的 GET 路由
 	r.Any("/*any", func(c *gin.Context) {
@@ -414,21 +415,34 @@ func ExhProxy() {
 		// 获取请求中的 Cookie
 		cookie, err := c.Cookie("pass")
 
-		// 如果 Cookie 包含 pass=pass，直接继续处理请求
+		// 如果 Cookie 包含 pass=pass，不阻止
 		if err == nil && cookie == "pass" {
 			return
 		}
 
+		// redirect_to image 不阻止.
 		if c.Query("redirect_to") != "" {
 			return
 		}
 
-		// 如果不在 "CN", "" 中的任意一个。
-		if !slices.Contains([]string{"CN"}, c.Request.Header.Get("Cf-Ipcountry")) {
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
-				"message":      "禁止访问, 请关闭代理/翻墙工具",
-				"Cf-Ipcountry": c.Request.Header.Get("Cf-Ipcountry"),
-			})
+		// 适配自家阅读器
+		if tools.Match(url.Parse(c.Request.Referer())).Result().Host == "page.moonchan.xyz" {
+			return
+		}
+
+		// 只要带有Referer就不阻止. 是上面的扩展.
+		if c.Request.Referer() != "" {
+			return
+		}
+
+		// 如果不在 "CN", "" 中的任意一个。则 block, 防止DMCA
+		if !slices.Contains([]string{"CN", ""}, c.Request.Header.Get("Cf-Ipcountry")) {
+			// c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
+			// 	"message":      "出于DMCA原因禁止访问, 请关闭代理/翻墙工具",
+			// 	"Cf-Ipcountry": c.Request.Header.Get("Cf-Ipcountry"),
+			// })
+			c.String(http.StatusForbidden, "出于DMCA原因禁止访问, 请关闭代理/翻墙工具再尝试进行访问\n你当前IP属地: %s\nexhentai镜像：https://ex.moonchan.xyz\nexhentai镜像：https://ex.nmbyd1.top\n反馈请致：https://moonchan.xyz", c.Request.Header.Get("Cf-Ipcountry"))
+			c.Abort()
 			return
 		}
 
@@ -525,7 +539,8 @@ func ExhProxy() {
 		// data = bytes.ReplaceAll(data, []byte("https://exhentai.org/img/"), []byte("https://"+"ex.nmbyd1.top"+"/img/"))
 		data = bytes.ReplaceAll(data, []byte("https://exhentai.org"), []byte{})
 		c.Header("X-Debug", c.GetHeader("Host"))
-		data = bytes.ReplaceAll(data, []byte("https://s.exhentai.org"), []byte("https://s-ex.moonchan.xyz"))
+		// data = bytes.ReplaceAll(data, []byte("https://s.exhentai.org"), []byte("https://s-ex.moonchan.xyz"))
+		data = bytes.ReplaceAll(data, []byte("https://s.exhentai.org"), []byte("https://ehgt.org"))
 		if strings.HasPrefix(path, `/s/`) {
 			data = []byte(addWaterFallViewButton(string(data)))
 		} else if strings.HasPrefix(path, "/g/") {
@@ -602,7 +617,7 @@ func ExhProxy() {
 			// blob, e := json.Marshal(o)
 			// fmt.Println(string(blob), e)
 
-			if isWithinThreeMonths(o.GetOrDefault("date", "2000-01-01").(string)) {
+			if isWithinThreeMonths(o.GetOrDefault("date", "2000-01-01").(string)) || isGalleryAvailable(o.GetOrDefault("date", "2000-01-01").(string)) {
 				debug.I("origin", o.GetOrDefault("date", "notfound"))
 				resp, err := mf.Fetch(http.MethodGet, "https://"+host+fullimg,
 					(header.Header), nil)
@@ -683,10 +698,12 @@ func ExhProxy() {
 
 		// 为什么会报多写。
 		c.DataFromReader(resp.StatusCode, int64(len(data)), resp.Header.Get("Content-Type"), bytes.NewReader(data), map[string]string{
-			"X-Host":    host,
-			"X-Origin":  header.Get("Origin"),
-			"X-Referer": header.Get("Referer"),
-			"X-Cookie":  header.Get("Cookie"),
+			"X-Host":               host,
+			"X-Origin":             header.Get("Origin"),
+			"X-Referer":            header.Get("Referer"),
+			"X-Cookie":             header.Get("Cookie"),
+			"X-Debug-Request-Host": c.Request.Host,
+			"X-Debug-Header-Host":  c.GetHeader("Host"),
 		})
 
 	})
@@ -970,24 +987,63 @@ func addFloatingIframeAtRightBottom(html []byte) []byte {
 		[]byte(`<body>
     <div id="moonchan-floating-iframe" style="display: none;">
         <button id="moonchan-close-button" onclick="moonchanCloseIframe()">×</button>
-        <iframe src="https://moonchan.xyz/iframe.html" style="border: none; width: 100%; height: calc(100% - 30px);"></iframe>
+        <iframe src="https://moonchan.xyz/iframe.html?date=250308" style="border: none; width: 100%; height: calc(100% - 30px);"></iframe>
     </div>
 
     <script>
+		const mark = '250306';
         // 检查 localStorage 中的值
-        if (localStorage.getItem('iframeClosed') !== 'true') {
+        if (localStorage.getItem('iframeClosed') !== mark) {
             document.getElementById('moonchan-floating-iframe').style.display = 'block';
         }
 
         function moonchanCloseIframe() {
             const iframeContainer = document.getElementById('moonchan-floating-iframe');
             iframeContainer.style.display = 'none'; // 隐藏 iframe
-            localStorage.setItem('iframeClosed', 'true'); // 设置 localStorage 标记
+            localStorage.setItem('iframeClosed', mark); // 设置 localStorage 标记
         }
     </script>
 
 `), 1)
 	return html
+}
+
+func isGalleryAvailable(datestr string) bool {
+	const layout = "2006-01-02 15:04"
+
+	// 解析输入时间（UTC时区）
+	parsedDate, err := time.ParseInLocation(layout, datestr, time.UTC)
+	if err != nil {
+		fmt.Println("解析日期字符串失败:", err)
+		return false
+	}
+
+	now := time.Now().UTC()
+
+	// 计算12个月前的时间
+	twelveMonthsAgo := now.AddDate(0, -12, 0)
+
+	// 判断是否在12个月内
+	within12Months := !parsedDate.Before(twelveMonthsAgo)
+
+	// 判断当前是否非高峰时段
+	notPeak := !isPeakHour(now)
+
+	return within12Months && notPeak
+}
+
+// 判断是否是高峰时段（UTC时区）
+// "Peak hours" for this purpose is (in UTC) between 14:00 and 20:00 UTC Monday-Saturday, and between 05:00 and 20:00 UTC on Sundays.
+func isPeakHour(t time.Time) bool {
+	t = t.UTC()
+	hour := t.Hour()
+	weekday := t.Weekday()
+
+	if weekday != time.Sunday { // 周一到周六
+		return hour >= 14 && hour < 20
+	} else { // 周日
+		return hour >= 5 && hour < 20
+	}
 }
 
 func isWithinThreeMonths(dateStr string) bool {

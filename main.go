@@ -40,6 +40,7 @@ func main() {
 
 	// 设置 CORS 头
 	r.Use(middleware.CORSMiddleware())
+	r.Use(middleware.ProxyMiddleware())
 
 	// 定义一个简单的 GET 路由
 	r.Any("/*any", func(c *gin.Context) {
@@ -58,18 +59,21 @@ func main() {
 			c.GetHeader("X-Host"),
 		).FirstUnequal("")
 
+		if path == "/favicon.ico" {
+			c.Redirect(http.StatusFound, "https://moonchan.xyz/favicon.ico")
+			return
+		}
+
 		if host == "" {
-			if path == "/favicon.ico" {
-				c.Redirect(http.StatusFound, "https://moonchan.xyz/favicon.ico")
-				return
-			}
 			c.Header("X-Error", "host not found")
 			c.AbortWithStatus(http.StatusNoContent)
 			return
 		}
+
 		if c.Request.Host == host {
 			c.Header("X-Error", c.Request.Host)
 			c.AbortWithStatus(http.StatusLoopDetected)
+			return
 		}
 
 		header := tools.NewHeader(nil)
