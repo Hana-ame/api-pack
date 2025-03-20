@@ -50,10 +50,7 @@ func GetIP() {
 	r.Use(middleware.CORSMiddleware())
 
 	// 定义一个简单的 GET 路由
-	r.GET("/", func(c *gin.Context) {
-		ip := c.GetHeader("CF-Connecting-IP")
-		c.String(http.StatusOK, ip)
-	})
+	r.GET("/", handler.EchoCFIP)
 
 	r.Any("/doh", func(c *gin.Context) {
 		// resp, err := http.Get("https://dns.cloudflare.com/dns-query")

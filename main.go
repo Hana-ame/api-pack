@@ -112,6 +112,10 @@ func main() {
 				c.Writer.Header().Add(k, v)
 			}
 		}
+		if c.Writer.Header().Get("cross-origin-resource-policy") == "same-origin" {
+			c.Writer.Header().Set("cross-origin-resource-policy", "cross-origin")
+		}
+
 		// slices.Sort(exposeHeaders)
 		// c.Writer.Header().Add("Access-Control-Expose-Headers", strings.Join(exposeHeaders, ", "))
 

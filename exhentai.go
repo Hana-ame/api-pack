@@ -441,11 +441,64 @@ func ExhProxy() { // 就是这个
 			// 	"message":      "出于DMCA原因禁止访问, 请关闭代理/翻墙工具",
 			// 	"Cf-Ipcountry": c.Request.Header.Get("Cf-Ipcountry"),
 			// })
-			c.String(http.StatusForbidden, "出于DMCA原因禁止访问, 请关闭代理/翻墙工具再尝试进行访问\n你当前IP属地: %s\nexhentai镜像：https://ex.moonchan.xyz\nexhentai镜像：https://ex.nmbyd1.top\n反馈请致：https://moonchan.xyz", c.Request.Header.Get("Cf-Ipcountry"))
+			c.String(http.StatusForbidden, "出于DMCA原因禁止访问, 请关闭代理/翻墙工具再尝试进行访问\n你当前IP属地: %s\nexhentai镜像：https://ex.moonchan.xyz\nexhentai镜像：https://ex.nmbyd2.top\n反馈请致：https://moonchan.xyz", c.Request.Header.Get("Cf-Ipcountry"))
 			c.Abort()
 			return
 		}
 
+	}, func(c *gin.Context) { // 用于迁移域名
+		if c.Request.Host == "ex.nmbyd1.top" {
+			// 获取请求中的 Cookie
+			cookie, err := c.Cookie("at")
+			// 如果 Cookie 包含 pass=pass，不阻止
+			if err == nil {
+				timestamp := tools.Atoi(cookie, -1)
+				if timestamp > 0 && timestamp < int(tools.NewTimeStamp()) { // 如果大于
+					return
+				}
+			}
+			cookieValue := strconv.Itoa(int(tools.NewTimeStamp()) + 65536*1000*60)
+			c.SetCookie("at", cookieValue, 3600*24*365, "/", "", false, false)
+			c.String(http.StatusOK, "为了节约3$以及防止一个域名用太久被墙，现已经迁移到：https://ex.nmbyd2.top\nhttps://ex.nmbyd1.top 将在5月2日过期，在这之前你依然能够使用这个域名\n这条警告消息被设置为只会出现在首次访问的1分钟内，以防有人看不见\n类似这样的迁移频率大致为10月一次，嫌麻烦可以给我打钱，有钱就能续域名也不用这么换了")
+			c.Abort()
+			return
+		}
+	}, func(c *gin.Context) { // 看看有多少余额用的
+		path := c.Request.URL.String()
+		if strings.HasPrefix(path, "/exchange.php") {
+			header := tools.NewHeader(c.Request.Header)
+			header.Set(
+				"Cookie",
+				tools.NewSlice(
+					c.GetHeader("X-Cookie"),
+					os.Getenv("EXHENTAI_PROXY_COOKIE"),
+					"ipb_member_id=5698562; ipb_pass_hash=154e574fd19294c32f905fe187cbdad1; yay=louder; igneous=5eevdxac75hpx71cv",
+				).FirstUnequal(""),
+			)
+			resp, err := myfetch.Fetch(
+				c.Request.Method, "https://e-hentai.org"+path,
+				(header.Header), c.Request.Body)
+			if err != nil {
+				debug.E("why", err.Error())
+				c.Header("X-Error", err.Error())
+				c.AbortWithError(http.StatusBadGateway, err)
+				return
+			}
+			defer resp.Body.Close()
+
+			for k, vs := range resp.Header {
+				if c.Writer.Header().Get(k) != "" {
+					continue
+				}
+				for _, v := range vs {
+					c.Writer.Header().Add(k, v)
+				}
+			}
+			c.DataFromReader(resp.StatusCode, resp.ContentLength, resp.Header.Get("Content-Type"), resp.Body, nil)
+
+			c.Abort()
+			return
+		}
 	}, func(c *gin.Context) {
 		c.Header("X-Debug-Request-Host", c.Request.Host)     // 要设置 Host $http_host
 		c.Header("X-Debug-Header-Host", c.GetHeader("Host")) // never
@@ -617,21 +670,40 @@ func ExhProxy() { // 就是这个
 			// blob, e := json.Marshal(o)
 			// fmt.Println(string(blob), e)
 
-			if isWithinThreeMonths(o.GetOrDefault("date", "2000-01-01").(string)) || isGalleryAvailable(o.GetOrDefault("date", "2000-01-01").(string)) {
+			// if isWithinThreeMonths(o.GetOrDefault("date", "2000-01-01").(string)) || isGalleryAvailable(o.GetOrDefault("date", "2000-01-01").(string)) {
+			// 没啦
+			if isGalleryAvailable(o.GetOrDefault("date", "2000-01-01").(string)) {
 				debug.I("origin", o.GetOrDefault("date", "notfound"))
 				resp, err := mf.Fetch(http.MethodGet, "https://"+host+fullimg,
 					(header.Header), nil)
 				if err != nil {
 					// debug.I("origin", err.Error())
 					c.Header("X-Error", err.Error())
-					// c.AbortWithStatus(http.StatusInternalServerError)
-					// return
+					c.AbortWithStatus(http.StatusInternalServerError)
+					return
 				}
+				defer resp.Body.Close()
 				// l, _ := resp.Location()
 				// debug.I("origin", l.String())
-				mf.AddCount(50)
-				c.Redirect(http.StatusFound, resp.Header.Get("Location"))
-				return
+				mf.AddCount(5)
+				if resp.StatusCode != http.StatusFound {
+					// str, err := io.ReadAll(resp.Body)
+					body, err := myfetch.ResponseToReader(resp)
+					if err != nil {
+						c.Header("X-Error", err.Error())
+						c.AbortWithError(http.StatusInternalServerError, err)
+						return
+					}
+					str, err := io.ReadAll(body)
+					if err != nil {
+						c.Header("X-Error", err.Error())
+					}
+					c.String(resp.StatusCode, string(str))
+					return
+				} else { // Found
+					c.Redirect(http.StatusFound, resp.Header.Get("Location"))
+					return
+				}
 			}
 
 			c.AbortWithStatus(http.StatusForbidden)
@@ -870,6 +942,22 @@ func addReloadCoverButton(html []byte) []byte {
 
 func addWaterFallViewButton(html string) string {
 	return strings.Replace(html, "<body>", `<body>
+	<!-- 新增的左上角按钮 -->
+	<div style="
+		height: 60px;
+		width: 100px;
+		text-align: center;
+		position: fixed;
+		left: 20px; 
+		top: 20px;
+		z-index: 99;"
+	>
+		<button id="originBtn" style="
+			width: 100%;    
+			height: 100%;
+			font-size: x-large;"
+		>原图</button>
+	</div>
 	<div style="
 	  height: 60px;
 	  width: 100px;
@@ -901,6 +989,7 @@ func addWaterFallViewButton(html string) string {
   <script type="text/javascript">
 	async function execWaterfall(){
 		console.log('!');
+		document.getElementById("originBtn").remove();
 		document.getElementById("waterfall").remove();
 		document.getElementById("waterfall2").remove();
 		let pn = document.createElement('div');
@@ -945,6 +1034,10 @@ func addWaterFallViewButton(html string) string {
 	  }
 	document.getElementById("waterfall").addEventListener("click", execWaterfall, false); 
 	document.getElementById("waterfall2").addEventListener("click", execWaterfall2, false); 
+	document.getElementById("originBtn").addEventListener("click", function() {
+      const currentUrl = window.location.href.split('?')[0];
+      window.location.href = currentUrl + '?redirect_to=origin';
+    });
 	</script>`, 1)
 }
 
