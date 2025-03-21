@@ -430,11 +430,6 @@ func ExhProxy() { // 就是这个
 			return
 		}
 
-		// 只要带有Referer就不阻止. 是上面的扩展.
-		if c.Request.Referer() != "" {
-			return
-		}
-
 		// 如果不在 "CN", "" 中的任意一个。则 block, 防止DMCA
 		if !slices.Contains([]string{"CN", ""}, c.Request.Header.Get("Cf-Ipcountry")) {
 			// c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
@@ -446,7 +441,8 @@ func ExhProxy() { // 就是这个
 			return
 		}
 
-	}, func(c *gin.Context) { // 用于迁移域名
+		// }, func(c *gin.Context) { // 用于迁移域名
+
 		if c.Request.Host == "ex.nmbyd1.top" {
 			// 获取请求中的 Cookie
 			cookie, err := c.Cookie("at")
@@ -457,12 +453,18 @@ func ExhProxy() { // 就是这个
 					return
 				}
 			}
-			cookieValue := strconv.Itoa(int(tools.NewTimeStamp()) + 65536*1000*60)
+			cookieValue := strconv.Itoa(int(tools.NewTimeStamp()) + 65536*1000*5)
 			c.SetCookie("at", cookieValue, 3600*24*365, "/", "", false, false)
-			c.String(http.StatusOK, "为了节约3$以及防止一个域名用太久被墙，现已经迁移到：https://ex.nmbyd2.top\nhttps://ex.nmbyd1.top 将在5月2日过期，在这之前你依然能够使用这个域名\n这条警告消息被设置为只会出现在首次访问的1分钟内，以防有人看不见\n类似这样的迁移频率大致为10月一次，嫌麻烦可以给我打钱，有钱就能续域名也不用这么换了")
+			c.String(http.StatusOK, "为了节约3$以及防止一个域名用太久被墙，现已经迁移到：https://ex.nmbyd2.top\nhttps://ex.nmbyd1.top 将在5月2日过期，在这之前你依然能够使用这个域名\n这条警告消息被设置为只会出现在首次访问的5秒内，以防有人看不见\n类似这样的迁移频率大致为10月一次，嫌麻烦可以给我打钱，有钱就能续域名也不用这么换了")
 			c.Abort()
 			return
 		}
+
+		// 只要带有Referer就不阻止. 是上面的扩展.
+		if c.Request.Referer() != "" {
+			return
+		}
+
 	}, func(c *gin.Context) { // 看看有多少余额用的
 		path := c.Request.URL.String()
 		if strings.HasPrefix(path, "/exchange.php") {
@@ -768,6 +770,12 @@ func ExhProxy() { // 就是这个
 			}
 		}
 
+		if slices.Contains([]int{http.StatusNotFound}, resp.StatusCode) {
+			c.Redirect(http.StatusTemporaryRedirect, "https://"+c.Request.Host)
+			c.Abort()
+			return
+		}
+
 		// 为什么会报多写。
 		c.DataFromReader(resp.StatusCode, int64(len(data)), resp.Header.Get("Content-Type"), bytes.NewReader(data), map[string]string{
 			"X-Host":               host,
@@ -942,22 +950,6 @@ func addReloadCoverButton(html []byte) []byte {
 
 func addWaterFallViewButton(html string) string {
 	return strings.Replace(html, "<body>", `<body>
-	<!-- 新增的左上角按钮 -->
-	<div style="
-		height: 60px;
-		width: 100px;
-		text-align: center;
-		position: fixed;
-		left: 20px; 
-		top: 20px;
-		z-index: 99;"
-	>
-		<button id="originBtn" style="
-			width: 100%;    
-			height: 100%;
-			font-size: x-large;"
-		>原图</button>
-	</div>
 	<div style="
 	  height: 60px;
 	  width: 100px;
@@ -985,6 +977,23 @@ func addWaterFallViewButton(html string) string {
 	  ">
 			下拉式
 	  </button>
+	</div>
+	<!-- 新增的左上角按钮、不行要C，还是删了 -->
+	<div style="
+		height: 60px;
+		width: 100px;
+		text-align: center;
+		position: fixed;
+		left: 20px; 
+		top: 20px;
+		z-index: 99;
+		display: none;"
+	>
+		<button id="originBtn" style="
+			width: 100%;    
+			height: 100%;
+			font-size: x-large;"
+		>原图</button>
 	</div>
   <script type="text/javascript">
 	async function execWaterfall(){
