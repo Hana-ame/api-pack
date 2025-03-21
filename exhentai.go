@@ -412,14 +412,6 @@ func ExhProxy() { // 就是这个
 	}, func(c *gin.Context) {
 		// 单纯封禁非中国
 
-		// 获取请求中的 Cookie
-		cookie, err := c.Cookie("pass")
-
-		// 如果 Cookie 包含 pass=pass，不阻止
-		if err == nil && cookie == "pass" {
-			return
-		}
-
 		// redirect_to image 不阻止.
 		if c.Query("redirect_to") != "" {
 			return
@@ -430,13 +422,21 @@ func ExhProxy() { // 就是这个
 			return
 		}
 
+		// 获取请求中的 Cookie
+		cookie, err := c.Cookie("pass")
+
+		// 如果 Cookie 包含 pass=pass，不阻止
+		if err == nil && cookie == "pass" {
+			return
+		}
+
 		// 如果不在 "CN", "" 中的任意一个。则 block, 防止DMCA
 		if !slices.Contains([]string{"CN", ""}, c.Request.Header.Get("Cf-Ipcountry")) {
 			// c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
 			// 	"message":      "出于DMCA原因禁止访问, 请关闭代理/翻墙工具",
 			// 	"Cf-Ipcountry": c.Request.Header.Get("Cf-Ipcountry"),
 			// })
-			c.String(http.StatusForbidden, "出于DMCA原因禁止访问, 请关闭代理/翻墙工具再尝试进行访问\n你当前IP属地: %s\nexhentai镜像：https://ex.moonchan.xyz\nexhentai镜像：https://ex.nmbyd2.top\n反馈请致：https://moonchan.xyz", c.Request.Header.Get("Cf-Ipcountry"))
+			c.String(http.StatusForbidden, "出于DMCA原因禁止访问, 请关闭代理/翻墙工具再尝试进行访问\n你当前IP属地: %s (必须为CN)\nexhentai镜像：https://ex.moonchan.xyz\nexhentai镜像：https://ex.nmbyd2.top\n反馈请致：https://moonchan.xyz", c.Request.Header.Get("Cf-Ipcountry"))
 			c.Abort()
 			return
 		}
@@ -460,10 +460,11 @@ func ExhProxy() { // 就是这个
 			return
 		}
 
+		// 没用啊, 这样google进来不也是ok了的
 		// 只要带有Referer就不阻止. 是上面的扩展.
-		if c.Request.Referer() != "" {
-			return
-		}
+		// if c.Request.Referer() != "" {
+		// 	return
+		// }
 
 	}, func(c *gin.Context) { // 看看有多少余额用的
 		path := c.Request.URL.String()
