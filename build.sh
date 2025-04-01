@@ -14,6 +14,8 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
+~/script/scp.sh iframe.html root@vps.moonchan.xyz:/var/www/moonchan/iframe.html 
+
 # 使用 SCP 传输文件到远程服务器
 # 发送到bwh
 ~/script/scp.sh -v -P26275 api-pack-new root@bwh.moonchan.xyz:~/temp
@@ -26,7 +28,7 @@ fi
 # ls temp && { pkill api-pack-new; rm -f api-pack-new; mv temp api-pack-new; ls -l api-pack-new; nohup ./api-pack-new & } 
 
 # 发送到vps
-~/script/scp.sh api-pack-new root@vps.moonchan.xyz:~/tempQ
+~/script/scp.sh api-pack-new root@vps.moonchan.xyz:~/temp
 # 检查 SCP 是否成功
 if [ $? -ne 0 ]; then
     echo "文件传输失败，退出。"

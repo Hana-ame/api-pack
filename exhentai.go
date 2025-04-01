@@ -300,11 +300,34 @@ func ExhProxy() { // 就是这个
 	// r.Use(middleware.BlockMiddleware()) // 改到下面
 
 	// 设置 CORS 头
+	// r.Use(gzip.Gzip(gzip.DefaultCompression))                                                                                                                                                        nnnn
 	r.Use(middleware.CORSMiddleware())
 	r.Use(middleware.ProxyMiddleware())
 
 	// 定义一个简单的 GET 路由
 	r.Any("/*any", func(c *gin.Context) {
+		// 送到新域名
+		if c.Request.Host == "ex.nmbyd1.top" {
+			// 获取请求中的 Cookie
+			href, err := url.Parse(c.Request.URL.String())
+			if err != nil {
+				c.Header("X-Error", c.Request.URL.String())
+				c.AbortWithStatus(http.StatusBadRequest)
+				return
+			}
+			href.Host = "ex.nmbyd2.top"
+			href.Scheme = "https"
+			c.Header("X-Location", href.String()) // 在那之前先在X-Location上看一看
+			// 闹钟
+			if time.Now().Before(time.Date(2025, 4, 10, 0, 0, 0, 0, time.Local)) {
+				return
+			}
+			c.Redirect(http.StatusMovedPermanently, href.String())
+			c.Abort()
+			return
+		}
+
+	}, func(c *gin.Context) {
 		// 封禁列表
 		// archive, fullimg, uconfig
 		// 国内且pass != pass
@@ -338,7 +361,7 @@ func ExhProxy() { // 就是这个
 		}
 
 		// 遗留问题, image这个path重定向到用param的请求
-		if strings.HasPrefix(c.Request.URL.String(), "/image") {
+		if strings.HasPrefix(c.Request.URL.String(), "/image/") {
 			path := strings.TrimPrefix(c.Request.URL.String(), "/image")
 			parsedURL, err := url.Parse(path)
 			if err != nil {
@@ -418,7 +441,7 @@ func ExhProxy() { // 就是这个
 		}
 
 		// 适配自家阅读器
-		if tools.Match(url.Parse(c.Request.Referer())).Result().Host == "page.moonchan.xyz" {
+		if tools.Match(url.Parse(c.Request.Referer())).GetOrDefault(c.Request.URL).Host == "page.moonchan.xyz" {
 			return
 		}
 
@@ -455,14 +478,13 @@ func ExhProxy() { // 就是这个
 			}
 			cookieValue := strconv.Itoa(int(tools.NewTimeStamp()) + 65536*1000*5)
 			c.SetCookie("at", cookieValue, 3600*24*365, "/", "", false, false)
-			c.String(http.StatusOK, "为了节约3$以及防止一个域名用太久被墙，现已经迁移到：https://ex.nmbyd2.top\nhttps://ex.nmbyd1.top 将在5月2日过期，在这之前你依然能够使用这个域名\n这条警告消息被设置为只会出现在首次访问的5秒内，以防有人看不见\n类似这样的迁移频率大致为10月一次，嫌麻烦可以给我打钱，有钱就能续域名也不用这么换了")
+			c.String(http.StatusOK, "为了节约3$预算以及防止一个域名用太久被墙，现已经迁移到：https://ex.nmbyd2.top\nhttps://ex.nmbyd1.top 将在5月2日过期，在这之前你依然能够使用这个域名\n这条警告消息被设置为只会出现在首次访问的5秒内，以防有人看不见\n类似这样的迁移频率大致为10月一次，嫌麻烦可以给我打钱，钱够就续到被墙")
 			c.Abort()
 			return
 		}
 
-		// 没用啊, 这样google进来不也是ok了的
-		// 只要带有Referer就不阻止. 是上面的扩展.
-		// if c.Request.Referer() != "" {
+		/// 顺序好像不对，不起用了。
+		// if r, err := (url.Parse(c.Request.Referer())); err == nil && slices.Contains([]string{"ex.nmbyd1.top", "ex.nmbyd2.top", "ex.nmbyd3.top", "ex.moonchan.xyz"}, r.Host) {
 		// 	return
 		// }
 
@@ -502,6 +524,19 @@ func ExhProxy() { // 就是这个
 			c.Abort()
 			return
 		}
+	}, func(c *gin.Context) { // 屏蔽php攻击
+		path := c.Request.URL.Path
+		allowList := []string{"/gallerytorrents.php", "/favorites.php", "/torrents.php", "/gallerypopups.php"}
+		for _, allowed := range allowList {
+			if strings.HasPrefix(path, allowed) {
+				return
+			}
+		}
+		if strings.HasSuffix(path, "php") {
+			c.String(http.StatusForbidden, "疑似攻击, 已屏蔽 %s, %s", c.Request.URL.Path, c.Request.URL.String())
+			c.Abort()
+			return
+		}
 	}, func(c *gin.Context) {
 		c.Header("X-Debug-Request-Host", c.Request.Host)     // 要设置 Host $http_host
 		c.Header("X-Debug-Header-Host", c.GetHeader("Host")) // never
@@ -515,14 +550,16 @@ func ExhProxy() { // 就是这个
 		const host = "exhentai.org"
 
 		header := tools.NewHeader(c.Request.Header)
-		header.Set(
-			"Cookie",
+		header.Set("Cookie",
 			tools.NewSlice(
 				c.GetHeader("X-Cookie"),
 				os.Getenv("EXHENTAI_PROXY_COOKIE"),
 				"ipb_member_id=5698562; ipb_pass_hash=154e574fd19294c32f905fe187cbdad1; yay=louder; igneous=5eevdxac75hpx71cv",
 			).FirstUnequal(""),
 		)
+		if strings.Contains(header.Get("User-Agent"), "Mobile") {
+			header.Set("User-Agent", "myfetch/1.0.9")
+		}
 
 		resp, err := mf.Fetch(
 			c.Request.Method, "https://"+host+path,
@@ -547,7 +584,7 @@ func ExhProxy() { // 就是这个
 			mf.SetClientPool(newCp)
 		}
 
-		if strings.HasPrefix(path, "/torrent") {
+		if strings.HasPrefix(path, "/torrent") || strings.HasPrefix(path, "/z/") {
 			for k, vs := range resp.Header {
 				if c.Writer.Header().Get(k) != "" {
 					continue
@@ -586,6 +623,7 @@ func ExhProxy() { // 就是这个
 
 		if len(data) == 0 {
 			c.AbortWithStatus(resp.StatusCode) // 304 not modified
+			tools.CopyHeader(c, resp.Header)
 			return
 		}
 
@@ -1068,21 +1106,40 @@ func addFloatingIframeAtRightBottom(html []byte) []byte {
 			z-index: 100000; /* 确保在最上层 */
 			overflow: hidden; /* 确保内容不超出边框 */
 		}       
-		#moonchan-close-button {
-            position: absolute;
-            top: 5px;
-            right: 5px;
-            background-color: red; /* 按钮颜色 */
-            color: white; /* 字体颜色 */
-            border: none;
-            border-radius: 50%;
-            width: 25px;
-            height: 25px;
-            cursor: pointer;
-            font-size: 18px;
-            line-height: 25px; /* 垂直居中 */
-            text-align: center;
-        }
+#moonchan-close-button {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background-color: red;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 48px;  /* iOS规范最小值44px的适配值 */
+    height: 48px;
+    padding: 6px; /* 增强触控容错 */
+    cursor: pointer;
+    font-size: 24px;
+    line-height: 48px;
+    transition: 0.2s;
+    /* 扩展热区 */
+    &:after {
+        content: '';
+        position: absolute;
+        top: -10px;
+        right: -10px;
+        bottom: -10px;
+        left: -10px;
+    }
+    /* 按压反馈 */
+    &:active {
+        transform: scale(0.9);
+    }
+    /* 禁用状态 */
+    &[disabled] {
+        opacity: 0.6;
+        pointer-events: none;
+    }
+}
 	</style>
 </head>`), 1)
 	html = bytes.Replace(html,
@@ -1090,11 +1147,11 @@ func addFloatingIframeAtRightBottom(html []byte) []byte {
 		[]byte(`<body>
     <div id="moonchan-floating-iframe" style="display: none;">
         <button id="moonchan-close-button" onclick="moonchanCloseIframe()">×</button>
-        <iframe src="https://moonchan.xyz/iframe.html?date=250308" style="border: none; width: 100%; height: calc(100% - 30px);"></iframe>
+        <iframe src="https://moonchan.xyz/iframe.html?date=250325" style="border: none; width: 100%; height: calc(100% - 30px);"></iframe>
     </div>
 
     <script>
-		const mark = '250306';
+		const mark = '250325';
         // 检查 localStorage 中的值
         if (localStorage.getItem('iframeClosed') !== mark) {
             document.getElementById('moonchan-floating-iframe').style.display = 'block';
