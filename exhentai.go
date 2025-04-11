@@ -272,7 +272,185 @@ func EhProxy() {
 
 }
 
-func ExhProxy() { // 就是这个
+// 仅加载origin。
+// 是通过location来的
+// / TODO
+func ExOrigin(laddr string) {
+	// 先这样。
+	myfetch.SetClients([]*http.Client{{
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse // 强制停止重定向[6,7,8](@ref)
+		},
+	},
+	})
+	godotenv.Load(".env")
+	r := gin.New()
+	r.Use(gin.Recovery())
+	r.Use(middleware.CORSMiddleware())
+	r.GET("/*any", func(c *gin.Context) {
+		path := c.Request.URL.String()
+		// 如果不是s开头，直接传送到别处
+		if !strings.HasPrefix(path, "/s/") {
+			c.Redirect(http.StatusFound, "https://ex.moonchan.xyz"+path)
+			c.Abort()
+			return
+		}
+		header := tools.NewHeader(c.Request.Header)
+		header.Set(
+			"Cookie",
+			tools.NewSlice(
+				c.GetHeader("X-Cookie"),
+				os.Getenv("EXHENTAI_PROXY_COOKIE"), // 记得改
+			).FirstUnequal(""),
+		)
+		// 获取画廊页面
+		resp, err := myfetch.Fetch(
+			c.Request.Method, "https://exhentai.org"+path,
+			(header.Header), c.Request.Body)
+		if err != nil {
+			debug.E("why", err.Error())
+			c.Header("X-Error", err.Error())
+			c.AbortWithError(http.StatusBadGateway, err)
+			return
+		}
+		defer resp.Body.Close()
+
+		body, err := myfetch.ResponseToReader(resp)
+		if err != nil {
+			c.Header("X-Error", err.Error())
+			c.AbortWithStatus(http.StatusInternalServerError)
+			return
+		}
+
+		doc, err := htmlquery.Parse(body)
+		if err != nil {
+			c.Header("X-Error", err.Error())
+			c.AbortWithStatus(http.StatusInternalServerError)
+			return
+		}
+		arr := findAll(doc, "//a", "href")
+
+		// 提取 fullimg 连接
+		fullimg, err := streams.First(arr, func(s string) bool {
+			return strings.HasPrefix(s, "https://exhentai.org/fullimg")
+		})
+		// 如果没有 fullimg 属性，直接返回当前图片
+		if err != nil {
+			c.Header("X-Error-Href", strings.Join(arr, ", "))
+			c.Header("X-Error-Fullimg", err.Error())
+			image, err := findOneAndSelectAttr(doc, "//img[@id='img']", "src")
+			if err != nil {
+				c.Header("X-Error", err.Error())
+				c.AbortWithStatus(http.StatusInternalServerError)
+				return
+			}
+			c.Redirect(http.StatusFound, image)
+			c.Abort()
+			return
+		}
+		// 从 home.php 找到 quota
+		{
+			resp, err := myfetch.Fetch(
+				c.Request.Method, "https://e-hentai.org/home.php",
+				(header.Header), c.Request.Body)
+			if err != nil {
+				c.Header("X-Error", err.Error())
+				c.AbortWithError(http.StatusBadGateway, err)
+				return
+			}
+			defer resp.Body.Close()
+			body, err := myfetch.ResponseToReader(resp)
+			if err != nil {
+				c.Header("X-Error", err.Error())
+				c.AbortWithStatus(http.StatusInternalServerError)
+				return
+			}
+			doc, err := htmlquery.Parse(body)
+			if err != nil {
+				c.Header("X-Error", err.Error())
+				c.AbortWithStatus(http.StatusInternalServerError)
+				return
+			}
+
+			arr := findAll(doc, "//strong", InnerText)
+			// fmt.Println(arr) // it's ok
+			if len(arr) < 2 {
+				c.Header("X-Error", "arr < 2")
+				c.AbortWithError(http.StatusInternalServerError, err)
+				return
+			}
+			quota := tools.Atoi(arr[0], -1)
+			limit := tools.Atoi(arr[1], -1)
+			c.Header("X-Quota", fmt.Sprintf("quota: %d, limit: %d", quota, limit))
+			if quota >= limit {
+				c.String(http.StatusForbidden, "配额不足：%d/%d", quota, limit)
+				return
+			}
+		}
+		// 提取 gallery 连接
+		gallery, err := streams.First(arr, func(s string) bool {
+			return strings.HasPrefix(s, "https://exhentai.org/g/")
+		})
+		if err != nil {
+			c.Header("X-Error", err.Error())
+			debug.E("origin", err.Error())
+			c.AbortWithStatus(http.StatusInternalServerError)
+			return
+		}
+		// 访问 gallery 确定是否在运行时间段
+		{
+			resp, err := myfetch.Fetch(
+				c.Request.Method, gallery,
+				(header.Header), c.Request.Body)
+			if err != nil {
+				c.Header("X-Error", err.Error())
+				c.AbortWithError(http.StatusBadGateway, err)
+				return
+			}
+			defer resp.Body.Close()
+			body, err := myfetch.ResponseToReader(resp)
+			if err != nil {
+				c.Header("X-Error", err.Error())
+				c.AbortWithStatus(http.StatusInternalServerError)
+				return
+			}
+			doc, err := htmlquery.Parse(body)
+			if err != nil {
+				c.Header("X-Error", err.Error())
+				c.AbortWithStatus(http.StatusInternalServerError)
+				return
+			}
+
+			date, _ := findOneAndSelectAttr(doc, `//*[@id="gdd"]/table/tbody/tr[1]/td[2]`, InnerText)
+
+			if !isGalleryAvailable(date) {
+				c.Header("X-Error", date)
+				c.String(http.StatusForbidden, "%s, 不满足发布后一年内空闲时段或三个月内的画廊", date)
+				return
+			}
+		}
+		// 访问原图
+		{
+			resp, err := myfetch.Fetch(http.MethodGet, fullimg,
+				(header.Header), nil)
+			if err != nil {
+				c.Header("X-Error", err.Error())
+				c.AbortWithStatus(http.StatusBadGateway)
+				return
+			}
+			defer resp.Body.Close()
+
+			header := tools.NewHeader(resp.Header)
+			c.DataFromReader(resp.StatusCode, resp.ContentLength, resp.Header.Get("Content-Type"), resp.Body, header.ToMap())
+		}
+
+	})
+	// 启动服务器
+	r.Run(laddr) // 在 8080 端口启动服务
+}
+
+// 就是这个
+func ExhProxy() {
 	godotenv.Load(".env")
 
 	// debug.LogLevel = debug.Fatal
@@ -490,7 +668,7 @@ func ExhProxy() { // 就是这个
 
 	}, func(c *gin.Context) { // 看看有多少余额用的
 		path := c.Request.URL.String()
-		if strings.HasPrefix(path, "/exchange.php") {
+		if strings.HasPrefix(path, "/exchange.php") || strings.HasPrefix(path, "/home.php") || strings.HasPrefix(path, "/logs.php") {
 			header := tools.NewHeader(c.Request.Header)
 			header.Set(
 				"Cookie",
@@ -519,7 +697,9 @@ func ExhProxy() { // 就是这个
 					c.Writer.Header().Add(k, v)
 				}
 			}
-			c.DataFromReader(resp.StatusCode, resp.ContentLength, resp.Header.Get("Content-Type"), resp.Body, nil)
+			c.DataFromReader(resp.StatusCode, resp.ContentLength, resp.Header.Get("Content-Type"), resp.Body, map[string]string{
+				"X-Path": path,
+			})
 
 			c.Abort()
 			return
@@ -547,7 +727,7 @@ func ExhProxy() { // 就是这个
 		// 读取 URL 参数
 		path := c.Request.URL.String()
 
-		const host = "exhentai.org"
+		host := tools.Or(c.Query("host"), "exhentai.org")
 
 		header := tools.NewHeader(c.Request.Header)
 		header.Set("Cookie",
@@ -557,10 +737,13 @@ func ExhProxy() { // 就是这个
 				"ipb_member_id=5698562; ipb_pass_hash=154e574fd19294c32f905fe187cbdad1; yay=louder; igneous=5eevdxac75hpx71cv",
 			).FirstUnequal(""),
 		)
+
 		if strings.Contains(header.Get("User-Agent"), "Mobile") {
 			header.Set("User-Agent", "myfetch/1.0.9")
 		}
-
+		if host != "exhentai.org" {
+			header.Set("Referer", "https://e-hentai.org/")
+		}
 		resp, err := mf.Fetch(
 			c.Request.Method, "https://"+host+path,
 			(header.Header), c.Request.Body)
@@ -1025,8 +1208,7 @@ func addWaterFallViewButton(html string) string {
 		position: fixed;
 		left: 20px; 
 		top: 20px;
-		z-index: 99;
-		display: none;"
+		z-index: 99;"
 	>
 		<button id="originBtn" style="
 			width: 100%;    
@@ -1084,7 +1266,7 @@ func addWaterFallViewButton(html string) string {
 	document.getElementById("waterfall2").addEventListener("click", execWaterfall2, false); 
 	document.getElementById("originBtn").addEventListener("click", function() {
       const currentUrl = window.location.href.split('?')[0];
-      window.location.href = currentUrl + '?redirect_to=origin';
+      window.location.host = "eh-web-viewer.moonchan.xyz";
     });
 	</script>`, 1)
 }
