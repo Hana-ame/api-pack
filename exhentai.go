@@ -286,23 +286,44 @@ func ExOrigin(laddr string) {
 	godotenv.Load(".env")
 	r := gin.New()
 	r.Use(gin.Recovery())
+	// r := gin.Default()
 	r.Use(middleware.CORSMiddleware())
 	r.GET("/*any", func(c *gin.Context) {
 		path := c.Request.URL.String()
-		// 如果不是s开头，直接传送到别处
-		if !strings.HasPrefix(path, "/s/") {
-			c.Redirect(http.StatusFound, "https://ex.moonchan.xyz"+path)
+		// 如果不是archiver.php开头，不处理
+		if !strings.HasPrefix(path, "/archiver.php") {
+			c.String(http.StatusOK, "原档下载已开放，点击Archive Download，省着点用，可以捐赠我一点SP/贡献/Hath/Credit\n")
 			c.Abort()
+		} else {
+			c.Abort()
+		}
+	}, func(c *gin.Context) {
+		path := c.Request.URL.String()
+		// 如果不是s开头，不处理
+		if !strings.HasPrefix(path, "/s/") {
 			return
 		}
 		header := tools.NewHeader(c.Request.Header)
 		header.Set(
 			"Cookie",
-			tools.NewSlice(
+			(tools.NewSlice(
 				c.GetHeader("X-Cookie"),
 				os.Getenv("EXHENTAI_PROXY_COOKIE"), // 记得改
-			).FirstUnequal(""),
+			).Find(tools.UnEqual(""))).GetOrDefault(""),
 		)
+
+		tools.Match(url.Parse(c.Request.Referer())).Then(func(url *url.URL) error {
+			url.Host = "exhentai.org"
+			header.Set("Referer", url.String())
+			return nil
+		}).Catch(func(e error) error {
+			c.Header("X-Error", e.Error())
+			header.Set("Referer", "https://exhentai.org/")
+			return nil
+		})
+
+		// header.Set("Origin", "https://exhentai.org")
+
 		// 获取画廊页面
 		resp, err := myfetch.Fetch(
 			c.Request.Method, "https://exhentai.org"+path,
@@ -318,14 +339,14 @@ func ExOrigin(laddr string) {
 		body, err := myfetch.ResponseToReader(resp)
 		if err != nil {
 			c.Header("X-Error", err.Error())
-			c.AbortWithStatus(http.StatusInternalServerError)
+			c.AbortWithError(http.StatusInternalServerError, err)
 			return
 		}
 
 		doc, err := htmlquery.Parse(body)
 		if err != nil {
 			c.Header("X-Error", err.Error())
-			c.AbortWithStatus(http.StatusInternalServerError)
+			c.AbortWithError(http.StatusInternalServerError, err)
 			return
 		}
 		arr := findAll(doc, "//a", "href")
@@ -341,7 +362,7 @@ func ExOrigin(laddr string) {
 			image, err := findOneAndSelectAttr(doc, "//img[@id='img']", "src")
 			if err != nil {
 				c.Header("X-Error", err.Error())
-				c.AbortWithStatus(http.StatusInternalServerError)
+				c.AbortWithError(http.StatusInternalServerError, err)
 				return
 			}
 			c.Redirect(http.StatusFound, image)
@@ -362,13 +383,13 @@ func ExOrigin(laddr string) {
 			body, err := myfetch.ResponseToReader(resp)
 			if err != nil {
 				c.Header("X-Error", err.Error())
-				c.AbortWithStatus(http.StatusInternalServerError)
+				c.AbortWithError(http.StatusInternalServerError, err)
 				return
 			}
 			doc, err := htmlquery.Parse(body)
 			if err != nil {
 				c.Header("X-Error", err.Error())
-				c.AbortWithStatus(http.StatusInternalServerError)
+				c.AbortWithError(http.StatusInternalServerError, err)
 				return
 			}
 
@@ -384,6 +405,7 @@ func ExOrigin(laddr string) {
 			c.Header("X-Quota", fmt.Sprintf("quota: %d, limit: %d", quota, limit))
 			if quota >= limit {
 				c.String(http.StatusForbidden, "配额不足：%d/%d", quota, limit)
+				c.Abort()
 				return
 			}
 		}
@@ -393,8 +415,7 @@ func ExOrigin(laddr string) {
 		})
 		if err != nil {
 			c.Header("X-Error", err.Error())
-			debug.E("origin", err.Error())
-			c.AbortWithStatus(http.StatusInternalServerError)
+			c.AbortWithError(http.StatusBadGateway, err)
 			return
 		}
 		// 访问 gallery 确定是否在运行时间段
@@ -411,21 +432,22 @@ func ExOrigin(laddr string) {
 			body, err := myfetch.ResponseToReader(resp)
 			if err != nil {
 				c.Header("X-Error", err.Error())
-				c.AbortWithStatus(http.StatusInternalServerError)
+				c.AbortWithError(http.StatusInternalServerError, err)
 				return
 			}
 			doc, err := htmlquery.Parse(body)
 			if err != nil {
 				c.Header("X-Error", err.Error())
-				c.AbortWithStatus(http.StatusInternalServerError)
+				c.AbortWithError(http.StatusInternalServerError, err)
 				return
 			}
 
 			date, _ := findOneAndSelectAttr(doc, `//*[@id="gdd"]/table/tbody/tr[1]/td[2]`, InnerText)
 
-			if !isGalleryAvailable(date) {
+			if (!isWithinThreeMonths(date)) && (!isWithinOneYearAndLeasureTime(date)) {
 				c.Header("X-Error", date)
 				c.String(http.StatusForbidden, "%s, 不满足发布后一年内空闲时段或三个月内的画廊", date)
+				c.Abort()
 				return
 			}
 		}
@@ -435,19 +457,25 @@ func ExOrigin(laddr string) {
 				(header.Header), nil)
 			if err != nil {
 				c.Header("X-Error", err.Error())
-				c.AbortWithStatus(http.StatusBadGateway)
+				c.AbortWithError(http.StatusBadGateway, err)
 				return
 			}
 			defer resp.Body.Close()
 
 			header := tools.NewHeader(resp.Header)
 			c.DataFromReader(resp.StatusCode, resp.ContentLength, resp.Header.Get("Content-Type"), resp.Body, header.ToMap())
+			c.Abort()
+			return
 		}
-
+	}, func(c *gin.Context) {
+		c.Redirect(http.StatusFound, "https://ex.moonchan.xyz"+c.Request.URL.String())
+		c.Abort()
 	})
 	// 启动服务器
 	r.Run(laddr) // 在 8080 端口启动服务
 }
+
+var last uint64
 
 // 就是这个
 func ExhProxy() {
@@ -484,7 +512,14 @@ func ExhProxy() {
 
 	// 定义一个简单的 GET 路由
 	r.Any("/*any", func(c *gin.Context) {
-		// 送到新域名
+		// if strings.HasPrefix(c.Request.URL.String(), "/still-alive") {
+		// 	last = uint64(time.Now().Unix())
+		// 	c.String(200, "%d", last)
+		// 	c.Abort()
+		// 	return
+		// }
+	}, func(c *gin.Context) {
+		// 送到新域名, 若 迁移(1/2)
 		if c.Request.Host == "ex.nmbyd1.top" {
 			// 获取请求中的 Cookie
 			href, err := url.Parse(c.Request.URL.String())
@@ -524,12 +559,15 @@ func ExhProxy() {
 		}
 
 		if strings.HasPrefix(c.Request.URL.String(), "/archiver.php") {
+			// if last+60 < uint64(time.Now().Unix()) {
+			// 	c.String(200, "关机节电中")
+			// 	c.Abort()
+			// 	return
+			// }
 			// 如果 Cookie 包含 pass=pass，直接继续处理请求
-			if cookie, err := c.Cookie("pass"); err != nil || cookie == "pass" {
-				c.AbortWithStatus(http.StatusForbidden)
-				return
-			}
-
+			c.Redirect(http.StatusFound, "https://chat.moonchan.xyz"+c.Request.URL.String())
+			c.Abort()
+			return
 		}
 
 		if strings.HasPrefix(c.Request.URL.String(), "/static/") {
@@ -644,6 +682,7 @@ func ExhProxy() {
 
 		// }, func(c *gin.Context) { // 用于迁移域名
 
+		//  若 迁移(2/2)
 		if c.Request.Host == "ex.nmbyd1.top" {
 			// 获取请求中的 Cookie
 			cookie, err := c.Cookie("at")
@@ -666,7 +705,10 @@ func ExhProxy() {
 		// 	return
 		// }
 
-	}, func(c *gin.Context) { // 看看有多少余额用的
+	}, func(c *gin.Context) {
+
+		// 看看有多少余额用的
+
 		path := c.Request.URL.String()
 		if strings.HasPrefix(path, "/exchange.php") || strings.HasPrefix(path, "/home.php") || strings.HasPrefix(path, "/logs.php") {
 			header := tools.NewHeader(c.Request.Header)
@@ -704,7 +746,10 @@ func ExhProxy() {
 			c.Abort()
 			return
 		}
-	}, func(c *gin.Context) { // 屏蔽php攻击
+	}, func(c *gin.Context) {
+
+		// 屏蔽php攻击
+
 		path := c.Request.URL.Path
 		allowList := []string{"/gallerytorrents.php", "/favorites.php", "/torrents.php", "/gallerypopups.php"}
 		for _, allowed := range allowList {
@@ -718,6 +763,9 @@ func ExhProxy() {
 			return
 		}
 	}, func(c *gin.Context) {
+
+		// 正牌
+
 		c.Header("X-Debug-Request-Host", c.Request.Host)     // 要设置 Host $http_host
 		c.Header("X-Debug-Header-Host", c.GetHeader("Host")) // never
 
@@ -737,13 +785,21 @@ func ExhProxy() {
 				"ipb_member_id=5698562; ipb_pass_hash=154e574fd19294c32f905fe187cbdad1; yay=louder; igneous=5eevdxac75hpx71cv",
 			).FirstUnequal(""),
 		)
-
+		// 如果头带Mobile就OverRide掉.
 		if strings.Contains(header.Get("User-Agent"), "Mobile") {
-			header.Set("User-Agent", "myfetch/1.0.9")
+			header.Set("User-Agent", "myfetch/2025.4.14")
 		}
-		if host != "exhentai.org" {
-			header.Set("Referer", "https://e-hentai.org/")
-		}
+
+		tools.Match(url.Parse(c.Request.Referer())).Then(func(url *url.URL) error {
+			url.Host = "exhentai.org"
+			header.Set("Referer", url.String())
+			return nil
+		}).Catch(func(e error) error {
+			c.Header("X-Error", e.Error())
+			header.Set("Referer", "https://exhentai.org/")
+			return nil
+		})
+
 		resp, err := mf.Fetch(
 			c.Request.Method, "https://"+host+path,
 			(header.Header), c.Request.Body)
@@ -896,7 +952,7 @@ func ExhProxy() {
 
 			// if isWithinThreeMonths(o.GetOrDefault("date", "2000-01-01").(string)) || isGalleryAvailable(o.GetOrDefault("date", "2000-01-01").(string)) {
 			// 没啦
-			if isGalleryAvailable(o.GetOrDefault("date", "2000-01-01").(string)) {
+			if isWithinOneYearAndLeasureTime(o.GetOrDefault("date", "2000-01-01").(string)) {
 				debug.I("origin", o.GetOrDefault("date", "notfound"))
 				resp, err := mf.Fetch(http.MethodGet, "https://"+host+fullimg,
 					(header.Header), nil)
@@ -1329,11 +1385,11 @@ func addFloatingIframeAtRightBottom(html []byte) []byte {
 		[]byte(`<body>
     <div id="moonchan-floating-iframe" style="display: none;">
         <button id="moonchan-close-button" onclick="moonchanCloseIframe()">×</button>
-        <iframe src="https://moonchan.xyz/iframe.html?date=250325" style="border: none; width: 100%; height: calc(100% - 30px);"></iframe>
+        <iframe src="https://moonchan.xyz/iframe.html?date=250422" style="border: none; width: 100%; height: calc(100% - 30px);"></iframe>
     </div>
 
     <script>
-		const mark = '250325';
+		const mark = '250422';
         // 检查 localStorage 中的值
         if (localStorage.getItem('iframeClosed') !== mark) {
             document.getElementById('moonchan-floating-iframe').style.display = 'block';
@@ -1350,7 +1406,7 @@ func addFloatingIframeAtRightBottom(html []byte) []byte {
 	return html
 }
 
-func isGalleryAvailable(datestr string) bool {
+func isWithinOneYearAndLeasureTime(datestr string) bool {
 	const layout = "2006-01-02 15:04"
 
 	// 解析输入时间（UTC时区）
@@ -1371,7 +1427,7 @@ func isGalleryAvailable(datestr string) bool {
 	// 判断当前是否非高峰时段
 	notPeak := !isPeakHour(now)
 
-	return within12Months && notPeak
+	return (within12Months && notPeak)
 }
 
 // 判断是否是高峰时段（UTC时区）
