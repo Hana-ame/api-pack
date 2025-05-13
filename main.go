@@ -32,8 +32,8 @@ func main() {
 	if os.Getenv("SUKEBEI_PROXY") != "" {
 		go SukebeiProxy() //127.25.23.5:8080
 	}
-	if os.Getenv("GROQ_PROXY") != "" {
-		go GroqProxy() //127.25.2.9:8080
+	if tools.HasEnv("GROQ_PROXY") {
+		go OpenaiProxy(os.Getenv("GROQ_PROXY")) //127.25.2.9:8080
 	}
 	// go EhProxy()      //127.25.23.6:8080
 

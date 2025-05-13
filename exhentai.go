@@ -1270,7 +1270,7 @@ func addWaterFallViewButton(html string) string {
 			width: 100%;    
 			height: 100%;
 			font-size: x-large;"
-		>原图</button>
+		>复制图片外链</button>
 	</div>
   <script type="text/javascript">
 	async function execWaterfall(){
@@ -1321,8 +1321,36 @@ func addWaterFallViewButton(html string) string {
 	document.getElementById("waterfall").addEventListener("click", execWaterfall, false); 
 	document.getElementById("waterfall2").addEventListener("click", execWaterfall2, false); 
 	document.getElementById("originBtn").addEventListener("click", function() {
-      const currentUrl = window.location.href.split('?')[0];
-      window.location.host = "eh-web-viewer.moonchan.xyz";
+
+  //   const currentUrl = window.location.href.split('?')[0];
+  //   window.location.host = "eh-web-viewer.moonchan.xyz";
+  const currentUrl = window.location.href;
+  // 方法二：兼容现有参数（智能添加 ? 或 &）
+  const hasQuery = currentUrl.includes('?');
+  const newUrl = currentUrl + (hasQuery ? '&' : '?') + 'redirect_to=image';
+
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(newUrl)
+      .then(() => alert('已复制到剪贴板！'))
+      .catch(() => fallbackCopy(newUrl));
+  } else {
+    fallbackCopy(newUrl);
+  }
+  function fallbackCopy(text) {
+    const input = document.createElement('input');
+    input.value = text;
+    document.body.appendChild(input);
+    input.select();
+    try {
+      document.execCommand('copy');
+      alert('已复制（兼容模式）');
+    } catch (err) {
+      alert('复制失败，请手动复制');
+    } finally {
+      document.body.removeChild(input);
+    }
+  }
+	
     });
 	</script>`, 1)
 }
