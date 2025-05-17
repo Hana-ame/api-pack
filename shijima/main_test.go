@@ -1,9 +1,11 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 	"testing"
 
 	tools "github.com/Hana-ame/api-pack/Tools"
@@ -144,4 +146,68 @@ func TestGetThread(t *testing.T) {
 			fmt.Println(string(tools.Match(json.Marshal(r)).Result()))
 		})
 	}
+}
+
+func TestExample(t *testing.T) {
+	// 数据库连接配置
+	dsn := os.Getenv("MARIADB")
+
+	// 建立连接
+	db, err := sql.Open("mysql", dsn)
+	if err != nil {
+		log.Fatal("数据库连接失败:", err)
+	}
+	defer db.Close()
+
+	// 执行查询
+	rows, err := db.Query(`
+        SELECT 
+            t, n, ts, id, no, p, txt, r, del, c, ip 
+        FROM 
+            thread
+		LIMIT 10;
+    `)
+	if err != nil {
+		log.Fatal("查询失败:", err)
+	}
+	defer rows.Close()
+
+	// 遍历结果集
+	var results []Thread
+	for rows.Next() {
+		var t Thread
+		err := rows.Scan(
+			&t.T,
+			&t.N,
+			&t.Ts,
+			&t.ID,
+			&t.No,
+			&t.P,
+			&t.Txt,
+			&t.R,
+			&t.Del,
+			&t.C,
+			&t.IP,
+		)
+		if err != nil {
+			log.Fatal("数据解析失败:", err)
+		}
+		results = append(results, t)
+	}
+
+	// 输出结果
+	fmt.Printf("共查询到 %d 条记录\n", len(results))
+	for _, thread := range results {
+		fmt.Printf("ID:%s 时间:%s 内容:%.20s...\n",
+			thread.ID,
+			thread.Ts,
+			thread.Txt)
+	}
+}
+
+func TestBoard(t *testing.T) {
+	ts, er := getBoard(1, 0)
+	fmt.Println(er)
+	fmt.Println(string(tools.Match(json.Marshal(ts)).Result()))
+	tools.SaveStructToJsonFile(ts, "a.json")
 }

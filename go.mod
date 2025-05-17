@@ -1,6 +1,6 @@
 module github.com/Hana-ame/api-pack
 
-go 1.23.3
+go 1.24.2
 
 require (
 	github.com/Hana-ame/httpsig v1.2.1
@@ -17,6 +17,7 @@ require (
 	github.com/klauspost/compress v1.17.11
 	github.com/lib/pq v1.10.9
 	github.com/stretchr/testify v1.10.0
+	github.com/things-go/go-socks5 v0.0.6
 	golang.org/x/net v0.37.0
 	golang.org/x/sys v0.31.0
 )

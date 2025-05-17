@@ -2,10 +2,11 @@ package main
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"sync"
 	"time"
 
@@ -48,8 +49,8 @@ type Thread struct {
 	Del  int8      `db:"del" json:"-"`          // is deleted?
 	C    string    `db:"c" json:"-"`            // country
 	IP   string    `db:"ip" json:"-"`           // ip address
-	Num  uint      `json:"num,omitempty"`
-	List []*Thread `json:"list,omitempty"`
+	Num  uint      `json:"num,omitempty"`       // from board
+	List []*Thread `json:"list,omitempty"`      // replies
 }
 
 // 表结构对应的结构体（根据图片中的列定义）
@@ -194,8 +195,73 @@ func getThread(tid, pn int) (*Thread, error) {
 	return thread, nil
 }
 
-func getBoard(bid, pn int) (*Thread, error) {
-	return nil, nil
+func getBoardThreads(bid, pn int) ([]*Thread, error) {
+	threads := make([]*Thread, 0, pageSize)
+	// 使用 Query 获取多行结果（网页5][网页7）
+	rows, err := db.Query(
+		`SELECT t.t, t.n, t.ts, t.id, t.no, t.p, t.txt, b.replynum 
+		FROM board AS b
+		INNER JOIN thread AS t
+			ON b.tid = t.no
+		WHERE b.bid = ? 
+			AND t.del >= 0 
+		ORDER BY b.last DESC 
+		LIMIT ? OFFSET ?`,
+		bid, pageSize, pageSize*pn,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("数据库查询失败: %w", err)
+	}
+	defer rows.Close() // 确保关闭连接（网页7强调）
+
+	// 遍历结果集（网页5][网页7）
+	for rows.Next() {
+		var t Thread
+		if err := rows.Scan(
+			&t.T, &t.N, &t.Ts, &t.ID, &t.No, &t.P, &t.Txt, &t.Num,
+		); err != nil {
+			return nil, fmt.Errorf("数据解析失败: %w", err)
+		}
+		threads = append(threads, &t)
+	}
+
+	// 检查遍历错误（网页5）
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("结果集处理错误: %w", err)
+	}
+
+	return threads, nil
+}
+
+func getBoard(bid, pn int) ([]*Thread, error) {
+	threads, err := getBoardThreads(bid, pn)
+	if err != nil {
+		return nil, err
+	}
+
+	n := len(threads)
+	errs := make([]error, n)
+	var wg sync.WaitGroup
+	wg.Add(n) // [1,2,6](@ref)
+	fmt.Println(n)
+	for i := 0; i < n; i++ {
+		go func(i int) {
+			defer wg.Done()
+
+			threads[i].List, errs[i] = getRepliesPreview(int(threads[i].No))
+			fmt.Println(i, string(tools.Match(json.Marshal(threads[i])).Result()))
+			tools.SaveStructToJsonFile(threads[i], strconv.Itoa(i)+".json")
+		}(i)
+	}
+	wg.Wait()
+
+	var merr *multierror.Error
+	merr = multierror.Append(merr, errs...)
+	if err := merr.ErrorOrNil(); err != nil {
+		return nil, err
+	}
+	return threads, err
+
 }
 
 func get(c *gin.Context) {
@@ -220,6 +286,34 @@ func get(c *gin.Context) {
 	}
 }
 
+func postThreadToBoard(bid, tid int) (int, error) {
+	//TODO
+	// 更新replynum
+}
+
+func postThread(thread *Thread, bid, tid int) error {
+	// TODO
+}
+
+func post(c *gin.Context) {
+	bid := tools.Atoi(c.Query("bid"), 0)
+	tid := tools.Atoi(c.Query("tid"), 0)
+	// pn := tools.Atoi(c.Query("pn"), 0)
+
+	var thread Thread
+	if err := c.BindJSON(&thread); err != nil {
+		c.JSON(http.StatusBadRequest, err.Error())
+	}
+	thread.R = tools.Or(thread.R, uint(tid))
+
+	if thread.R == 0 && bid == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "plz set tid or bid."})
+		return
+	}
+
+	get(c)
+}
+
 func Run(addr ...string) error {
 	r := gin.Default()
 
@@ -227,65 +321,8 @@ func Run(addr ...string) error {
 	r.Use(middleware.ProxyMiddleware())
 
 	r.GET("/api/v2", get)
-	// r.POST("/api/v2", post)
+	r.POST("/api/v2", post)
 	// r.DELETE("/api/v2", delete)
 
 	return r.Run(addr...)
-}
-
-func example() {
-	// 数据库连接配置
-	dsn := os.Getenv("MARIADB")
-
-	// 建立连接
-	db, err := sql.Open("mysql", dsn)
-	if err != nil {
-		log.Fatal("数据库连接失败:", err)
-	}
-	defer db.Close()
-
-	// 执行查询
-	rows, err := db.Query(`
-        SELECT 
-            t, n, ts, id, no, p, txt, r, del, c, ip 
-        FROM 
-            thread
-		LIMIT 10;
-    `)
-	if err != nil {
-		log.Fatal("查询失败:", err)
-	}
-	defer rows.Close()
-
-	// 遍历结果集
-	var results []Thread
-	for rows.Next() {
-		var t Thread
-		err := rows.Scan(
-			&t.T,
-			&t.N,
-			&t.Ts,
-			&t.ID,
-			&t.No,
-			&t.P,
-			&t.Txt,
-			&t.R,
-			&t.Del,
-			&t.C,
-			&t.IP,
-		)
-		if err != nil {
-			log.Fatal("数据解析失败:", err)
-		}
-		results = append(results, t)
-	}
-
-	// 输出结果
-	fmt.Printf("共查询到 %d 条记录\n", len(results))
-	for _, thread := range results {
-		fmt.Printf("ID:%s 时间:%s 内容:%.20s...\n",
-			thread.ID,
-			thread.Ts,
-			thread.Txt)
-	}
 }
