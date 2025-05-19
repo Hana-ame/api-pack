@@ -1,21 +1,26 @@
-package main
+// wait for test
+
+package shijima
 
 import (
 	"database/sql"
-	"encoding/json"
 	"fmt"
+	"image/jpeg"
 	"net/http"
 	"os"
-	"strconv"
+	"strings"
 	"sync"
 	"time"
 
 	_ "github.com/Hana-ame/api-pack/Tools"
 	tools "github.com/Hana-ame/api-pack/Tools"
+	myfetch "github.com/Hana-ame/api-pack/Tools/my_fetch"
 	middleware "github.com/Hana-ame/api-pack/Tools/my_gin_middleware"
+	"github.com/Hana-ame/api-pack/Tools/randomreader"
 	"github.com/gin-gonic/gin"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/hashicorp/go-multierror"
+	"github.com/nfnt/resize"
 )
 
 var db, _ = func() (*sql.DB, error) {
@@ -243,14 +248,11 @@ func getBoard(bid, pn int) ([]*Thread, error) {
 	errs := make([]error, n)
 	var wg sync.WaitGroup
 	wg.Add(n) // [1,2,6](@ref)
-	fmt.Println(n)
 	for i := 0; i < n; i++ {
 		go func(i int) {
 			defer wg.Done()
 
 			threads[i].List, errs[i] = getRepliesPreview(int(threads[i].No))
-			fmt.Println(i, string(tools.Match(json.Marshal(threads[i])).Result()))
-			tools.SaveStructToJsonFile(threads[i], strconv.Itoa(i)+".json")
 		}(i)
 	}
 	wg.Wait()
@@ -273,12 +275,14 @@ func get(c *gin.Context) {
 		o, e := getBoard(bid, pn)
 		if e != nil {
 			c.JSON(http.StatusInternalServerError, e.Error())
+			return
 		}
 		c.JSON(http.StatusOK, o)
 	} else if bid == 0 {
 		o, e := getThread(tid, pn)
 		if e != nil {
 			c.JSON(http.StatusInternalServerError, e.Error())
+			return
 		}
 		c.JSON(http.StatusOK, o)
 	} else {
@@ -286,13 +290,63 @@ func get(c *gin.Context) {
 	}
 }
 
-func postThreadToBoard(bid, tid int) (int, error) {
-	//TODO
-	// 更新replynum
+func getMaxNo() (int, error) {
+	var maxNo int
+	err := db.QueryRow("SELECT MAX(no) FROM thread").Scan(&maxNo)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return 0, nil
+		}
+		return 0, fmt.Errorf("获取最大no失败: %w", err)
+	}
+	return maxNo, nil
 }
 
-func postThread(thread *Thread, bid, tid int) error {
-	// TODO
+func postThreadToBoard(bid, tid int) (int, error) {
+	// 插入到板中
+	result, err := db.Exec(
+		"INSERT IGNORE  INTO board (bid, tid) VALUES (?, ?)",
+		bid, tid,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("插入到板失败: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("获取影响行数失败: %w", err)
+	}
+
+	return int(rowsAffected), nil
+}
+
+func postThread(thread *Thread, bid int) error {
+
+	// 执行插入
+	result, err := db.Exec(
+		"INSERT INTO thread (t, n, id, p, txt, r, del, c, ip) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)",
+		thread.T, thread.N, thread.ID, thread.P, thread.Txt, thread.R, thread.C, thread.IP,
+	)
+	if err != nil {
+		return fmt.Errorf("插入主题失败: %w", err)
+	}
+
+	// 获取插入的ID
+	lastInsertID, err := result.LastInsertId()
+	if err != nil {
+		return fmt.Errorf("获取插入ID失败: %w", err)
+	}
+	thread.No = uint(lastInsertID)
+
+	// 如果指定了bid，则添加到板中
+	if thread.R == 0 && bid > 0 {
+		_, err = postThreadToBoard(bid, int(lastInsertID))
+		if err != nil {
+			return fmt.Errorf("添加到板失败: %w", err)
+		}
+	}
+
+	return nil
 }
 
 func post(c *gin.Context) {
@@ -311,7 +365,97 @@ func post(c *gin.Context) {
 		return
 	}
 
+	thread.C = c.GetHeader("Cf-Ipcountry")
+	thread.IP = c.GetHeader("X-Forwarded-For")
+
+	err := postThread(&thread, bid)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, err)
+		return
+	}
 	get(c)
+}
+
+func deleteThread(no int, id, ip string) error {
+	// 执行插入
+	_, err := db.Exec(
+		"UPDATE thread SET del = -1 WHERE no = ? AND (id = ? OR ip = ?)",
+		no, id, ip,
+	)
+	return err
+}
+
+func delete(c *gin.Context) {
+	id := c.GetString("id")
+	ip := c.GetHeader("X-Forwarded-For")
+	no := tools.Atoi(c.Query("no"), 0)
+
+	// var thread Thread
+	// if err := c.BindJSON(&thread); err != nil {
+	// 	c.JSON(http.StatusBadRequest, err.Error())
+	// }
+
+	err := deleteThread(no, id, ip)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, err)
+		return
+	}
+	c.AbortWithStatus(http.StatusOK)
+}
+
+func checkID(c *gin.Context) {
+	auth, err := c.Cookie("auth")
+	if err != nil {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+	arr := strings.Split(auth, "|")
+	id, hash := arr[0], arr[1]
+	if tools.Hash(id, os.Getenv("SALT")) != hash {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+	c.Set("id", id)
+}
+func cookie(c *gin.Context) {
+	id := make([]byte, 8)
+	_, err := randomreader.Read(id)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, err)
+		return
+	}
+	hash := tools.Hash(string(id), os.Getenv("SALT"))
+	auth := string(id) + "|" + hash
+	c.SetCookie("auth", auth, 3600*24*365*10, "/", "", true, false)
+}
+
+func preview(c *gin.Context) {
+
+	path := c.Param("path")
+	host := c.Query("host")
+
+	resp, err := myfetch.Fetch(http.MethodGet, "https://"+host+path+"?"+c.Request.URL.Query().Encode(), nil, nil)
+	if err != nil {
+		c.String(http.StatusBadGateway, err.Error())
+		return
+	}
+
+	img, err := tools.DecodeResponseToImage(resp)
+	if err != nil {
+		c.String(http.StatusBadGateway, err.Error())
+		return
+	}
+
+	// 4. 生成缩略图（保持宽高比）
+	thumbnail := resize.Thumbnail(320, 320, img, resize.Lanczos3)
+
+	// 输出JPEG格式
+	c.Writer.Header().Set("Content-Type", "image/jpeg")
+	err = jpeg.Encode(c.Writer, thumbnail, &jpeg.Options{Quality: 80})
+	if err != nil {
+		c.String(http.StatusInternalServerError, err.Error())
+	}
+
 }
 
 func Run(addr ...string) error {
@@ -320,9 +464,11 @@ func Run(addr ...string) error {
 	r.Use(middleware.CORSMiddleware())
 	r.Use(middleware.ProxyMiddleware())
 
-	r.GET("/api/v2", get)
-	r.POST("/api/v2", post)
-	// r.DELETE("/api/v2", delete)
+	r.GET("/api/v2/", get)
+	r.GET("/api/v2/preview/*path", preview)
+	r.GET("/api/v2/cookie", cookie)
+	r.POST("/api/v2/", checkID, post)
+	r.DELETE("/api/v2/", checkID, delete)
 
 	return r.Run(addr...)
 }

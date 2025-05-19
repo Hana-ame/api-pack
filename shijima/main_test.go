@@ -1,4 +1,4 @@
-package main
+package shijima
 
 import (
 	"database/sql"
@@ -209,5 +209,91 @@ func TestBoard(t *testing.T) {
 	ts, er := getBoard(1, 0)
 	fmt.Println(er)
 	fmt.Println(string(tools.Match(json.Marshal(ts)).Result()))
-	tools.SaveStructToJsonFile(ts, "a.json")
+	tools.SaveToJSON(ts, "a.json")
+}
+
+func TestPostThread(t *testing.T) {
+	fmt.Println("version", 1)
+	// 测试用例表格
+	tests := []struct {
+		name        string
+		thread      *Thread
+		bid         int
+		wantErr     bool
+		wantNo      uint
+		postToBoard bool
+	}{
+		{
+			name: "成功插入主题并添加到板",
+			thread: &Thread{
+				T:   "测试标题",
+				N:   "测试用户",
+				ID:  "test123",
+				P:   "test.jpg",
+				Txt: "测试内容",
+				R:   0,
+				C:   "CN",
+				IP:  "127.0.0.1",
+			},
+			bid:         1,
+			wantErr:     false,
+			wantNo:      100,
+			postToBoard: true,
+		},
+		{
+			name: "成功插入回复主题",
+			thread: &Thread{
+				T:   "",
+				N:   "回复用户",
+				ID:  "reply123",
+				P:   "",
+				Txt: "回复内容",
+				R:   100,
+				C:   "US",
+				IP:  "192.168.1.1",
+			},
+			bid:         0,
+			wantErr:     false,
+			wantNo:      101,
+			postToBoard: false,
+		},
+		{
+			name: "数据库插入失败",
+			thread: &Thread{
+				T:   "失败测试",
+				N:   "测试用户",
+				ID:  "test123",
+				Txt: "测试内容",
+				R:   0,
+			},
+			bid:         1,
+			wantErr:     true,
+			postToBoard: false,
+		},
+		{
+			name: "添加到板失败",
+			thread: &Thread{
+				T:   "测试标题",
+				N:   "测试用户",
+				ID:  "test123",
+				Txt: "测试内容",
+				R:   0,
+			},
+			bid:         1,
+			wantErr:     true,
+			wantNo:      100,
+			postToBoard: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// 保存原始db对象以便测试后恢复
+
+			// 模拟postThreadToBoard函数
+			err := postThread(tt.thread, 2)
+			fmt.Println(err)
+
+		})
+	}
 }

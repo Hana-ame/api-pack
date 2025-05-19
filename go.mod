@@ -16,6 +16,7 @@ require (
 	github.com/jucardi/go-streams/v2 v2.0.2
 	github.com/klauspost/compress v1.17.11
 	github.com/lib/pq v1.10.9
+	github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646
 	github.com/stretchr/testify v1.10.0
 	github.com/things-go/go-socks5 v0.0.6
 	golang.org/x/net v0.37.0
