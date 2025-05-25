@@ -604,6 +604,16 @@ func ExhProxy() {
 
 		}
 
+		if strings.HasPrefix(c.Request.URL.String(), "/mytags") {
+			// 如果 Cookie 包含 pass=pass，直接继续处理请求
+			if cookie, err := c.Cookie("pass"); err != nil || cookie == "pass" {
+				c.String(http.StatusOK, "全局影响项，不样改。在search里面用 girl -[不想要的tag] 方式平替（只有-tag排除时无效,前面需要加个girl）")
+				c.Abort()
+				return
+			}
+
+		}
+
 		// 如果写在img标签的src里面，那么request的accept头会有
 		// 这里其实没有parse。要写吗。如果不行回头再找。要找吗。
 		// 不行，炸了，以后折腾。

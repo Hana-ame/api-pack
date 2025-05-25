@@ -31,8 +31,8 @@ var db, _ = func() (*sql.DB, error) {
 	}
 
 	// 连接池参数
-	db.SetMaxOpenConns(20)                  // 最大活跃连接数
-	db.SetMaxIdleConns(5)                   // 最大空闲连接数
+	db.SetMaxOpenConns(100)                 // 最大活跃连接数
+	db.SetMaxIdleConns(30)                  // 最大空闲连接数
 	db.SetConnMaxLifetime(5 * time.Minute)  // 连接最长存活时间
 	db.SetConnMaxIdleTime(30 * time.Minute) // 空闲连接最长保留时间
 
@@ -54,7 +54,7 @@ type Thread struct {
 	Del  int8      `db:"del" json:"-"`          // is deleted?
 	C    string    `db:"c" json:"-"`            // country
 	IP   string    `db:"ip" json:"-"`           // ip address
-	Num  uint      `json:"num,omitempty"`       // from board
+	Num  int       `json:"num,omitempty"`       // from board
 	List []*Thread `json:"list,omitempty"`      // replies
 }
 
@@ -69,26 +69,61 @@ func getThreadByNo(no int) (*Thread, error) {
 	var thread Thread
 	thread.No = uint(no)
 	err := db.QueryRow(
-		`SELECT t,n,ts,id,p,txt
+		`SELECT t,n,ts,id,p,txt,r
 		FROM thread
 		WHERE no = ? AND del >= 0;`,
 		no,
 	).Scan(
-		&thread.T, &thread.N, &thread.Ts, &thread.ID, &thread.P, &thread.Txt,
+		&thread.T, &thread.N, &thread.Ts, &thread.ID, &thread.P, &thread.Txt, &thread.R,
 	)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if err == sql.ErrNoRows || thread.Del < 0 {
 			return nil, fmt.Errorf("主题不存在")
 		}
 		return nil, fmt.Errorf("数据库查询失败: %w", err)
 	}
+
+	if err == nil && thread.R != 0 {
+		err := db.QueryRow(
+			`SELECT del
+			FROM thread
+			WHERE no = ? AND del >= 0;`,
+			thread.R,
+		).Scan(
+			&thread.Del,
+		)
+		if err != nil || thread.Del < 0 {
+			if err == sql.ErrNoRows || thread.Del < 0 {
+				return nil, fmt.Errorf("主题不存在")
+			}
+			return nil, fmt.Errorf("数据库查询失败: %w", err)
+		}
+	}
+
+	if err == nil && thread.R == 0 {
+		err := db.QueryRow(
+			`SELECT replynum
+			FROM board
+			WHERE tid = ?`,
+			thread.No,
+		).Scan(
+			&thread.Num,
+		)
+		if err != nil {
+			if err == sql.ErrNoRows || thread.Del < 0 {
+				return nil, fmt.Errorf("主题不存在")
+			}
+			return nil, fmt.Errorf("数据库查询失败: %w", err)
+		}
+	}
+
 	return &thread, nil
 }
 
 func getReplies(no, pn int) ([]*Thread, error) {
 	replies := make([]*Thread, 0, pageSize)
 
-	offset := pn * pageSize
+	offset := pn * (pageSize)
 
 	// 执行分页查询
 	rows, err := db.Query(
@@ -197,11 +232,13 @@ func getThread(tid, pn int) (*Thread, error) {
 	}
 
 	thread.List = list
+	thread.Num = -thread.Num
+
 	return thread, nil
 }
 
 func getBoardThreads(bid, pn int) ([]*Thread, error) {
-	threads := make([]*Thread, 0, pageSize)
+	threads := make([]*Thread, 0, pageSize/2)
 	// 使用 Query 获取多行结果（网页5][网页7）
 	rows, err := db.Query(
 		`SELECT t.t, t.n, t.ts, t.id, t.no, t.p, t.txt, b.replynum 
@@ -212,7 +249,7 @@ func getBoardThreads(bid, pn int) ([]*Thread, error) {
 			AND t.del >= 0 
 		ORDER BY b.last DESC 
 		LIMIT ? OFFSET ?`,
-		bid, pageSize, pageSize*pn,
+		bid, pageSize/2, (pageSize/2)*pn,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("数据库查询失败: %w", err)
@@ -271,14 +308,14 @@ func get(c *gin.Context) {
 	tid := tools.Atoi(c.Query("tid"), 0)
 	pn := tools.Atoi(c.Query("pn"), 0)
 
-	if tid == 0 { // board
+	if tid == 0 && bid != 0 { // board
 		o, e := getBoard(bid, pn)
 		if e != nil {
 			c.JSON(http.StatusInternalServerError, e.Error())
 			return
 		}
 		c.JSON(http.StatusOK, o)
-	} else if bid == 0 {
+	} else if tid != 0 {
 		o, e := getThread(tid, pn)
 		if e != nil {
 			c.JSON(http.StatusInternalServerError, e.Error())
@@ -320,6 +357,21 @@ func postThreadToBoard(bid, tid int) (int, error) {
 	return int(rowsAffected), nil
 }
 
+func updateReplyNum(tid int) error {
+	_, err := db.Exec(
+		`UPDATE board 
+		SET replynum = (
+			SELECT COUNT(*) 
+			FROM threads
+			WHERE r = ?
+		)
+		WHERE tid = ?`,
+		tid, tid,
+	)
+
+	return err
+}
+
 func postThread(thread *Thread, bid int) error {
 
 	// 执行插入
@@ -346,6 +398,10 @@ func postThread(thread *Thread, bid int) error {
 		}
 	}
 
+	// 如果是回复，那么更新replynum和lastreply（自动）
+	if thread.R != 0 {
+		updateReplyNum(int(thread.R))
+	}
 	return nil
 }
 
@@ -358,6 +414,7 @@ func post(c *gin.Context) {
 	if err := c.BindJSON(&thread); err != nil {
 		c.JSON(http.StatusBadRequest, err.Error())
 	}
+
 	thread.R = tools.Or(thread.R, uint(tid))
 
 	if thread.R == 0 && bid == 0 {
@@ -365,6 +422,7 @@ func post(c *gin.Context) {
 		return
 	}
 
+	thread.ID = c.GetString("id")
 	thread.C = c.GetHeader("Cf-Ipcountry")
 	thread.IP = c.GetHeader("X-Forwarded-For")
 
@@ -373,7 +431,8 @@ func post(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, err)
 		return
 	}
-	get(c)
+	// get(c)
+	c.AbortWithStatus(http.StatusOK)
 }
 
 func deleteThread(no int, id, ip string) error {
@@ -426,7 +485,7 @@ func cookie(c *gin.Context) {
 	}
 	hash := tools.Hash(string(id), os.Getenv("SALT"))
 	auth := string(id) + "|" + hash
-	c.SetCookie("auth", auth, 3600*24*365*10, "/", "", true, false)
+	c.SetCookie("auth", auth, 3600*24*365*10, "/", "", false, false)
 }
 
 func preview(c *gin.Context) {
