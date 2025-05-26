@@ -1,5 +1,4 @@
 // 在 .env 中设置 EXHENTAI_PROXY_COOKIE 项目以更新Cookie
-// 默认 "ipb_member_id=5698562; ipb_pass_hash=154e574fd19294c32f905fe187cbdad1; yay=louder; igneous=5eevdxac75hpx71cv"
 
 package main
 
@@ -1121,7 +1120,6 @@ func SProxy() {
 			tools.NewSlice(
 				c.GetHeader("X-Cookie"),
 				os.Getenv("EXHENTAI_PROXY_COOKIE"),
-				"ipb_member_id=5698562; ipb_pass_hash=154e574fd19294c32f905fe187cbdad1; yay=louder; igneous=5eevdxac75hpx71cv",
 			).FirstUnequal(""),
 		)
 

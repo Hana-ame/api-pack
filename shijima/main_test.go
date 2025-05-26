@@ -5,10 +5,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net/http"
+	"net/url"
 	"os"
 	"testing"
 
 	tools "github.com/Hana-ame/api-pack/Tools"
+	myfetch "github.com/Hana-ame/api-pack/Tools/my_fetch"
+	"github.com/nfnt/resize"
 )
 
 func TestGetThreadByNo(t *testing.T) {
@@ -296,4 +300,52 @@ func TestPostThread(t *testing.T) {
 
 		})
 	}
+}
+
+func TestDel(t *testing.T) {
+	URL, _ := url.Parse("/api/v2/preview/media/GrfZh0daUAAhFwi?format=jpg&name=small&host=pbs.twimg.com")
+	URL.Query().Del("host")
+	URL.Query().Encode()
+	fmt.Println(URL.Query().Encode())
+}
+
+func TestPreview(t *testing.T) {
+
+	path := "/preview/media/GrfZh0daUAAhFwi"
+	host := "pbs.twimg.com"
+	// c.Request.URL.Query().Del("host")
+	header := tools.NewHeader(nil)
+	// header.Add("Referer", c.Query("proxy_referer"))
+
+	URL, _ := url.Parse("/api/v2/preview/media/GrfZh0daUAAhFwi?format=jpg&name=small&host=pbs.twimg.com")
+	URL.Query().Del("host")
+
+	resp, err := myfetch.Fetch(http.MethodGet, "https://"+host+path+"?"+URL.Query().Encode(), header.Header, nil)
+	if err != nil {
+		// c.Header("X-Error", err.Error())
+		// c.String(http.StatusBadGateway, err.Error())
+		fmt.Println(err)
+		return
+	}
+
+	img, err := tools.DecodeResponseToImage(resp)
+	if err != nil {
+		// c.Header("X-Error", err.Error())
+		// c.String(http.StatusBadGateway, err.Error())
+		fmt.Println(err)
+		return
+	}
+
+	// 4. 生成缩略图（保持宽高比）
+	thumbnail := resize.Thumbnail(320, 320, img, resize.Lanczos3)
+
+	// 输出JPEG格式
+	// c.Writer.Header().Set("Content-Type", "image/jpeg")
+	// err = jpeg.Encode(c.Writer, thumbnail, &jpeg.Options{Quality: 80})
+	if err != nil {
+		// c.Header("X-Error", err.Error())
+		// c.String(http.StatusInternalServerError, err.Error())
+		fmt.Println(err)
+	}
+	_ = thumbnail
 }

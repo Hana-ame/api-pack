@@ -50,7 +50,7 @@ type Thread struct {
 	No   uint      `db:"no" json:"no"`          // number
 	P    string    `db:"p"  json:"p,omitempty"` // picture src
 	Txt  string    `db:"txt" json:"txt"`        // content
-	R    uint      `db:"r" json:"-"`            // reply to
+	R    uint      `db:"r" json:"r,omitempty"`  // reply to
 	Del  int8      `db:"del" json:"-"`          // is deleted?
 	C    string    `db:"c" json:"-"`            // country
 	IP   string    `db:"ip" json:"-"`           // ip address
@@ -362,9 +362,10 @@ func updateReplyNum(tid int) error {
 		`UPDATE board 
 		SET replynum = (
 			SELECT COUNT(*) 
-			FROM threads
-			WHERE r = ?
-		)
+			FROM thread
+			WHERE r = ? AND del >= 0
+		),
+		last = CURRENT_TIMESTAMP()
 		WHERE tid = ?`,
 		tid, tid,
 	)
@@ -400,7 +401,9 @@ func postThread(thread *Thread, bid int) error {
 
 	// 如果是回复，那么更新replynum和lastreply（自动）
 	if thread.R != 0 {
-		updateReplyNum(int(thread.R))
+		if err := updateReplyNum(int(thread.R)); err != nil {
+			return fmt.Errorf("更新回复数失败: %w", err)
+		}
 	}
 	return nil
 }
@@ -428,6 +431,7 @@ func post(c *gin.Context) {
 
 	err := postThread(&thread, bid)
 	if err != nil {
+		c.Header("X-Error", err.Error())
 		c.JSON(http.StatusInternalServerError, err)
 		return
 	}
@@ -459,7 +463,10 @@ func delete(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, err)
 		return
 	}
-	c.AbortWithStatus(http.StatusOK)
+	c.AbortWithStatusJSON(http.StatusOK, gin.H{
+		"id": id,
+		"ip": ip,
+	})
 }
 
 func checkID(c *gin.Context) {
@@ -491,33 +498,48 @@ func cookie(c *gin.Context) {
 func preview(c *gin.Context) {
 
 	path := c.Param("path")
-	host := c.Query("host")
+	host := tools.Or(c.Query("proxy_host"), c.Query("host"))
+	query := c.Request.URL.Query()
+	query.Del("host")
+	header := tools.NewHeader(c.Request.Header)
+	header.Set("Referer", c.Query("proxy_referer"))
 
-	resp, err := myfetch.Fetch(http.MethodGet, "https://"+host+path+"?"+c.Request.URL.Query().Encode(), nil, nil)
+	url := "https://" + host + path + "?" + query.Encode()
+	if host == "upload.moonchan.xyz" && tools.HasEnv("AZURE") {
+		url = "http://" + os.Getenv("AZURE") + path + "?" + query.Encode()
+	}
+	resp, err := myfetch.Fetch(http.MethodGet, url, header.Header, nil)
 	if err != nil {
+		c.Header("X-Error", err.Error())
 		c.String(http.StatusBadGateway, err.Error())
 		return
 	}
 
 	img, err := tools.DecodeResponseToImage(resp)
 	if err != nil {
+		c.Header("X-Error", err.Error())
 		c.String(http.StatusBadGateway, err.Error())
 		return
 	}
 
 	// 4. 生成缩略图（保持宽高比）
-	thumbnail := resize.Thumbnail(320, 320, img, resize.Lanczos3)
+	thumbnail := resize.Thumbnail(480, 480, img, resize.Lanczos3)
 
 	// 输出JPEG格式
 	c.Writer.Header().Set("Content-Type", "image/jpeg")
 	err = jpeg.Encode(c.Writer, thumbnail, &jpeg.Options{Quality: 80})
 	if err != nil {
+		c.Header("X-Error", err.Error())
 		c.String(http.StatusInternalServerError, err.Error())
 	}
 
 }
 
-func Run(addr ...string) error {
+func Run(addr string) error {
+	if addr == "" {
+		return nil
+	}
+
 	r := gin.Default()
 
 	r.Use(middleware.CORSMiddleware())
@@ -529,5 +551,5 @@ func Run(addr ...string) error {
 	r.POST("/api/v2/", checkID, post)
 	r.DELETE("/api/v2/", checkID, delete)
 
-	return r.Run(addr...)
+	return r.Run(addr)
 }
