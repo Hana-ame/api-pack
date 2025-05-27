@@ -552,6 +552,7 @@ func preview(c *gin.Context) {
 		c.Header("X-Cached", "true")
 		c.Header("X-Error", "不支持的图片格式")
 		c.String(http.StatusBadRequest, "不支持的图片格式")
+		return
 	}
 
 	resp, err := myfetch.Fetch(http.MethodGet, url, header.Header, nil)
@@ -576,9 +577,10 @@ func preview(c *gin.Context) {
 	// 不在支持列表。
 	if !slices.Contains(
 		[]string{"image/jpeg", "image/jpg", "image/webp", "image/png", "image/gif"},
-		c.GetHeader("Content-Type")) {
+		resp.Header.Get("Content-Type")) {
 
 		c.Header("X-Cached", "false")
+		c.Header("X-Content-Type", resp.Header.Get("Content-Type"))
 		kv.AddOrUpdate(path+"?"+query.Encode(), "")
 		c.Header("X-Error", "不支持的图片格式")
 		c.String(http.StatusBadRequest, "不支持的图片格式")
