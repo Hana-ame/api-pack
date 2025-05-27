@@ -3,11 +3,14 @@
 package shijima
 
 import (
+	"bytes"
 	"database/sql"
 	"fmt"
+	"image"
 	"image/jpeg"
 	"net/http"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -17,11 +20,43 @@ import (
 	myfetch "github.com/Hana-ame/api-pack/Tools/my_fetch"
 	middleware "github.com/Hana-ame/api-pack/Tools/my_gin_middleware"
 	"github.com/Hana-ame/api-pack/Tools/randomreader"
+	"github.com/Hana-ame/api-pack/Tools/sqlite"
 	"github.com/gin-gonic/gin"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/hashicorp/go-multierror"
 	"github.com/nfnt/resize"
 )
+
+var kv, _ = sqlite.NewKVSQLiteDB("kv.db", "query_url")
+
+func uploadAndCache(image image.Image, path string) error {
+	var buf bytes.Buffer
+	err := jpeg.Encode(&buf, image, &jpeg.Options{Quality: 80}) // 改为写入 buf
+	if err != nil {
+		return fmt.Errorf("编码图片失败: %w", err)
+	}
+
+	resp, err := myfetch.Fetch(http.MethodPut, "https://upload.moonchan.xyz/api/upload", http.Header{
+		"Content-Type":   []string{"image/jpeg"},
+		"Content-Length": []string{fmt.Sprintf("%d", buf.Len())},
+	}, &buf)
+	if err != nil {
+		return fmt.Errorf("上传图片失败: %w", err)
+	}
+	defer resp.Body.Close()
+
+	o, err := tools.ReaderToJSON(resp.Body)
+	if err != nil {
+		return fmt.Errorf("error on decode: %w", err)
+	}
+
+	// 缓存到 KV 数据库
+	if err := kv.AddOrUpdate(path, o.GetOrDefault("id", "").(string)); err != nil {
+		return fmt.Errorf("缓存图片失败: %w", err)
+	}
+
+	return nil
+}
 
 var db, _ = func() (*sql.DB, error) {
 	dsn := os.Getenv("MARIADB")
@@ -496,6 +531,8 @@ func cookie(c *gin.Context) {
 }
 
 func preview(c *gin.Context) {
+	cached := false
+	// cacheKey :=  path+"?"+query.Encode()
 
 	path := c.Param("path")
 	host := tools.Or(c.Query("proxy_host"), c.Query("host"))
@@ -508,10 +545,43 @@ func preview(c *gin.Context) {
 	if host == "upload.moonchan.xyz" && tools.HasEnv("AZURE") {
 		url = "http://" + os.Getenv("AZURE") + path + "?" + query.Encode()
 	}
+	if v, err := kv.QueryValue(path + "?" + query.Encode()); err == nil && v != "" {
+		cached = true
+		url = "http://" + os.Getenv("AZURE") + "/api/" + v + "/"
+	} else if err == nil && v == "" {
+		c.Header("X-Cached", "true")
+		c.Header("X-Error", "不支持的图片格式")
+		c.String(http.StatusBadRequest, "不支持的图片格式")
+	}
+
 	resp, err := myfetch.Fetch(http.MethodGet, url, header.Header, nil)
 	if err != nil {
 		c.Header("X-Error", err.Error())
 		c.String(http.StatusBadGateway, err.Error())
+		return
+	}
+	defer resp.Body.Close()
+
+	if cached {
+		c.Header("X-Cached", "true")
+		c.DataFromReader(resp.StatusCode, resp.ContentLength, resp.Header.Get("Content-Type"), resp.Body, map[string]string{
+			"Cache-Control": "public, max-age=31536000, immutable",
+			"Expires":       time.Now().Add(365 * 24 * time.Hour).Format(http.TimeFormat),
+			// "ETag":          v,
+			"Last-Modified": "Tue, 27 May 2025 00:00:00 GMT",
+		})
+		return
+	}
+
+	// 不在支持列表。
+	if !slices.Contains(
+		[]string{"image/jpeg", "image/jpg", "image/webp", "image/png", "image/gif"},
+		c.GetHeader("Content-Type")) {
+
+		c.Header("X-Cached", "false")
+		kv.AddOrUpdate(path+"?"+query.Encode(), "")
+		c.Header("X-Error", "不支持的图片格式")
+		c.String(http.StatusBadRequest, "不支持的图片格式")
 		return
 	}
 
@@ -524,13 +594,14 @@ func preview(c *gin.Context) {
 
 	// 4. 生成缩略图（保持宽高比）
 	thumbnail := resize.Thumbnail(480, 480, img, resize.Lanczos3)
-
+	go uploadAndCache(thumbnail, path+"?"+query.Encode())
 	// 输出JPEG格式
 	c.Writer.Header().Set("Content-Type", "image/jpeg")
 	err = jpeg.Encode(c.Writer, thumbnail, &jpeg.Options{Quality: 80})
 	if err != nil {
-		c.Header("X-Error", err.Error())
-		c.String(http.StatusInternalServerError, err.Error())
+		// c.Header("X-Error", err.Error())
+		// c.String(http.StatusInternalServerError, err.Error())
+		return
 	}
 
 }

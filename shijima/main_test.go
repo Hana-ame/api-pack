@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"image"
+	"image/color"
 	"log"
 	"net/http"
 	"net/url"
@@ -348,4 +350,21 @@ func TestPreview(t *testing.T) {
 		fmt.Println(err)
 	}
 	_ = thumbnail
+}
+
+// simulateImageCreation 模拟生成一个图像（例如，一个红色方块）
+func simulateImageCreation() image.Image {
+	img := image.NewRGBA(image.Rect(0, 0, 100, 100))
+	// 填充红色
+	for x := 0; x < 100; x++ {
+		for y := 0; y < 100; y++ {
+			img.Set(x, y, color.RGBA{255, 0, 0, 255})
+		}
+	}
+	return img
+}
+func TestUploadAndCache(t *testing.T) {
+	thumbnail := simulateImageCreation() // 得到你的图像数据
+	err := uploadAndCache(thumbnail, "123")
+	log.Println(err)
 }
