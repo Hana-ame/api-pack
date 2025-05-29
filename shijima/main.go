@@ -546,8 +546,8 @@ func preview(c *gin.Context) {
 		url = "http://" + os.Getenv("AZURE") + path + "?" + query.Encode()
 	}
 	if v, err := kv.QueryValue(path + "?" + query.Encode()); err == nil && v != "" {
-		cached = true
-		url = "http://" + os.Getenv("AZURE") + "/api/" + v + "/"
+		c.Redirect(http.StatusFound, "https://upload.moonchan.xyz/api/"+v+"/")
+		return
 	} else if err == nil && v == "" {
 		c.Header("X-Cached", "true")
 		c.Header("X-Error", "不支持的图片格式")
@@ -576,7 +576,7 @@ func preview(c *gin.Context) {
 
 	// 不在支持列表。
 	if !slices.Contains(
-		[]string{"image/jpeg", "image/jpg", "image/webp", "image/png", "image/gif"},
+		[]string{"image/jpeg", "image/jpg", "image/webp", "image/png", "image/gif", "image/avif"},
 		resp.Header.Get("Content-Type")) {
 
 		c.Header("X-Cached", "false")
@@ -589,6 +589,9 @@ func preview(c *gin.Context) {
 
 	img, err := tools.DecodeResponseToImage(resp)
 	if err != nil {
+		c.Header("X-Cached", "false")
+		c.Header("X-Content-Type", resp.Header.Get("Content-Type"))
+		kv.AddOrUpdate(path+"?"+query.Encode(), "")
 		c.Header("X-Error", err.Error())
 		c.String(http.StatusBadGateway, err.Error())
 		return
@@ -623,6 +626,13 @@ func Run(addr string) error {
 	r.GET("/api/v2/cookie", cookie)
 	r.POST("/api/v2/", checkID, post)
 	r.DELETE("/api/v2/", checkID, delete)
+	r.GET("/api/v2/reaction/:tid", checkID, GetReactionsHandlerAlt)
+	r.POST("/api/v2/reaction/:tid", checkID, SetReactionHandlerAlt)
+	// r.GET("/api/v2/reactions", checkID, GetReactionsBatchHandler) // no longer used
+	r.GET("/api/v2/cover", getRandomRecordHandler)
+	r.POST("/api/v2/cover", checkID, addURLHandler)
+	r.GET("/api/v2/random", getRandomHandler)
+	r.POST("/api/v2/random", addRandomHandler)
 
 	return r.Run(addr)
 }

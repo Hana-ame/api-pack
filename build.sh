@@ -28,7 +28,7 @@ fi
 # ls temp && { pkill api-pack-new; rm -f api-pack-new; mv temp api-pack-new; ls -l api-pack-new; nohup ./api-pack-new & } 
 
 # 发送到vps
-~/script/scp.sh api-pack-new root@vps.moonchan.xyz:~/temp
+~/script/scp.sh -4 api-pack-new root@vps.moonchan.xyz:~/temp
 # 检查 SCP 是否成功
 if [ $? -ne 0 ]; then
     echo "文件传输失败，退出。"

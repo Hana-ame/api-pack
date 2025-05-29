@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"testing"
+	"time"
 
 	tools "github.com/Hana-ame/api-pack/Tools"
 	myfetch "github.com/Hana-ame/api-pack/Tools/my_fetch"
@@ -367,4 +368,100 @@ func TestUploadAndCache(t *testing.T) {
 	thumbnail := simulateImageCreation() // 得到你的图像数据
 	err := uploadAndCache(thumbnail, "123")
 	log.Println(err)
+}
+
+func TestAlt(t *testing.T) {
+
+	// 确保表存在
+	if err := createTableIfNotExists(); err != nil {
+		log.Fatalf("Error ensuring table exists: %v", err)
+	}
+
+	fmt.Println("\n--- Testing setReactionAlt ---")
+	// 模拟一些操作
+	testTID := 123
+	err := setReactionAlt(testTID, "👍") // count=1, timestamp=t1
+	if err != nil {
+		log.Printf("Error setting reaction: %v", err)
+	}
+	time.Sleep(10 * time.Millisecond)  // 模拟时间流逝，确保timestamp有差异
+	err = setReactionAlt(testTID, "👍") // count=2, timestamp=t2
+	if err != nil {
+		log.Printf("Error setting reaction: %v", err)
+	}
+	time.Sleep(10 * time.Millisecond)
+	err = setReactionAlt(testTID, "❤️") // count=1, timestamp=t3
+	if err != nil {
+		log.Printf("Error setting reaction: %v", err)
+	}
+	time.Sleep(10 * time.Millisecond)
+	err = setReactionAlt(testTID, "😂") // count=1, timestamp=t4
+	if err != nil {
+		log.Printf("Error setting reaction: %v", err)
+	}
+	time.Sleep(10 * time.Millisecond)
+	err = setReactionAlt(testTID, "👍") // count=3, timestamp=t5
+	if err != nil {
+		log.Printf("Error setting reaction: %v", err)
+	}
+	time.Sleep(10 * time.Millisecond)
+	err = setReactionAlt(testTID, "❤️") // count=2, timestamp=t6 (count=2, t6 > t3)
+	if err != nil {
+		log.Printf("Error setting reaction: %v", err)
+	}
+	time.Sleep(10 * time.Millisecond)
+	err = setReactionAlt(testTID, "😂") // count=2, timestamp=t7 (count=2, t7 > t4)
+	if err != nil {
+		log.Printf("Error setting reaction: %v", err)
+	}
+	fmt.Println("Reactions set.")
+
+	fmt.Println("\n--- Testing getReactions ---")
+	// 获取并打印结果
+	reactionsMap, err := getReactionsAlt(testTID)
+	if err != nil {
+		log.Fatalf("Error getting reactions: %v", err)
+	}
+
+	fmt.Printf("Reactions for tid %d (ordered by count DESC, timestamp DESC):\n", testTID)
+	// 遍历有序映射并打印
+	for _, key := range reactionsMap.Keys() {
+		value, _ := reactionsMap.Get(key)
+		fmt.Printf("- Reaction: %s, Count: %d\n", key, value)
+	}
+	// Expected order:
+	// - 👍 (count 3)
+	// - 😂 (count 2, because its timestamp is more recent than ❤️'s timestamp for count 2)
+	// - ❤️ (count 2)
+	// If timestamps are too close to register difference, the order for count=2 might vary.
+	// Running with `time.Sleep(10 * time.Millisecond)` should make timestamps distinct enough.
+	fmt.Println(string(tools.Match(json.Marshal(reactionsMap)).Result()))
+
+	// Test with another tid
+	fmt.Println("\n--- Testing another TID ---")
+	testTID2 := 456
+	_ = setReactionAlt(testTID2, "😂")
+	_ = setReactionAlt(testTID2, "😂")
+	_ = setReactionAlt(testTID2, "👍")
+	reactionsMap2, err := getReactionsAlt(testTID2)
+	if err != nil {
+		log.Fatalf("Error getting reactions for tid %d: %v", testTID2, err)
+	}
+	fmt.Printf("Reactions for tid %d:\n", testTID2)
+	for _, key := range reactionsMap2.Keys() {
+		value, _ := reactionsMap2.Get(key)
+		fmt.Printf("- Reaction: %s, Count: %d\n", key, value)
+	}
+	fmt.Println(string(tools.Match(json.Marshal(reactionsMap2)).Result()))
+
+}
+
+func TestAlt2(t *testing.T) {
+	setReactionAlt(4, "😂")  // count=1, timestamp=t1
+	setReactionAlt(3, "❤️") // count=1, timestamp=t1
+	setReactionAlt(2, "👍")  // count=1, timestamp=t1
+	fmt.Println([]byte("😂"))
+	fmt.Println([]byte("👍"))
+	fmt.Println([]byte("❤️"))
+
 }
