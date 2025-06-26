@@ -10,11 +10,14 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
 	tools "github.com/Hana-ame/api-pack/Tools"
 	myfetch "github.com/Hana-ame/api-pack/Tools/my_fetch"
+	"github.com/Hana-ame/api-pack/Tools/orderedmap"
 	"github.com/nfnt/resize"
 )
 
@@ -298,7 +301,7 @@ func TestPostThread(t *testing.T) {
 			// 保存原始db对象以便测试后恢复
 
 			// 模拟postThreadToBoard函数
-			err := postThread(tt.thread, 2)
+			_, err := postThread(tt.thread, 2)
 			fmt.Println(err)
 
 		})
@@ -463,5 +466,23 @@ func TestAlt2(t *testing.T) {
 	fmt.Println([]byte("😂"))
 	fmt.Println([]byte("👍"))
 	fmt.Println([]byte("❤️"))
+
+}
+
+func TestSp(t *testing.T) {
+	a, b, c := tools.SeprateString(" ", "@reaction test")
+	fmt.Println(a, b, c)
+	arr := []byte{123, 34, 116, 115, 34, 58, 34, 34, 44, 34, 105, 100, 34, 58, 34, 68, 89, 52, 88, 53, 73, 72, 82, 34, 44, 34, 110, 111, 34, 58, 49, 52, 52, 56, 51, 54, 44, 34, 116, 120, 116, 34, 58, 34, 64, 114, 101, 97, 99, 116, 105, 111, 110, 32, 116, 101, 115, 116, 92, 110, 34, 44, 34, 114, 34, 58, 49, 52, 52, 56, 49, 49, 125}
+	fmt.Println(string(arr))
+	om := orderedmap.New()
+	if err := json.Unmarshal(arr, &om); err != nil {
+	}
+	j, _ := json.Marshal(om)
+	fmt.Println(string(j))
+	r := int(om.GetOrDefault("r", float64(0)).(float64))
+	fmt.Println(r)
+	if r == 0 {
+	}
+	myfetch.Fetch(http.MethodPost, "https://moonchan.xyz/api/v2/reaction/"+strconv.Itoa(int(r)), http.Header{"Content-Type": []string{"plain/text"}}, strings.NewReader("query"))
 
 }

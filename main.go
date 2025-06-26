@@ -73,20 +73,17 @@ func main() {
 			return
 		}
 
-		host := tools.NewSlice(
-			c.Query("proxy_host"),
-			c.GetHeader("X-Host"),
-		).FirstUnequal("")
+		host := tools.Or(c.Query("proxy_host"), c.GetHeader("X-Host"))
 
 		if host == "" {
 			c.Header("X-Error", "host not found")
-			c.AbortWithStatus(http.StatusNoContent)
+			c.Redirect(http.StatusFound, "https://page.moonchan.xyz/")
 			return
 		}
 
 		if c.Request.Host == host {
 			c.Header("X-Error", c.Request.Host)
-			c.AbortWithStatus(http.StatusLoopDetected)
+			c.Redirect(http.StatusFound, "https://page.moonchan.xyz/")
 			return
 		}
 
@@ -97,14 +94,14 @@ func main() {
 		header.Add("Origin", c.GetHeader("X-Origin"))
 		header.Add("Referer", c.Query("proxy_referer"))
 		header.Add("Referer", c.GetHeader("X-Referer"))
-		header.Set("Cookie", tools.NewSlice(
+		header.Set("Cookie", tools.Or(
 			c.Query("proxy_cookie"),
 			c.GetHeader("X-Cookie"),
 			header.Get("Cookie"),
-		).FirstUnequal(""))
+		))
 		// header.Add("Cookie", c.GetHeader("X-Cookie")) // 这个是candidates传的
 
-		scheme := tools.NewSlice(c.Query("proxy_scheme"), c.GetHeader("X-Scheme"), "https").FirstUnequal("")
+		scheme := tools.Or(c.Query("proxy_scheme"), c.GetHeader("X-Scheme"), "https")
 
 		resp, err := myfetch.Fetch(c.Request.Method, scheme+"://"+host+path,
 			(header.Header), c.Request.Body)
@@ -126,9 +123,7 @@ func main() {
 				c.Writer.Header().Add(k, v)
 			}
 		}
-		if c.Writer.Header().Get("cross-origin-resource-policy") == "same-origin" {
-			c.Writer.Header().Set("cross-origin-resource-policy", "cross-origin")
-		}
+		c.Writer.Header().Set("cross-origin-resource-policy", "cross-origin")
 
 		// slices.Sort(exposeHeaders)
 		// c.Writer.Header().Add("Access-Control-Expose-Headers", strings.Join(exposeHeaders, ", "))

@@ -5,6 +5,7 @@ package shijima
 import (
 	"bytes"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"image"
 	"image/jpeg"
@@ -21,6 +22,7 @@ import (
 	middleware "github.com/Hana-ame/api-pack/Tools/my_gin_middleware"
 	"github.com/Hana-ame/api-pack/Tools/randomreader"
 	"github.com/Hana-ame/api-pack/Tools/sqlite"
+	"github.com/Hana-ame/api-pack/shijima/bot"
 	"github.com/gin-gonic/gin"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/hashicorp/go-multierror"
@@ -408,7 +410,7 @@ func updateReplyNum(tid int) error {
 	return err
 }
 
-func postThread(thread *Thread, bid int) error {
+func postThread(thread *Thread, bid int) (int64, error) {
 
 	// 执行插入
 	result, err := db.Exec(
@@ -416,13 +418,13 @@ func postThread(thread *Thread, bid int) error {
 		thread.T, thread.N, thread.ID, thread.P, thread.Txt, thread.R, thread.C, thread.IP,
 	)
 	if err != nil {
-		return fmt.Errorf("插入主题失败: %w", err)
+		return -1, fmt.Errorf("插入主题失败: %w", err)
 	}
 
 	// 获取插入的ID
 	lastInsertID, err := result.LastInsertId()
 	if err != nil {
-		return fmt.Errorf("获取插入ID失败: %w", err)
+		return -1, fmt.Errorf("获取插入ID失败: %w", err)
 	}
 	thread.No = uint(lastInsertID)
 
@@ -430,17 +432,17 @@ func postThread(thread *Thread, bid int) error {
 	if thread.R == 0 && bid > 0 {
 		_, err = postThreadToBoard(bid, int(lastInsertID))
 		if err != nil {
-			return fmt.Errorf("添加到板失败: %w", err)
+			return -1, fmt.Errorf("添加到板失败: %w", err)
 		}
 	}
 
 	// 如果是回复，那么更新replynum和lastreply（自动）
 	if thread.R != 0 {
 		if err := updateReplyNum(int(thread.R)); err != nil {
-			return fmt.Errorf("更新回复数失败: %w", err)
+			return -1, fmt.Errorf("更新回复数失败: %w", err)
 		}
 	}
-	return nil
+	return lastInsertID, nil
 }
 
 func post(c *gin.Context) {
@@ -464,13 +466,33 @@ func post(c *gin.Context) {
 	thread.C = c.GetHeader("Cf-Ipcountry")
 	thread.IP = c.GetHeader("X-Forwarded-For")
 
-	err := postThread(&thread, bid)
+	LastInsertId, err := postThread(&thread, bid)
 	if err != nil {
 		c.Header("X-Error", err.Error())
 		c.JSON(http.StatusInternalServerError, err)
 		return
 	}
-	// get(c)
+
+	thread.No = uint(LastInsertId)
+
+	// 送给bot处理
+	go func() {
+		body, err := json.Marshal(thread)
+		if err != nil {
+			return
+		}
+		for _, line := range strings.Split(thread.Txt, "\n") {
+			if strings.HasPrefix(strings.TrimSpace(line), "@") {
+				botName, query, err := tools.SeprateString(" ", strings.TrimSpace(line))
+				if err == nil {
+					go bot.Request(LastInsertId, botName, query, body)
+				} else {
+					go bot.Request(LastInsertId, strings.TrimSpace(line), "", body)
+				}
+			}
+		}
+	}()
+
 	c.AbortWithStatus(http.StatusOK)
 }
 
@@ -546,8 +568,9 @@ func preview(c *gin.Context) {
 		url = "http://" + os.Getenv("AZURE") + path + "?" + query.Encode()
 	}
 	if v, err := kv.QueryValue(path + "?" + query.Encode()); err == nil && v != "" {
-		c.Redirect(http.StatusFound, "https://upload.moonchan.xyz/api/"+v+"/")
+		c.Redirect(http.StatusMovedPermanently, "https://upload.moonchan.xyz/api/"+v+"/thumbnail.jpg")
 		return
+		// cached = true
 	} else if err == nil && v == "" {
 		c.Header("X-Cached", "true")
 		c.Header("X-Error", "不支持的图片格式")
@@ -616,6 +639,8 @@ func Run(addr string) error {
 		return nil
 	}
 
+	bot.SetDB(tools.Match(bot.NewDB(db)).Result())
+
 	r := gin.Default()
 
 	r.Use(middleware.CORSMiddleware())
@@ -633,6 +658,21 @@ func Run(addr string) error {
 	r.POST("/api/v2/cover", checkID, addURLHandler)
 	r.GET("/api/v2/random", getRandomHandler)
 	r.POST("/api/v2/random", addRandomHandler)
+	r.GET("/api/v2/bot/:bot/:tid", bot.Handler)
+	r.POST("/api/v2/bot/:bot/:tid", func(c *gin.Context) {
+		tid := tools.Atoi(c.Param("tid"), 0)
+		thread, err := getThreadByNo(tid)
+		if err != nil {
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		threadJSON, err := json.Marshal(thread)
+		if err != nil {
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.Set("thread", string(threadJSON))
+	}, bot.Handler)
 
 	return r.Run(addr)
 }

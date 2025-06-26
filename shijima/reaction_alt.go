@@ -179,5 +179,14 @@ func SetReactionHandlerAlt(c *gin.Context) {
 		message = fmt.Sprintf("Reaction已设置为: %s", reaction)
 	}
 
+	if reaction == "🎲" {
+		postThread(&Thread{
+			// No:  uint(tid),
+			ID:  c.GetString("id"),
+			R:   uint(tid),
+			Txt: "自动roll点 [1,100]\n@rd 1d100",
+		}, 0)
+	}
+
 	c.JSON(http.StatusOK, gin.H{"message": message})
 }
