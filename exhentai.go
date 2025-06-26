@@ -1421,11 +1421,11 @@ func addFloatingIframeAtRightBottom(html []byte) []byte {
 		[]byte(`<body>
     <div id="moonchan-floating-iframe" style="display: none;">
         <button id="moonchan-close-button" onclick="moonchanCloseIframe()">×</button>
-        <iframe src="https://moonchan.xyz/iframe.html?date=250422" style="border: none; width: 100%; height: calc(100% - 30px);"></iframe>
+        <iframe src="https://moonchan.xyz/iframe.html?date=250626" style="border: none; width: 100%; height: calc(100% - 30px);"></iframe>
     </div>
 
     <script>
-		const mark = '250422';
+		const mark = '250626';
         // 检查 localStorage 中的值
         if (localStorage.getItem('iframeClosed') !== mark) {
             document.getElementById('moonchan-floating-iframe').style.display = 'block';
