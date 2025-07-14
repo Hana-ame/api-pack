@@ -569,11 +569,11 @@ func ExhProxy() {
 			return
 		}
 
-		if strings.HasPrefix(c.Request.URL.String(), "/static/") {
-			c.Redirect(http.StatusFound, "https://moonchan.xyz"+c.Request.URL.String())
-			c.Abort()
-			return
-		}
+		// if strings.HasPrefix(c.Request.URL.String(), "/static/") {
+		// 	c.Redirect(http.StatusFound, "https://moonchan.xyz"+c.Request.URL.String())
+		// 	c.Abort()
+		// 	return
+		// }
 
 		// 遗留问题, image这个path重定向到用param的请求
 		if strings.HasPrefix(c.Request.URL.String(), "/image/") {
@@ -785,6 +785,11 @@ func ExhProxy() {
 		path := c.Request.URL.String()
 
 		host := tools.Or(c.Query("host"), "exhentai.org")
+		if strings.HasPrefix(c.Request.URL.String(), "/static/") ||
+			strings.HasPrefix(c.Request.URL.String(), "/sw.js") ||
+			strings.HasPrefix(c.Request.URL.String(), "/manifast.json") {
+			host = "page.moonchan.xyz"
+		}
 
 		header := tools.NewHeader(c.Request.Header)
 		header.Set("Cookie",
@@ -1261,7 +1266,7 @@ func addWaterFallViewButton(html string) string {
 			height: 100%;
 			font-size: x-large;
 	  ">
-			下拉式
+			下拉式(w/重新加载)
 	  </button>
 	</div>
 	<!-- 新增的左上角按钮、不行要C，还是删了 -->
@@ -1321,7 +1326,7 @@ func addWaterFallViewButton(html string) string {
 		const currentPath = window.location.pathname;
 
 		// 定义新的连接
-		const newUrl = 'https://page.moonchan.xyz/#' + currentPath;
+		const newUrl = '/?host=page.moonchan.xyz#' + currentPath;
 
 		// 跳转到新的连接
 		window.location.href = newUrl;
@@ -1379,6 +1384,7 @@ func addFloatingIframeAtRightBottom(html []byte) []byte {
 			box-shadow: 0 0 10px rgba(0, 0, 0, 0.2); /* 阴影效果 */
 			z-index: 100000; /* 确保在最上层 */
 			overflow: hidden; /* 确保内容不超出边框 */
+			background-color: rgba(255,255,255,0.5); /* 背景颜色 */
 		}       
 #moonchan-close-button {
     position: absolute;
@@ -1421,11 +1427,17 @@ func addFloatingIframeAtRightBottom(html []byte) []byte {
 		[]byte(`<body>
     <div id="moonchan-floating-iframe" style="display: none;">
         <button id="moonchan-close-button" onclick="moonchanCloseIframe()">×</button>
-        <iframe src="https://moonchan.xyz/iframe.html?date=250626" style="border: none; width: 100%; height: calc(100% - 30px);"></iframe>
+        <div>
+			<p>如遇反诈页面请设置DNS为<b>1.1.1.1</b></p>
+			<p>具体设置方式请自行搜索</p>
+			<p><a href="https://114514.nmbyd2.top">https://114514.nmbyd2.top</a></p>
+			<p><a href="https://ex.nmbyd3.top">https://ex.nmbyd3.top</a></p>
+			<p>反馈请发送邮件至<b>readonly@moonchan.xyz</b></p>
+		</div>
     </div>
 
     <script>
-		const mark = '250626';
+		const mark = '250714-1';
         // 检查 localStorage 中的值
         if (localStorage.getItem('iframeClosed') !== mark) {
             document.getElementById('moonchan-floating-iframe').style.display = 'block';
