@@ -83,6 +83,7 @@ var jar *cookiejar.Jar = nil
 
 // 妹有v6,毙了
 func EhProxy() {
+
 	godotenv.Load(".env")
 
 	// debug.LogLevel = debug.Fatal
@@ -666,7 +667,10 @@ func ExhProxy() {
 		}
 
 		// 适配自家阅读器
-		if tools.Match(url.Parse(c.Request.Referer())).GetOrDefault(c.Request.URL).Host == "page.moonchan.xyz" {
+		refererHost := tools.Match(url.Parse(c.Request.Referer())).GetOrDefault(c.Request.URL).Host
+		if refererHost == "page.moonchan.xyz" ||
+			strings.Contains(refererHost, "nmbyd") ||
+			strings.Contains(refererHost, "moonchan") {
 			return
 		}
 
@@ -675,6 +679,11 @@ func ExhProxy() {
 
 		// 如果 Cookie 包含 pass=pass，不阻止
 		if err == nil && cookie == "pass" {
+			return
+		}
+
+		// 放行标头存在zh的
+		if strings.Contains(c.GetHeader("accept-language"), "zh") {
 			return
 		}
 
@@ -1259,14 +1268,14 @@ func addWaterFallViewButton(html string) string {
 			height: 100%;
 			font-size: x-large;
 	  ">
-			下拉式
+			下拉式1
 	  </button>
 	  <button id="waterfall2" style="
 			width: 100%;    
 			height: 100%;
 			font-size: x-large;
 	  ">
-			下拉式(w/重新加载)
+			下拉式2
 	  </button>
 	</div>
 	<!-- 新增的左上角按钮、不行要C，还是删了 -->

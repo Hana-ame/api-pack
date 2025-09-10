@@ -1,0 +1,1 @@
+curl -X POST  -d @test.json "https://proxy.moonchan.xyz/?proxy_host=127.25.9.10:8080&proxy_scheme=http"

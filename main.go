@@ -12,6 +12,7 @@ import (
 	myfetch "github.com/Hana-ame/api-pack/Tools/my_fetch"
 	middleware "github.com/Hana-ame/api-pack/Tools/my_gin_middleware"
 	"github.com/Hana-ame/api-pack/Tools/wasm/v"
+	"github.com/Hana-ame/api-pack/pastejson"
 	shijima "github.com/Hana-ame/api-pack/shijima"
 	"github.com/gin-gonic/gin"
 )
@@ -42,6 +43,7 @@ func main() {
 		go shijima.Run(os.Getenv("SHIJIMA"))
 	}
 	// go EhProxy()      //127.25.23.6:8080
+	go pastejson.Run(os.Getenv("PASTEJSON"), os.Getenv("PASTEJSON_CONN_STR"))
 
 	//127.24.11.16:8080
 	// 创建 Gin 引擎
@@ -68,14 +70,13 @@ func main() {
 		// 读取 URL 参数
 		path := c.Request.URL.String()
 
-		if path == "/favicon.ico" {
-			c.Redirect(http.StatusFound, "https://moonchan.xyz/favicon.ico")
-			return
-		}
-
 		host := tools.Or(c.Query("proxy_host"), c.GetHeader("X-Host"))
 
 		if host == "" {
+			if path == "/favicon.ico" {
+				c.Redirect(http.StatusFound, "https://moonchan.xyz/favicon.ico")
+				return
+			}
 			c.Header("X-Error", "host not found")
 			c.Redirect(http.StatusFound, "https://page.moonchan.xyz/")
 			return
