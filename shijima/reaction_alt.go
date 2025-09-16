@@ -155,6 +155,7 @@ func SetReactionHandlerAlt(c *gin.Context) {
 	tid, err := strconv.Atoi(tidStr)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的tid参数"})
+		c.Abort()
 		return
 	}
 
@@ -169,6 +170,7 @@ func SetReactionHandlerAlt(c *gin.Context) {
 	err = setReactionAlt(tid, reaction)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("设置reaction失败: %v", err)})
+		c.Abort()
 		return
 	}
 

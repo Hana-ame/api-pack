@@ -102,6 +102,7 @@ type Board struct {
 	ReplyNum uint `db:"num"`
 }
 
+// 就是找到单条thread
 func getThreadByNo(no int) (*Thread, error) {
 	var thread Thread
 	thread.No = uint(no)
@@ -157,6 +158,7 @@ func getThreadByNo(no int) (*Thread, error) {
 	return &thread, nil
 }
 
+// 获得回复no的最新的5条作为replies
 func getReplies(no, pn int) ([]*Thread, error) {
 	replies := make([]*Thread, 0, pageSize)
 
@@ -195,6 +197,7 @@ func getReplies(no, pn int) ([]*Thread, error) {
 	return replies, nil
 }
 
+// 获得最新的5条作为replies
 func getRepliesPreview(no int) ([]*Thread, error) {
 	replies := make([]*Thread, 0, 5)
 
@@ -274,6 +277,7 @@ func getThread(tid, pn int) (*Thread, error) {
 	return thread, nil
 }
 
+// 获得board的pn页的回复
 func getBoardThreads(bid, pn int) ([]*Thread, error) {
 	threads := make([]*Thread, 0, pageSize/2)
 	// 使用 Query 获取多行结果（网页5][网页7）
@@ -552,6 +556,7 @@ func cookie(c *gin.Context) {
 	c.SetCookie("auth", auth, 3600*24*365*10, "/", "", false, false)
 }
 
+// 固定屎upload.moonchan.xyz
 func preview(c *gin.Context) {
 	cached := false
 	// cacheKey :=  path+"?"+query.Encode()
@@ -647,14 +652,16 @@ func Run(addr string) error {
 	r.Use(middleware.ProxyMiddleware())
 
 	r.GET("/api/v2/", get)
-	r.GET("/api/v2/preview/*path", preview)
+	// r.GET("/api/v2/preview/*path", preview)
 	r.GET("/api/v2/cookie", cookie)
 	r.POST("/api/v2/", checkID, post)
 	r.DELETE("/api/v2/", checkID, delete)
 	r.GET("/api/v2/reaction/:tid", checkID, GetReactionsHandlerAlt)
-	r.POST("/api/v2/reaction/:tid", checkID, SetReactionHandlerAlt)
+	r.POST("/api/v2/reaction/:tid", checkID, SetReactionHandlerAlt, updateNewReaction)
+	r.GET("/api/v2/new_reactions", getNewReactions)
 	// r.GET("/api/v2/reactions", checkID, GetReactionsBatchHandler) // no longer used
 	r.GET("/api/v2/cover", getRandomRecordHandler)
+	r.GET("/api/v2/bilicover", getRandomRecordHandlerBili)
 	r.POST("/api/v2/cover", checkID, addURLHandler)
 	r.GET("/api/v2/random", getRandomHandler)
 	r.POST("/api/v2/random", addRandomHandler)

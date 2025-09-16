@@ -48,4 +48,5 @@ exit 0
 ls temp && { pkill api-pack-new; rm -f api-pack-new; mv temp api-pack-new; ls -l api-pack-new; nohup ./api-pack-new & } 
 ls bak && { pkill api-pack-new; rm -f api-pack-new; mv bak api-pack-new; ls -l api-pack-new; nohup ./api-pack-new & } 
 
-pkill api-pack-new; nohup ./api-pack-new & 
+pkill api-pack-new; rm -f api-pack-new; mv 5.bin api-pack-new; chmod +x api-pack-new;  nohup ./api-pack-new & 
+

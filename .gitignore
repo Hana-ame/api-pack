@@ -6,3 +6,5 @@ api-pack
 
 api-pack-new
 __debug_bin*
+
+*.bin
