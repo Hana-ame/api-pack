@@ -8,3 +8,5 @@ api-pack-new
 __debug_bin*
 
 *.bin
+
+*.db

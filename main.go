@@ -45,6 +45,7 @@ func main() {
 	// go EhProxy()      //127.25.23.6:8080
 	go pastejson.Run(os.Getenv("PASTEJSON"), os.Getenv("PASTEJSON_CONN_STR"))
 	go TwimgProxy(os.Getenv("TWIMG")) // 127.25.9.15:8080
+	go PximgProxy(os.Getenv("PXIMG")) // 127.25.9.16:8080
 
 	//127.24.11.16:8080
 	// 创建 Gin 引擎

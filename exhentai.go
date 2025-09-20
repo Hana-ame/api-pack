@@ -565,7 +565,7 @@ func ExhProxy() {
 			// 	return
 			// }
 			// 如果 Cookie 包含 pass=pass，直接继续处理请求
-			c.Redirect(http.StatusFound, "https://chat.moonchan.xyz"+c.Request.URL.String())
+			c.Redirect(301, "https://exhentai.org"+c.Request.URL.String())
 			c.Abort()
 			return
 		}
