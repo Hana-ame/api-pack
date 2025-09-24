@@ -1,6 +1,8 @@
 module github.com/Hana-ame/api-pack
 
-go 1.23
+go 1.22
+
+toolchain go1.22.5
 
 require (
 	github.com/antchfx/htmlquery v1.3.2
