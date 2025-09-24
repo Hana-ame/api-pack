@@ -43,7 +43,8 @@ func main() {
 		go shijima.Run(os.Getenv("SHIJIMA"))
 	}
 	// go EhProxy()      //127.25.23.6:8080
-	go pastejson.Run(os.Getenv("PASTEJSON"), os.Getenv("PASTEJSON_CONN_STR"))
+	go pastejson.Run(os.Getenv("PASTEJSON"), os.Getenv("PASTEJSON_CONN_STR")) // 127.25.9.10:8080
+
 	go TwimgProxy(os.Getenv("TWIMG")) // 127.25.9.15:8080
 	go PximgProxy(os.Getenv("PXIMG")) // 127.25.9.16:8080
 
@@ -70,7 +71,7 @@ func main() {
 		}
 
 		// 读取 URL 参数
-		path := c.Request.URL.String()
+		path := c.Request.URL.Path
 
 		host := tools.Or(c.Query("proxy_host"), c.GetHeader("X-Host"))
 
@@ -78,39 +79,37 @@ func main() {
 			if path == "/favicon.ico" {
 				c.Redirect(http.StatusFound, "https://moonchan.xyz/favicon.ico")
 				return
+			} else {
+				c.Header("X-Error", "host not found")
+				c.Redirect(http.StatusFound, "https://page.moonchan.xyz/")
+				return
 			}
-			c.Header("X-Error", "host not found")
-			c.Redirect(http.StatusFound, "https://page.moonchan.xyz/")
-			return
-		}
-
-		if c.Request.Host == host {
+		} else if c.Request.Host == host {
 			c.Header("X-Error", c.Request.Host)
 			c.Redirect(http.StatusFound, "https://page.moonchan.xyz/")
 			return
 		}
 
-		header := tools.NewHeader(nil)
+		header := tools.NewHeader(c.Request.Header)
 
-		header.Add("Host", host)
-		header.Add("Origin", c.Query("proxy_origin"))
-		header.Add("Origin", c.GetHeader("X-Origin"))
-		header.Add("Referer", c.Query("proxy_referer"))
-		header.Add("Referer", c.GetHeader("X-Referer"))
-		header.Set("Cookie", tools.Or(
-			c.Query("proxy_cookie"),
-			c.GetHeader("X-Cookie"),
-			header.Get("Cookie"),
-		))
-		// header.Add("Cookie", c.GetHeader("X-Cookie")) // 这个是candidates传的
+		header.Set("Host", host)
+		header.Set("Origin", tools.Or(c.Query("proxy_origin"), c.GetHeader("X-Origin"), c.GetHeader("Origin")))
+		header.Set("Referer", tools.Or(c.Query("proxy_referer"), c.GetHeader("X-Referer") /*c.GetHeader("Referer")*/))
+		header.Set("Cookie", tools.Or(c.Query("proxy_cookie"), c.GetHeader("X-Cookie"), header.Get("Cookie")))
 
 		scheme := tools.Or(c.Query("proxy_scheme"), c.GetHeader("X-Scheme"), "https")
 
-		resp, err := myfetch.Fetch(c.Request.Method, scheme+"://"+host+path,
+		search := c.Request.URL.Query()
+		search.Del("proxy_host")
+		search.Del("proxy_origin")
+		search.Del("proxy_referer")
+		search.Del("proxy_cookie")
+
+		newUrl := scheme + "://" + host + path + tools.Ternary(len(search) > 0, "?", "") + search.Encode()
+
+		resp, err := myfetch.Fetch(c.Request.Method, newUrl,
 			(header.Header), c.Request.Body)
-		if err != nil {
-			c.Header("X-Error", err.Error())
-			c.AbortWithError(http.StatusBadGateway, err)
+		if tools.AbortWithError(c, 500, err) {
 			return
 		}
 		defer resp.Body.Close()
