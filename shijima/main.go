@@ -19,6 +19,7 @@ import (
 	_ "github.com/Hana-ame/api-pack/Tools"
 	tools "github.com/Hana-ame/api-pack/Tools"
 	myfetch "github.com/Hana-ame/api-pack/Tools/my_fetch"
+	handler "github.com/Hana-ame/api-pack/Tools/my_gin_handler"
 	middleware "github.com/Hana-ame/api-pack/Tools/my_gin_middleware"
 	"github.com/Hana-ame/api-pack/Tools/randomreader"
 	"github.com/Hana-ame/api-pack/Tools/sqlite"
@@ -544,13 +545,19 @@ func checkID(c *gin.Context) {
 	}
 	c.Set("id", id)
 }
+
 func cookie(c *gin.Context) {
 	id := make([]byte, 8)
-	_, err := randomreader.Read(id)
-	if err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, err)
-		return
+	if c.Query("id") != "" { // 怎么可能有人猜到
+		id = []byte(c.Query("id"))
+	} else {
+		_, err := randomreader.Read(id)
+		if err != nil {
+			c.AbortWithStatusJSON(http.StatusInternalServerError, err)
+			return
+		}
 	}
+	c.SetSameSite(http.SameSiteNoneMode)
 	hash := tools.Hash(string(id), os.Getenv("SALT"))
 	auth := string(id) + "|" + hash
 	c.SetCookie("auth", auth, 3600*24*365*10, "/", "", false, false)
@@ -651,13 +658,15 @@ func Run(addr string) error {
 	r.Use(middleware.CORSMiddleware())
 	r.Use(middleware.ProxyMiddleware())
 
+	r.POST("/groq", handler.GroqHandler)
+
 	r.GET("/api/v2/", get)
 	// r.GET("/api/v2/preview/*path", preview)
 	r.GET("/api/v2/cookie", cookie)
 	r.POST("/api/v2/", checkID, post)
 	r.DELETE("/api/v2/", checkID, delete)
 	r.GET("/api/v2/reaction/:tid", checkID, GetReactionsHandlerAlt)
-	r.POST("/api/v2/reaction/:tid", checkID, SetReactionHandlerAlt, updateNewReaction)
+	r.POST("/api/v2/reaction/:tid", checkID, SetReactionHandlerAlt /*, updateNewReaction*/)
 	r.GET("/api/v2/new_reactions", getNewReactions)
 	// r.GET("/api/v2/reactions", checkID, GetReactionsBatchHandler) // no longer used
 	r.GET("/api/v2/cover", getRandomRecordHandler)
@@ -680,6 +689,8 @@ func Run(addr string) error {
 		}
 		c.Set("thread", string(threadJSON))
 	}, bot.Handler)
+
+	r.NoRoute(handler.NoRoute("/var/www/moonchan", "index.html"))
 
 	return r.Run(addr)
 }

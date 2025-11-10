@@ -834,7 +834,7 @@ func ExhProxy() {
 		}
 		defer resp.Body.Close()
 
-		if mf.Count() > 250 {
+		if mf.Count() > 1000 {
 			ipidx = (ipidx + 1) % len(ips)
 			defer func(ip string) {
 				time.Sleep(240 * time.Second)
@@ -885,7 +885,7 @@ func ExhProxy() {
 
 		if len(data) == 0 {
 			c.AbortWithStatus(resp.StatusCode) // 304 not modified
-			tools.CopyHeader(c, resp.Header)
+			tools.PatchHeader(c, resp.Header)
 			return
 		}
 
@@ -1167,7 +1167,7 @@ func SProxy() {
 		// 		c.Writer.Header().Add(k, v)
 		// 	}
 		// }
-		tools.CopyHeader(c, resp.Header)
+		tools.PatchHeader(c, resp.Header)
 
 		c.DataFromReader(resp.StatusCode, resp.ContentLength, resp.Header.Get("Content-Type"), resp.Body, map[string]string{
 			"X-Host":    host,

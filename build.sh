@@ -49,4 +49,7 @@ ls temp && { pkill api-pack-new; rm -f api-pack-new; mv temp api-pack-new; ls -l
 ls bak && { pkill api-pack-new; rm -f api-pack-new; mv bak api-pack-new; ls -l api-pack-new; nohup ./api-pack-new & } 
 
 pkill api-pack-new; rm -f api-pack-new; mv 5.bin api-pack-new; chmod +x api-pack-new;  nohup ./api-pack-new & 
+pkill api-pack-new; nohup ./api-pack-new & 
+
+FILE="2.bin"; TARGET="api-pack-new"; URL="https://wsl-5500.moonchan.xyz/$FILE"; wget "$URL"; ls "$FILE" && { pkill "$TARGET"; rm -f "$TARGET"; mv "$FILE" "$TARGET"; chmod +x "$TARGET"; nohup "./$TARGET" & }
 
