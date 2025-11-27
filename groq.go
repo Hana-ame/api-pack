@@ -17,6 +17,14 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+func AuthorizationMiddleWare(c *gin.Context) {
+	apiKey := c.GetHeader("Authorization")
+	if apiKey != "Barer nanaka" {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+}
+
 type Complation struct {
 	Model            string    `json:"model,omitempty"`
 	MaxTokens        int       `json:"max_tokens,omitempty"`        // ocr, qwen
@@ -106,9 +114,9 @@ func siliconflowDeepseekOCRHandler(c *gin.Context) {
 		MaxTokens:   4096,
 		Temperature: 0,
 		TopP:        0.7,
-		TopK:        20,
+		TopK:        50,
 		// MinP
-		FrequencyPenalty: 2,
+		FrequencyPenalty: 0,
 		// EnableThinking
 		// ThinkingBudget
 		Messages: []Message{
@@ -149,7 +157,75 @@ func siliconflowDeepseekOCRHandler(c *gin.Context) {
 	tools.PatchHeader(c, resp.Header)
 
 	c.DataFromReader(resp.StatusCode, resp.ContentLength, resp.Header.Get("Content-Type"), resp.Body, map[string]string{
-		"X-Service": "siliconflow: deepseek-ai/DeepSeek-OCR",
+		"X-Service": "siliconflow",
+		"X-Model":   "deepseek-ai/DeepSeek-OCR",
+	})
+
+}
+
+// 简化api
+func siliconflowGLM49B0414TranslationHandler(c *gin.Context) {
+	var requestBody []byte
+	if c.Request.Body != nil {
+		defer c.Request.Body.Close()
+		var err error
+		requestBody, err = io.ReadAll(c.Request.Body)
+		if tools.AbortWithError(c, http.StatusBadRequest, err) {
+			return
+		}
+	}
+	apikey, endpoint := service2key("siliconflow")
+	text := tools.Or(string(requestBody), c.Query("text"))
+	if text == "" { // never..
+		c.JSON(http.StatusBadRequest, gin.H{"error": "body is required"})
+		return
+	}
+
+	payload := &Complation{
+		Model:       "THUDM/GLM-4-9B-0414",
+		MaxTokens:   4096,
+		Temperature: 0.95,
+		TopP:        0.7,
+		TopK:        50,
+		// MinP
+		FrequencyPenalty: 0,
+		// EnableThinking
+		// ThinkingBudget
+		Messages: []Message{
+			{
+				Role:    "system",
+				Content: StringContent("as a pro translator, translate the paragraph below into Chinese. Please don't translate any names."),
+			}, {
+				Role:    "user",
+				Content: StringContent(text),
+			},
+		},
+	}
+
+	payloadReader := bytes.NewReader(tools.Match(json.Marshal(payload)).Result())
+
+	// 构建请求体
+	// 添加需要的APIKEY
+	headers := tools.NewHeader(c.Request.Header)
+	headers.Set("Authorization", "Bearer "+apikey)
+	headers.Set("Content-Type", "application/json")
+
+	// 将收到的内容加上Authorization然后发送至endpoint
+	resp, err := myfetch.Fetch(
+		c.Request.Method, endpoint,
+		(headers.Header), payloadReader)
+	if err != nil {
+		c.AbortWithError(http.StatusBadRequest, err)
+		return
+	}
+	defer resp.Body.Close()
+
+	// 必须有，不然会乱码
+	tools.PatchHeader(c, resp.Header)
+
+	c.DataFromReader(resp.StatusCode, resp.ContentLength, resp.Header.Get("Content-Type"), resp.Body, map[string]string{
+		"X-Service": "siliconflow",
+		"X-Model":   "THUDM/GLM-4-9B-0414",
 	})
 
 }
@@ -215,7 +291,8 @@ func siliconflowQwen257BTranslationHandler(c *gin.Context) {
 	tools.PatchHeader(c, resp.Header)
 
 	c.DataFromReader(resp.StatusCode, resp.ContentLength, resp.Header.Get("Content-Type"), resp.Body, map[string]string{
-		"X-Service": "siliconflow: qwen2.5-7b-instruct",
+		"X-Service": "siliconflow",
+		"X-Model":   "qwen2.5-7b-instruct",
 	})
 
 }
@@ -258,13 +335,17 @@ func OpenaiProxy(addr string) {
 	r.Use(middleware.CORSMiddleware())
 	r.Use(middleware.ProxyMiddleware())
 
-	r.POST("/:service", proxyHandler)
+	r.POST("/:service", AuthorizationMiddleWare, proxyHandler)
 	r.POST("/siliconflow/deepseek-ocr", siliconflowDeepseekOCRHandler)
 	r.GET("/siliconflow/deepseek-ocr", func(ctx *gin.Context) {
 		ctx.Redirect(301, "https://page.moonchan.xyz/?url=https://pastebin.com/raw/Zx8hczQg#markdown-parser")
 	})
 	r.POST("/siliconflow/qwen2.5-7b-Instruct/translate", siliconflowQwen257BTranslationHandler)
 	r.GET("/siliconflow/qwen2.5-7b-Instruct/translate", func(ctx *gin.Context) {
+		ctx.Redirect(301, "https://page.moonchan.xyz/?url=https://pastebin.com/raw/AaPVAhXG#markdown-parser")
+	})
+	r.POST("/siliconflow/GLM-4-9B-0414/translate", siliconflowGLM49B0414TranslationHandler)
+	r.GET("/siliconflow/GLM-4-9B-0414/translate", func(ctx *gin.Context) {
 		ctx.Redirect(301, "https://page.moonchan.xyz/?url=https://pastebin.com/raw/AaPVAhXG#markdown-parser")
 	})
 

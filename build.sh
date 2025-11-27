@@ -45,8 +45,8 @@ exit 0
 #  ifconfig sit1 inet6 del  2001:470:c:6c:2f15:169f:1161:e269/64
 
 # 无缝运行
-ls temp && { pkill api-pack-new; rm -f api-pack-new; mv temp api-pack-new; ls -l api-pack-new; nohup ./api-pack-new & } 
-ls bak && { pkill api-pack-new; rm -f api-pack-new; mv bak api-pack-new; ls -l api-pack-new; nohup ./api-pack-new & } 
+cd; ls temp && { pkill api-pack-new; rm -f api-pack-new; mv temp api-pack-new; ls -l api-pack-new; nohup ./api-pack-new & } 
+cd; ls bak && { pkill api-pack-new; rm -f api-pack-new; mv bak api-pack-new; ls -l api-pack-new; nohup ./api-pack-new & } 
 
 pkill api-pack-new; rm -f api-pack-new; mv 5.bin api-pack-new; chmod +x api-pack-new;  nohup ./api-pack-new & 
 pkill api-pack-new; nohup ./api-pack-new & 

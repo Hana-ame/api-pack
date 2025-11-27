@@ -560,7 +560,7 @@ func cookie(c *gin.Context) {
 	c.SetSameSite(http.SameSiteNoneMode)
 	hash := tools.Hash(string(id), os.Getenv("SALT"))
 	auth := string(id) + "|" + hash
-	c.SetCookie("auth", auth, 3600*24*365*10, "/", "", false, false)
+	c.SetCookie("auth", auth, 3600*24*365*10, "/", "", true, false)
 }
 
 // 固定屎upload.moonchan.xyz
