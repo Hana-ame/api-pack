@@ -5,9 +5,9 @@ import (
 	"strconv"
 	"time"
 
-	myfetch "github.com/Hana-ame/api-pack/Tools/my_fetch"
-	handler "github.com/Hana-ame/api-pack/Tools/my_gin_handler"
-	middleware "github.com/Hana-ame/api-pack/Tools/my_gin_middleware"
+	myfetch "github.com/Hana-ame/api-pack/tools/my_fetch"
+	handler "github.com/Hana-ame/api-pack/tools/my_gin_handler"
+	middleware "github.com/Hana-ame/api-pack/tools/my_gin_middleware"
 	"github.com/gin-gonic/gin"
 )
 

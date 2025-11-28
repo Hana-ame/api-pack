@@ -8,8 +8,8 @@ import (
 	"os"
 	"strconv"
 
-	_ "github.com/Hana-ame/api-pack/Tools"
-	tools "github.com/Hana-ame/api-pack/Tools"
+	_ "github.com/Hana-ame/api-pack/tools/utils"
+	tools "github.com/Hana-ame/api-pack/tools/utils"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"

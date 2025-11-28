@@ -7,13 +7,13 @@ import (
 
 	_ "github.com/joho/godotenv/autoload"
 
-	tools "github.com/Hana-ame/api-pack/Tools"
-	"github.com/Hana-ame/api-pack/Tools/debug"
-	myfetch "github.com/Hana-ame/api-pack/Tools/my_fetch"
-	middleware "github.com/Hana-ame/api-pack/Tools/my_gin_middleware"
-	"github.com/Hana-ame/api-pack/Tools/wasm/v"
 	"github.com/Hana-ame/api-pack/pastejson"
 	shijima "github.com/Hana-ame/api-pack/shijima"
+	"github.com/Hana-ame/api-pack/tools/debug"
+	myfetch "github.com/Hana-ame/api-pack/tools/my_fetch"
+	middleware "github.com/Hana-ame/api-pack/tools/my_gin_middleware"
+	tools "github.com/Hana-ame/api-pack/tools/utils"
+	"github.com/Hana-ame/api-pack/tools/wasm/v"
 	"github.com/gin-gonic/gin"
 )
 

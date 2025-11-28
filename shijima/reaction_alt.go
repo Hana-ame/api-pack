@@ -7,8 +7,8 @@ import (
 
 	// "github.com/elliotchance/orderedmap/v2" // 尼玛，没json的。
 
-	tools "github.com/Hana-ame/api-pack/Tools"
-	"github.com/Hana-ame/api-pack/Tools/orderedmap"
+	"github.com/Hana-ame/api-pack/tools/orderedmap"
+	tools "github.com/Hana-ame/api-pack/tools/utils"
 	"github.com/gin-gonic/gin"
 	_ "github.com/go-sql-driver/mysql" // MySQL driver
 )

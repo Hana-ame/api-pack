@@ -11,9 +11,9 @@ import (
 	"strconv"
 	"strings"
 
-	tools "github.com/Hana-ame/api-pack/Tools"
-	myfetch "github.com/Hana-ame/api-pack/Tools/my_fetch"
-	middleware "github.com/Hana-ame/api-pack/Tools/my_gin_middleware"
+	myfetch "github.com/Hana-ame/api-pack/tools/my_fetch"
+	middleware "github.com/Hana-ame/api-pack/tools/my_gin_middleware"
+	tools "github.com/Hana-ame/api-pack/tools/utils"
 	"github.com/gin-gonic/gin"
 )
 

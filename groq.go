@@ -10,10 +10,10 @@ import (
 	"net/http"
 	"os"
 
-	tools "github.com/Hana-ame/api-pack/Tools"
-	myfetch "github.com/Hana-ame/api-pack/Tools/my_fetch"
-	middleware "github.com/Hana-ame/api-pack/Tools/my_gin_middleware"
-	"github.com/Hana-ame/api-pack/Tools/orderedmap"
+	myfetch "github.com/Hana-ame/api-pack/tools/my_fetch"
+	middleware "github.com/Hana-ame/api-pack/tools/my_gin_middleware"
+	"github.com/Hana-ame/api-pack/tools/orderedmap"
+	tools "github.com/Hana-ame/api-pack/tools/utils"
 	"github.com/gin-gonic/gin"
 )
 

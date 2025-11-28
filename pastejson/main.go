@@ -8,9 +8,9 @@ import (
 	"strconv"
 	"strings"
 
-	_ "github.com/Hana-ame/api-pack/Tools"
-	tools "github.com/Hana-ame/api-pack/Tools"
-	middleware "github.com/Hana-ame/api-pack/Tools/my_gin_middleware"
+	middleware "github.com/Hana-ame/api-pack/tools/my_gin_middleware"
+	_ "github.com/Hana-ame/api-pack/tools/utils"
+	tools "github.com/Hana-ame/api-pack/tools/utils"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
 	"github.com/valyala/fastjson"

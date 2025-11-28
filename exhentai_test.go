@@ -10,10 +10,10 @@ import (
 	"strings"
 	"testing"
 
-	tools "github.com/Hana-ame/api-pack/Tools"
-	"github.com/Hana-ame/api-pack/Tools/debug"
-	myfetch "github.com/Hana-ame/api-pack/Tools/my_fetch"
-	streams "github.com/Hana-ame/api-pack/Tools/my_streams"
+	"github.com/Hana-ame/api-pack/tools/debug"
+	myfetch "github.com/Hana-ame/api-pack/tools/my_fetch"
+	streams "github.com/Hana-ame/api-pack/tools/my_streams"
+	tools "github.com/Hana-ame/api-pack/tools/utils"
 	"github.com/antchfx/htmlquery"
 )
 

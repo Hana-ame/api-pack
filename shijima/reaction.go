@@ -8,8 +8,8 @@ import (
 	"strings"
 	"sync"
 
-	tools "github.com/Hana-ame/api-pack/Tools"
-	"github.com/Hana-ame/api-pack/Tools/orderedmap"
+	"github.com/Hana-ame/api-pack/tools/orderedmap"
+	tools "github.com/Hana-ame/api-pack/tools/utils"
 	"github.com/gin-gonic/gin"
 )
 

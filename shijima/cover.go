@@ -9,8 +9,8 @@ import (
 
 	// "os" // 如果不再需要 os.Remove(dbPath) 可以删除
 
-	tools "github.com/Hana-ame/api-pack/Tools"
-	"github.com/Hana-ame/api-pack/Tools/sqlite"
+	"github.com/Hana-ame/api-pack/tools/sqlite"
+	tools "github.com/Hana-ame/api-pack/tools/utils"
 	"github.com/gin-gonic/gin"
 )
 

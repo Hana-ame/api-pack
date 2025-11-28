@@ -4,7 +4,7 @@ import (
 	"strconv"
 	"sync"
 
-	tools "github.com/Hana-ame/api-pack/Tools"
+	tools "github.com/Hana-ame/api-pack/tools/utils"
 	"github.com/gin-gonic/gin"
 	"github.com/hashicorp/go-multierror"
 )

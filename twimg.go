@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"net/http"
 
-	handler "github.com/Hana-ame/api-pack/Tools/my_gin_handler"
-	middleware "github.com/Hana-ame/api-pack/Tools/my_gin_middleware"
+	handler "github.com/Hana-ame/api-pack/tools/my_gin_handler"
+	middleware "github.com/Hana-ame/api-pack/tools/my_gin_middleware"
 	"github.com/gin-gonic/gin"
 )
 

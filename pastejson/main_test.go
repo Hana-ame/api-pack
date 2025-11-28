@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"testing"
 
-	tools "github.com/Hana-ame/api-pack/Tools"
+	tools "github.com/Hana-ame/api-pack/tools/utils"
 	"github.com/jackc/pgx/v5"
 	"github.com/valyala/fastjson"
 )

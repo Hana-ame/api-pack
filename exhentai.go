@@ -17,12 +17,12 @@ import (
 	"strings"
 	"time"
 
-	tools "github.com/Hana-ame/api-pack/Tools"
-	"github.com/Hana-ame/api-pack/Tools/debug"
-	myfetch "github.com/Hana-ame/api-pack/Tools/my_fetch"
-	"github.com/Hana-ame/api-pack/Tools/my_fetch/my_if"
-	middleware "github.com/Hana-ame/api-pack/Tools/my_gin_middleware"
-	streams "github.com/Hana-ame/api-pack/Tools/my_streams"
+	"github.com/Hana-ame/api-pack/tools/debug"
+	myfetch "github.com/Hana-ame/api-pack/tools/my_fetch"
+	"github.com/Hana-ame/api-pack/tools/my_fetch/my_if"
+	middleware "github.com/Hana-ame/api-pack/tools/my_gin_middleware"
+	streams "github.com/Hana-ame/api-pack/tools/my_streams"
+	tools "github.com/Hana-ame/api-pack/tools/utils"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 	"golang.org/x/net/html"
@@ -163,7 +163,6 @@ func EhProxy() {
 			tools.NewSlice(
 				c.GetHeader("X-Cookie"),
 				os.Getenv("EXHENTAI_PROXY_COOKIE"),
-				"ipb_member_id=5698562; ipb_pass_hash=154e574fd19294c32f905fe187cbdad1; yay=louder; igneous=5eevdxac75hpx71cv",
 			).FirstUnequal(""),
 		)
 
