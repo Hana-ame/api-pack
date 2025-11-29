@@ -658,7 +658,7 @@ func Run(addr string) error {
 	r.Use(middleware.CORSMiddleware())
 	r.Use(middleware.ProxyMiddleware())
 
-	r.POST("/groq", handler.GroqHandler)
+	// r.POST("/groq", handler.GroqHandler)
 
 	r.GET("/api/v2/", get)
 	// r.GET("/api/v2/preview/*path", preview)

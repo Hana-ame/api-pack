@@ -4,6 +4,7 @@ package main
 
 import (
 	"bytes"
+	"compress/gzip"
 	"errors"
 	"fmt"
 	"io"
@@ -250,7 +251,7 @@ func EhProxy() {
 		}
 
 		if len(data) == 0 {
-			debug.E("why", resp.Status) // 304
+			// debug.E("why", resp.Status) // 304
 			c.Header("X-Error", resp.Status)
 			c.AbortWithStatus(resp.StatusCode)
 			return
@@ -804,7 +805,6 @@ func ExhProxy() {
 			tools.NewSlice(
 				c.GetHeader("X-Cookie"),
 				os.Getenv("EXHENTAI_PROXY_COOKIE"),
-				"ipb_member_id=5698562; ipb_pass_hash=154e574fd19294c32f905fe187cbdad1; yay=louder; igneous=5eevdxac75hpx71cv",
 			).FirstUnequal(""),
 		)
 		// 如果头带Mobile就OverRide掉.
@@ -812,7 +812,9 @@ func ExhProxy() {
 			header.Set("User-Agent", "myfetch/2025.4.14")
 		}
 
+		// 修改Referer
 		tools.Match(url.Parse(c.Request.Referer())).Then(func(url *url.URL) error {
+			url.Scheme = "https"
 			url.Host = "exhentai.org"
 			header.Set("Referer", url.String())
 			return nil
@@ -1058,9 +1060,11 @@ func ExhProxy() {
 		}
 
 		// 为什么自带的方法这么贵物
-		c.Writer.Header().Set("Content-Encoding", "identity")
+		// c.Writer.Header().Set("Content-Encoding", "identity")
 		// 和最后的方法到底用哪个。
-		c.Writer.Header().Set("Content-Length", strconv.Itoa(len(data)))
+		// c.Writer.Header().Set("Content-Length", strconv.Itoa(len(data)))
+		// c.Header("Content-Length", strconv.Itoa(len(compressedData))) // 长度必须是压缩后的长度
+
 		for k, vs := range resp.Header {
 			if c.Writer.Header().Get(k) != "" {
 				continue
@@ -1069,22 +1073,48 @@ func ExhProxy() {
 				c.Writer.Header().Add(k, v)
 			}
 		}
+		// c.Header("Content-Type", resp.Header.Get("Content-Type"))
 
+		// 【重点】强制删除 Content-Length，触发 Chunked 传输
+		// 这样你就不用算长度，也不会报“多写”
+		c.Header("Content-Length", "")
+
+		// 这是在干嘛..
 		if slices.Contains([]int{http.StatusNotFound}, resp.StatusCode) {
 			c.Redirect(http.StatusTemporaryRedirect, "https://"+c.Request.Host)
 			c.Abort()
 			return
 		}
 
+		// 把你那个 map 里的头搬出来手动设
+		c.Header("X-Host", host)
+		c.Header("X-Origin", header.Get("Origin"))
+		c.Header("X-Referer", header.Get("Referer"))
+		c.Header("X-Cookie", header.Get("Cookie"))
+		c.Header("X-Debug-Request-Host", c.Request.Host)
+		c.Header("X-Debug-Header-Host", c.GetHeader("Host"))
+
+		c.Writer.Header().Set("Content-Encoding", "gzip") // there is no difference with the code above
+
+		c.Status(resp.StatusCode)
+
+		// 6. 接管 Writer 进行流式压缩
+		gz := gzip.NewWriter(c.Writer)
+		defer gz.Close() // 必须 defer Close，否则 gzip 数据不完整，浏览器会报解压失败
+
+		if _, err := gz.Write(data); err != nil {
+			return // 客户端断开了
+		}
+
 		// 为什么会报多写。
-		c.DataFromReader(resp.StatusCode, int64(len(data)), resp.Header.Get("Content-Type"), bytes.NewReader(data), map[string]string{
-			"X-Host":               host,
-			"X-Origin":             header.Get("Origin"),
-			"X-Referer":            header.Get("Referer"),
-			"X-Cookie":             header.Get("Cookie"),
-			"X-Debug-Request-Host": c.Request.Host,
-			"X-Debug-Header-Host":  c.GetHeader("Host"),
-		})
+		// c.DataFromReader(resp.StatusCode, -1, resp.Header.Get("Content-Type"), bytes.NewReader(data), map[string]string{
+		// 	"X-Host":               host,
+		// 	"X-Origin":             header.Get("Origin"),
+		// 	"X-Referer":            header.Get("Referer"),
+		// 	"X-Cookie":             header.Get("Cookie"),
+		// 	"X-Debug-Request-Host": c.Request.Host,
+		// 	"X-Debug-Header-Host":  c.GetHeader("Host"),
+		// })
 
 	})
 
@@ -1436,16 +1466,17 @@ func addFloatingIframeAtRightBottom(html []byte) []byte {
     <div id="moonchan-floating-iframe" style="display: none;">
         <button id="moonchan-close-button" onclick="moonchanCloseIframe()">×</button>
         <div>
-			<p>如遇反诈页面请设置DNS为<b>1.1.1.1</b></p>
-			<p>具体设置方式请自行搜索</p>
+			<p>moonchan.xyz有DNS污染迹象，请注意迁移到以下节点</p>
 			<p><a href="https://114514.nmbyd2.top">https://114514.nmbyd2.top</a></p>
 			<p><a href="https://ex.nmbyd3.top">https://ex.nmbyd3.top</a></p>
 			<p>反馈请发送邮件至<b>readonly@moonchan.xyz</b></p>
+			<p>没钱了，救救孩子，<a href="https://cloud.siliconflow.cn/i/sRO0U8o0">注册一下硅基流动让我吃点人头费吧，还能用各种AI，太赚啦</a></p>
+			<p>【也是回血计划】<a href="https://nmbyd3.top/?bid=998&tid=168104&pn=0">代理拼好车，1元50G，点我看详细</a></p>
 		</div>
     </div>
 
     <script>
-		const mark = '250714-1';
+		const mark = '1129-1';
         // 检查 localStorage 中的值
         if (localStorage.getItem('iframeClosed') !== mark) {
             document.getElementById('moonchan-floating-iframe').style.display = 'block';
