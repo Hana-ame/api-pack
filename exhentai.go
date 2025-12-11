@@ -1467,16 +1467,13 @@ func addFloatingIframeAtRightBottom(html []byte) []byte {
         <button id="moonchan-close-button" onclick="moonchanCloseIframe()">×</button>
         <div>
 			<p>moonchan.xyz有DNS污染迹象，请注意迁移到以下节点</p>
-			<p><a href="https://114514.nmbyd2.top">https://114514.nmbyd2.top</a></p>
-			<p><a href="https://ex.nmbyd3.top">https://ex.nmbyd3.top</a></p>
-			<p>反馈请发送邮件至<b>readonly@moonchan.xyz</b></p>
-			<p>没钱了，救救孩子，<a href="https://cloud.siliconflow.cn/i/sRO0U8o0">注册一下硅基流动让我吃点人头费吧，还能用各种AI，太赚啦</a></p>
-			<p>【也是回血计划】<a href="https://nmbyd3.top/?bid=998&tid=168104&pn=0">代理拼好车，1元50G，点我看详细</a></p>
+			<p>New:<a href="https://ex.810114.xyz/">https://ex.810114.xyz/</a>（无污染永续）</p>			
+			<p>目前各个域名情况如下<img src="https://upload.moonchan.xyz/api/01LLWEUUY3T3XM5KBRVVD37QHEAH4GBQ66/image.webp" /></p>
 		</div>
     </div>
 
     <script>
-		const mark = '1129-1';
+		const mark = '1209';
         // 检查 localStorage 中的值
         if (localStorage.getItem('iframeClosed') !== mark) {
             document.getElementById('moonchan-floating-iframe').style.display = 'block';

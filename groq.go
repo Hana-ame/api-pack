@@ -19,7 +19,7 @@ import (
 
 func AuthorizationMiddleWare(c *gin.Context) {
 	apiKey := c.GetHeader("Authorization")
-	if apiKey != "Barer nanaka" {
+	if apiKey != "Bearer nanaka" {
 		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return
 	}
@@ -47,9 +47,9 @@ type StringContent string        // qwen
 func (StringContent) isContent() {}
 
 type StructContent struct {
-	Type     string     `json:"type,omitempty"`      // ocr: image_url or text
-	ImageUrl UrlMessage `json:"image_url,omitempty"` // ocr
-	Text     string     `json:"text,omitempty"`      // ocr
+	Type     string   `json:"type,omitempty"`      // ocr: image_url or text
+	ImageUrl ImageUrl `json:"image_url,omitempty"` // ocr
+	Text     string   `json:"text,omitempty"`      // ocr
 }
 
 func (StructContent) isContent() {}
@@ -61,7 +61,7 @@ type Content interface {
 	isContent()
 }
 
-type UrlMessage struct {
+type ImageUrl struct {
 	Url string `json:"url,omitempty"` //data:image/png;base64
 }
 
@@ -124,7 +124,7 @@ func siliconflowDeepseekOCRHandler(c *gin.Context) {
 				Role: "user",
 				Content: StructContentSlice{{
 					Type: "image_url",
-					ImageUrl: UrlMessage{
+					ImageUrl: ImageUrl{
 						Url: imageUrl,
 					},
 				}, {
@@ -349,7 +349,7 @@ func OpenaiProxy(addr string) {
 		ctx.Redirect(301, "https://page.moonchan.xyz/?url=https://pastebin.com/raw/AaPVAhXG#markdown-parser")
 	})
 
-	r.NoRoute(proxyHandler)
+	r.NoRoute(AuthorizationMiddleWare, proxyHandler)
 
 	// 启动服务器
 	r.Run(addr) // chat.moonchan.xyz
