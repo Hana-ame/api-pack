@@ -28,8 +28,8 @@ func main() {
 	if os.Getenv("EX_PROXY") != "" {
 		go ExhProxy() //EX_PROXY="127.25.23.2:8080"
 	}
-	if tools.HasEnv("EX_ORIGIN_PROXY") {
-		go ExOrigin("127.25.23.2:8080")
+	if tools.HasEnv("EX_API_PROXY") {
+		// go ExOrigin("127.25.23.2:8080")
 	}
 	if os.Getenv("NYAA_PROXY") != "" {
 		go NyaaProxy() //127.25.23.4:8080

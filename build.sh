@@ -6,7 +6,7 @@ export GOOS=linux
 export GOARCH=amd64
 
 # 构建 Go 项目
-go build -o api-pack-new
+go build -ldflags="-s -w" -o api-pack-new
 
 # 检查构建是否成功
 if [ $? -ne 0 ]; then
