@@ -910,7 +910,7 @@ func addInlineChatRoom(html []byte) []byte {
 			document.body.appendChild(script);
 			console.log("GM Polyfill loaded via localStorage.");
 		}
-		if (localStorage.getItem("ehsyringe") === "true") { // default is false
+		if (localStorage.getItem("ehsyringe") !== "false") { 
 			{
 				var script = document.createElement("script");
 				script.src = "https://config.810114.xyz/exhentai/gm-polyfill.js";	
@@ -921,7 +921,20 @@ func addInlineChatRoom(html []byte) []byte {
 				script.src = "https://config.810114.xyz/exhentai/EhSyringe.user.js";	
 				document.body.appendChild(script);
 			}
-			console.log("GM Polyfill loaded via localStorage.");
+		}
+		if (localStorage.getItem("gscript") !== "false" && location.pathname.startsWith("/g/")) { 
+			{
+				var script = document.createElement("script");
+				script.src = "https://config.810114.xyz/exhentai/gallery.js";	
+				document.body.appendChild(script);
+			}
+		}
+		if (localStorage.getItem("reader") !== "false" && location.pathname.startsWith("/g/")) { 
+			{
+				var script = document.createElement("script");
+				script.src = "https://config.810114.xyz/exhentai/reader.js";
+				document.body.appendChild(script);
+			}
 		}
 	})();
 
