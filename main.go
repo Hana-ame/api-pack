@@ -8,6 +8,7 @@ import (
 	_ "github.com/joho/godotenv/autoload"
 
 	"github.com/Hana-ame/api-pack/pastejson"
+	"github.com/Hana-ame/api-pack/qwen"
 	shijima "github.com/Hana-ame/api-pack/shijima"
 	"github.com/Hana-ame/api-pack/tools/debug"
 	myfetch "github.com/Hana-ame/api-pack/tools/my_fetch"
@@ -25,7 +26,7 @@ func main() {
 		go SProxy() //127.25.23.3:8080
 	}
 	if os.Getenv("EX_PROXY") != "" {
-		go ExhProxy() //127.25.23.2:8080
+		go ExhProxy() //EX_PROXY="127.25.23.2:8080"
 	}
 	if tools.HasEnv("EX_ORIGIN_PROXY") {
 		go ExOrigin("127.25.23.2:8080")
@@ -50,6 +51,8 @@ func main() {
 	go PximgProxy(os.Getenv("PXIMG")) // 127.25.9.16:8080
 
 	go EchoJSON() // 127.25.23.101:8080
+
+	go qwen.Run(os.Getenv("QWEN_PROXY")) // 127.25.12.16:8080
 
 	//127.24.11.16:8080
 	// 创建 Gin 引擎

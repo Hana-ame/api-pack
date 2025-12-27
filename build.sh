@@ -14,7 +14,8 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-~/script/scp.sh iframe.html root@vps.moonchan.xyz:/var/www/moonchan/iframe.html 
+# 已经不需要了
+# ~/script/scp.sh iframe.html root@vps.moonchan.xyz:/var/www/moonchan/iframe.html 
 
 # 使用 SCP 传输文件到远程服务器
 # 发送到bwh
@@ -51,5 +52,5 @@ cd; ls bak && { pkill api-pack-new; rm -f api-pack-new; mv bak api-pack-new; ls 
 pkill api-pack-new; rm -f api-pack-new; mv 5.bin api-pack-new; chmod +x api-pack-new;  nohup ./api-pack-new & 
 pkill api-pack-new; nohup ./api-pack-new & 
 
-FILE="2.bin"; TARGET="api-pack-new"; URL="https://wsl-5500.moonchan.xyz/$FILE"; wget "$URL"; ls "$FILE" && { pkill "$TARGET"; rm -f "$TARGET"; mv "$FILE" "$TARGET"; chmod +x "$TARGET"; nohup "./$TARGET" & }
+FILE="1.bin"; TARGET="api-pack-new"; URL="https://wsl-5500.moonchan.xyz/$FILE"; wget "$URL"; ls "$FILE" && { pkill "$TARGET"; rm -f "$TARGET"; mv "$FILE" "$TARGET"; chmod +x "$TARGET"; nohup "./$TARGET" & }
 

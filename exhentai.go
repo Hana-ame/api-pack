@@ -595,13 +595,23 @@ func ExhProxy() {
 		}
 
 		if strings.HasPrefix(c.Request.URL.String(), "/uconfig.php") {
-			// 如果 Cookie 包含 pass=pass，直接继续处理请求
-			if cookie, err := c.Cookie("pass"); err != nil || cookie == "pass" {
-				c.String(http.StatusOK, "哪个小天才整天改设置里的filter改得搜索搜不出东西的")
-				c.Abort()
+			// 修改为设置页面
+			const href = "https://config.810114.xyz/exhentai/settings.html"
+			resp, err := myfetch.Fetch(
+				c.Request.Method, href,
+				nil, c.Request.Body)
+			if err != nil {
+				c.Header("X-Error", err.Error())
+				c.AbortWithError(http.StatusBadGateway, err)
 				return
 			}
+			defer resp.Body.Close()
 
+			c.DataFromReader(resp.StatusCode, resp.ContentLength, resp.Header.Get("Content-Type"), resp.Body, map[string]string{
+				"X-Href": href,
+			})
+			c.Abort()
+			return
 		}
 
 		if strings.HasPrefix(c.Request.URL.String(), "/mytags") {
@@ -847,6 +857,7 @@ func ExhProxy() {
 			mf.SetClientPool(newCp)
 		}
 
+		// 是 torrent， 是js，就直接返回
 		if strings.HasPrefix(path, "/torrent") || strings.HasPrefix(path, "/z/") {
 			for k, vs := range resp.Header {
 				if c.Writer.Header().Get(k) != "" {
@@ -878,7 +889,6 @@ func ExhProxy() {
 
 		data, err := io.ReadAll(body)
 		if err != nil {
-			debug.E("why", err.Error())
 			c.Header("X-Error", err.Error())
 			c.AbortWithError(http.StatusBadGateway, err)
 			return
@@ -906,6 +916,10 @@ func ExhProxy() {
 			data = addReloadCoverButton(data)
 		}
 		data = addFloatingIframeAtRightBottom(data)
+		if host != "page.moonchan.xyz" {
+			// 随同inline chat room, 应该一同加载一些tamper monkey脚本
+			data = addInlineChatRoom(data)
+		}
 
 		// 获得param，redirect_to=image
 		// 没经过类型检查
@@ -1272,6 +1286,7 @@ func addReloadCoverButton(html []byte) []byte {
 	// 	execReload();
 
 	</script>
+
 </body>`), 1)
 
 	return html
@@ -1406,6 +1421,43 @@ func addWaterFallViewButton(html string) string {
 	</script>`, 1)
 }
 
+func addInlineChatRoom(html []byte) []byte {
+	// 注入客户端 Loader JS
+	// 它会读取 localStorage 中的 custom_loader_scripts，并动态创建 <script> 标签
+	clientLoader := `<script>
+	(function() {
+		// 这里设置你在 localStorage 中存储的键名，例如 "use_polyfill"
+		// 假设当值为 "true" 时加载
+		if (localStorage.getItem("chat") !== "false") { // default is true
+			var script = document.createElement("script");
+			script.src = "https://inline-chat.moonchan.xyz/loader.js";
+			// 添加到 head 或 body 中
+			document.body.appendChild(script);
+			console.log("GM Polyfill loaded via localStorage.");
+		}
+		if (localStorage.getItem("ehsyringe") === "true") { // default is false
+			{
+				var script = document.createElement("script");
+				script.src = "https://config.810114.xyz/exhentai/gm-polyfill.js";	
+				document.body.appendChild(script);
+			}
+			{
+				var script = document.createElement("script");
+				script.src = "https://config.810114.xyz/exhentai/EhSyringe.user.js";	
+				document.body.appendChild(script);
+			}
+			console.log("GM Polyfill loaded via localStorage.");
+		}
+	})();
+
+	</script>
+	`
+
+	// 将引导脚本插入到 </body> 之前
+	html = bytes.Replace(html, []byte("</body>"), append([]byte(clientLoader), []byte("\n</body>")...), 1)
+	return html
+}
+
 func addFloatingIframeAtRightBottom(html []byte) []byte {
 	html = bytes.Replace(html,
 		[]byte("</head>"),
@@ -1468,12 +1520,12 @@ func addFloatingIframeAtRightBottom(html []byte) []byte {
         <div>
 			<p>moonchan.xyz有DNS污染迹象，请注意迁移到以下节点</p>
 			<p>New:<a href="https://ex.810114.xyz/">https://ex.810114.xyz/</a>（无污染永续）</p>			
-			<p>目前各个域名情况如下<img src="https://upload.moonchan.xyz/api/01LLWEUUY3T3XM5KBRVVD37QHEAH4GBQ66/image.webp" /></p>
+			<p><a style="color: black;" href="/uconfig.php">点击上方Settings（点这句话也可以）选择希望开启的脚本</a></p>
 		</div>
     </div>
 
     <script>
-		const mark = '1209';
+		const mark = '1225';
         // 检查 localStorage 中的值
         if (localStorage.getItem('iframeClosed') !== mark) {
             document.getElementById('moonchan-floating-iframe').style.display = 'block';
