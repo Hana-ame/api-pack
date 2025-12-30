@@ -213,51 +213,5 @@ func Run(addr string) {
 	if addr == "" {
 		return
 	}
-}
 
-// 结果是这样的，1/1000秒会噶掉。
-// 不过1/100s其实会还好。
-// 反正不是常见用处，就这样吧。
-func test() {
-	manager, err := myfetch.NewManager("sit1", "")
-	if err != nil {
-		log.Fatalf("Failed to create manager: %v", err)
-	}
-
-	rotator, err := NewIPRotator(manager)
-	if err != nil {
-		log.Fatalf("Failed to create IP rotator: %v", err)
-	}
-
-	time.Sleep(time.Second)
-
-	var wg sync.WaitGroup
-	totalRequests := 2500
-
-	start := time.Now()
-
-	for i := 0; i < totalRequests; i++ {
-		wg.Add(1)
-		go func(reqNum int) {
-			defer wg.Done()
-			resp, err := rotator.Fetch("GET", "https://ifconfig.me/ip", nil, nil)
-			if err != nil {
-				log.Printf("Req %d error: %v", reqNum, err)
-			}
-			defer resp.Body.Close()
-			body, _ := io.ReadAll(resp.Body)
-			log.Printf("%05d: %s\n", reqNum, body)
-		}(i + 1)
-
-		// 模拟极高并发，几乎没有 sleep
-		// if i%50 == 0 {
-		time.Sleep(10 * time.Millisecond)
-		// }
-	}
-
-	wg.Wait()
-	log.Printf("Finished %d requests in %v", totalRequests, time.Since(start))
-
-	// 防止主进程退出太快看不到清理日志
-	time.Sleep(DefaultCleanupDelay + 2*time.Second)
 }
