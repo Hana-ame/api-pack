@@ -14,73 +14,94 @@ import (
 	myfetch "github.com/Hana-ame/api-pack/tools/my_fetch/v2"
 )
 
+var defaultClient = &http.Client{
+	Transport: &http.Transport{
+		DialContext: (&net.Dialer{
+			LocalAddr: &net.TCPAddr{
+				IP:   net.IPv4(142, 171, 157, 74),
+				Port: 0,
+			},
+			Timeout:   3 * time.Second,
+			KeepAlive: 3 * time.Second,
+		}).DialContext,
+		MaxIdleConns:        100,
+		IdleConnTimeout:     10 * time.Second,
+		TLSHandshakeTimeout: 3 * time.Second,
+	},
+	CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		return http.ErrUseLastResponse
+	},
+}
+
+// client 保持不变
 type client struct {
-	*myfetch.Client // 实际的 http client
-	*netip.Addr     // 绑定的 IP，用于日志和清理
+	*myfetch.Client
+	*netip.Addr
 }
 
 const (
-	// DefaultRotationThreshold 默认轮换阈值
-	DefaultRotationThreshold = 500
+	// DefaultRotationThreshold 单个槽位的轮换阈值
+	DefaultRotationThreshold = 10
 	// DefaultCleanupDelay 删除旧 IP 的延迟时间
 	DefaultCleanupDelay = 6 * time.Second
+	// DefaultPoolSize 默认并发 IP 数量
+	DefaultPoolSize = 5
 )
 
-// IPRotator 负责管理和轮换绑定了IP的http客户端
-type IPRotator struct {
-	ipManager *myfetch.Manager
-	threshold int64
+// -------------------------------------------------------
+// ClientSlot: 代表连接池中的一个“槽位”，负责管理单个IP的生命周期
+// -------------------------------------------------------
+type clientSlot struct {
+	id        int              // 槽位ID，用于日志区分
+	ipManager *myfetch.Manager // 用于生成/删除IP
 
-	// currentClientHolder 用于原子存储当前的 *client
-	// 这样读取时完全无锁
+	// currentClientHolder 原子存储当前的 *client
 	currentClientHolder atomic.Value
 
-	// requestCounter 原子计数器
-	requestCounter int64
+	// usageCounter 当前 IP 的使用次数
+	usageCounter int64
 
-	// rotationMu 仅在轮换操作时使用，不阻塞普通请求
+	// rotationMu 保护轮换逻辑
 	rotationMu sync.Mutex
-	// nextClient 受 rotationMu 保护
+	// nextClient 预备好的下一个客户端
 	nextClient *client
 }
 
-// NewIPRotator 创建并初始化一个IPRotator
-func NewIPRotator(manager *myfetch.Manager) (*IPRotator, error) {
-	rotator := &IPRotator{
+// newClientSlot 初始化一个槽位
+func newClientSlot(id int, manager *myfetch.Manager) (*clientSlot, error) {
+	slot := &clientSlot{
+		id:        id,
 		ipManager: manager,
-		threshold: DefaultRotationThreshold,
 	}
 
 	// 1. 初始化当前 client
-	current, err := rotator.prepareNewClient()
+	current, err := slot.prepareNewClient()
 	if err != nil {
-		return nil, fmt.Errorf("failed to initialize current client: %w", err)
+		return nil, err
 	}
-	// 存入原子容器
-	rotator.currentClientHolder.Store(current)
+	slot.currentClientHolder.Store(current)
 
 	// 2. 提前准备下一个 client
-	next, err := rotator.prepareNewClient()
+	next, err := slot.prepareNewClient()
 	if err != nil {
-		_ = rotator.ipManager.DelAddr(*(current.Addr))
-		return nil, fmt.Errorf("failed to initialize next client: %w", err)
+		_ = slot.ipManager.DelAddr(*(current.Addr))
+		return nil, err
 	}
-	rotator.nextClient = next
+	slot.nextClient = next
 
-	log.Printf("IPRotator initialized. Current IP: %s, Next IP: %s\n",
-		current.Addr, next.Addr)
-
-	return rotator, nil
+	return slot, nil
 }
 
-// prepareNewClient 生成 IP 并创建 Client (这是一个耗时操作)
-func (r *IPRotator) prepareNewClient() (*client, error) {
-	ip, err := r.ipManager.GenerateIP()
+// prepareNewClient 生成 IP 并创建 Client
+func (s *clientSlot) prepareNewClient() (*client, error) {
+	ip, err := s.ipManager.GenerateIP()
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate IP: %w", err)
+		return nil, fmt.Errorf("slot %d generate ip failed: %w", s.id, err)
 	}
 
-	r.ipManager.AddAddr(ip)
+	if err := s.ipManager.AddAddr(ip); err != nil {
+		return nil, fmt.Errorf("slot %d add addr failed: %w", s.id, err)
+	}
 
 	c := &client{
 		Addr: &ip,
@@ -88,15 +109,13 @@ func (r *IPRotator) prepareNewClient() (*client, error) {
 			Client: &http.Client{
 				Transport: &http.Transport{
 					DialContext: (&net.Dialer{
-						LocalAddr: &net.TCPAddr{
-							IP: ip.AsSlice(),
-						},
-						Timeout:   30 * time.Second,
-						KeepAlive: 30 * time.Second,
+						LocalAddr: &net.TCPAddr{IP: ip.AsSlice()},
+						Timeout:   3 * time.Second,
+						KeepAlive: 3 * time.Second,
 					}).DialContext,
 					MaxIdleConns:        100,
-					IdleConnTimeout:     90 * time.Second,
-					TLSHandshakeTimeout: 10 * time.Second,
+					IdleConnTimeout:     10 * time.Second,
+					TLSHandshakeTimeout: 3 * time.Second,
 				},
 				CheckRedirect: func(req *http.Request, via []*http.Request) error {
 					return http.ErrUseLastResponse
@@ -104,108 +123,144 @@ func (r *IPRotator) prepareNewClient() (*client, error) {
 			},
 		},
 	}
-	log.Printf("Prepared new client with IP: %s\n", ip)
 	return c, nil
 }
 
-// getCurrentClient 安全地获取当前客户端
-func (r *IPRotator) getCurrentClient() *client {
-	return r.currentClientHolder.Load().(*client)
+func (s *clientSlot) getCurrentClient() *client {
+	return s.currentClientHolder.Load().(*client)
 }
 
-// Fetch 执行HTTP请求，核心路径无锁
-func (r *IPRotator) Fetch(method, url string, header http.Header, body io.Reader) (*http.Response, error) {
-	// 1. 【无锁】获取当前 Client
-	// atomic.Load 非常快，纳秒级
-	current := r.getCurrentClient()
+// execute 执行请求并处理该槽位的轮换逻辑
+func (s *clientSlot) execute(method, url string, header http.Header, body io.Reader) (*http.Response, error) {
+	// 1. 获取当前客户端
+	current := s.getCurrentClient()
 
-	// 2. 【无锁】增加计数器
-	// atomic.Add 也是纳秒级
-	count := atomic.AddInt64(&r.requestCounter, 1)
+	// 2. 增加该槽位的使用计数
+	count := atomic.AddInt64(&s.usageCounter, 1)
 
-	// 3. 检查阈值
-	if count >= r.threshold {
-		// 尝试触发轮换。
-		// 使用 TryLock：如果拿不到锁，说明已经有别的 goroutine 在处理轮换了，
-		// 此时我们不做等待，直接使用当前的（旧）client 发送请求即可。
-		// 这样彻底避免了阻塞。
-		if r.rotationMu.TryLock() {
-			// 获取到锁的这个 goroutine 负责执行切换逻辑
-			// 注意：这里传入 current 是为了稍后做清理
-			r.performRotation(current)
-			// performRotation 内部会解锁，并启动后台任务
-
-			// 轮换完成后，为了防止瞬间使用刚换下来的旧IP（虽然通常没问题），
-			// 我们可以再次获取一下最新的（虽然大概率还是刚才那个，除非切换极其快）
-			current = r.getCurrentClient()
+	// 3. 检查是否需要轮换 (阈值检查)
+	if count >= DefaultRotationThreshold {
+		// 尝试获取锁进行轮换 (TryLock 非阻塞)
+		if s.rotationMu.TryLock() {
+			// 只有获取到锁的请求才执行轮换，其他请求继续用旧的
+			s.performRotation(current)
+			// 轮换完尝试拿新的（虽然大部分情况可能拿不到最新的，但不影响）
+			current = s.getCurrentClient()
 		}
 	}
 
-	// 4. 执行请求
+	// 4. 发起请求
 	return current.Fetch(method, url, header, body)
 }
 
-// performRotation 执行切换逻辑，必须在持有 rotationMu 时调用
-func (r *IPRotator) performRotation(oldClient *client) {
-	// 检查 nextClient 是否可用
-	if r.nextClient == nil {
-		// 这种情况一般是因为生成 IP 太慢，还没准备好
-		// 放弃本次轮换，解锁，继续用旧的跑
-		r.rotationMu.Unlock()
-		// 重置计数器一部分，避免每个请求都进来 tryLock
-		// 比如减去 100，让它过一会再试
-		atomic.AddInt64(&r.requestCounter, -100)
-		log.Println("Next client not ready yet, skipping rotation.")
+func (s *clientSlot) performRotation(oldClient *client) {
+	// 检查 next 是否就绪
+	if s.nextClient == nil {
+		s.rotationMu.Unlock()
+		atomic.AddInt64(&s.usageCounter, -100) // 临时回退计数器，稍后重试
 		return
 	}
 
-	next := r.nextClient
+	next := s.nextClient
 
-	// 1. 切换指针：将 current 替换为 next
-	r.currentClientHolder.Store(next)
+	// 切换
+	s.currentClientHolder.Store(next)
+	s.nextClient = nil
+	atomic.StoreInt64(&s.usageCounter, 0) // 重置计数
+	s.rotationMu.Unlock()
 
-	// 2. 将内部 next 置空，标记需要补充
-	r.nextClient = nil
+	log.Printf("[Slot %d] Rotated: %s -> %s", s.id, oldClient.Addr, next.Addr)
 
-	// 3. 重置计数器
-	// 直接归零。虽然此时可能有其他并发请求让它变成了 1005，但归零是安全的
-	atomic.StoreInt64(&r.requestCounter, 0)
-
-	// 4. 解锁（关键操作已完成）
-	r.rotationMu.Unlock()
-
-	log.Printf("Rotated IP from %s to %s", oldClient.Addr, next.Addr)
-
-	// 5. 【后台】补充新的 nextClient 和 清理旧 client
-	go r.backgroundTask(oldClient)
+	// 后台准备
+	go s.backgroundPrepare(oldClient)
 }
 
-// backgroundTask 在后台补充新IP并清理旧IP
-func (r *IPRotator) backgroundTask(oldClient *client) {
-	// A. 准备下一个备用 Client
-	// 这步比较耗时，所以放在后台
-	newNext, err := r.prepareNewClient()
+func (s *clientSlot) backgroundPrepare(oldClient *client) {
+	// 准备新 IP
+	newNext, err := s.prepareNewClient()
 	if err != nil {
-		log.Printf("CRITICAL: Failed to prepare new next client: %v", err)
-		// 如果这里失败了，下次轮换时 nextClient 就是 nil，会触发上面的 skip 逻辑
+		log.Printf("[Slot %d] ERROR preparing next: %v", s.id, err)
 	} else {
-		// 只有在写入 nextClient 字段时才需要锁
-		r.rotationMu.Lock()
-		r.nextClient = newNext
-		r.rotationMu.Unlock()
-		log.Printf("New backup client ready: %s", newNext.Addr)
+		s.rotationMu.Lock()
+		s.nextClient = newNext
+		s.rotationMu.Unlock()
+		log.Printf("[Slot %d] Backup ready: %s", s.id, newNext.Addr)
 	}
 
-	// B. 延迟清理旧 Client
+	// 延迟清理旧 IP
 	time.Sleep(DefaultCleanupDelay)
-
-	log.Printf("Cleaning up old IP: %s", oldClient.Addr)
-	// 关闭旧客户端的空闲连接（可选，视 myfetch 实现而定）
 	oldClient.Client.CloseIdleConnections()
-
-	if err := r.ipManager.DelAddr(*oldClient.Addr); err != nil {
-		log.Printf("Error deleting IP %s: %v", oldClient.Addr, err)
+	if err := s.ipManager.DelAddr(*(oldClient.Addr)); err != nil {
+		log.Printf("[Slot %d] cleanup error: %v", s.id, err)
 	}
+}
+
+// -------------------------------------------------------
+// IPRotator: 管理器，负责负载均衡
+// -------------------------------------------------------
+
+type IPRotator struct {
+	slots     []*clientSlot // 固定数量的槽位池
+	rrCounter uint64        // Round-Robin 计数器
+}
+
+// NewIPRotator 创建包含多个 IP 的 Rotator
+// poolSize: 同时维护多少个 IP (例如 5 或 10)
+func NewIPRotator(manager *myfetch.Manager, poolSize int) (*IPRotator, error) {
+	if poolSize <= 0 {
+		poolSize = DefaultPoolSize
+	}
+
+	rotator := &IPRotator{
+		slots: make([]*clientSlot, poolSize),
+	}
+
+	log.Printf("Initializing IPRotator with pool size: %d...", poolSize)
+
+	// 并行初始化所有槽位，加快启动速度
+	var wg sync.WaitGroup
+	var initErr error
+	var errMu sync.Mutex
+
+	for i := 0; i < poolSize; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			slot, err := newClientSlot(idx, manager)
+			if err != nil {
+				errMu.Lock()
+				initErr = err
+				errMu.Unlock()
+				return
+			}
+			rotator.slots[idx] = slot
+		}(i)
+	}
+	wg.Wait()
+
+	if initErr != nil {
+		// 如果初始化失败，这里应该做清理逻辑，把已经创建好的都销毁
+		// 为简化代码，这里直接返回错误
+		return nil, fmt.Errorf("failed to init slots: %w", initErr)
+	}
+
+	log.Println("IPRotator initialized successfully.")
+	return rotator, nil
+}
+
+// Fetch 实现了负载均衡的请求分发
+func (r *IPRotator) Fetch(method, url string, header http.Header, body io.Reader) (*http.Response, error) {
+	// 1. Round-Robin 算法选择一个槽位
+	// 使用原子操作递增全局计数器
+	reqNum := atomic.AddUint64(&r.rrCounter, 1)
+
+	// 取模得到索引。注意 len(r.slots) 是常量（初始化后不变），所以安全
+	slotIdx := reqNum % uint64(len(r.slots))
+
+	selectedSlot := r.slots[slotIdx]
+
+	// 2. 委托给选中的槽位执行
+	return selectedSlot.execute(method, url, header, body)
 }
 
 // Run 模拟运行
@@ -213,5 +268,42 @@ func Run(addr string) {
 	if addr == "" {
 		return
 	}
+	manager, err := myfetch.NewManager("sit1", "")
+	if err != nil {
+		log.Fatalf("Failed to create manager: %v", err)
+	}
 
+	// 比如开启 10 个并发 IP
+	rotator, err := NewIPRotator(manager, 10)
+	if err != nil {
+		log.Fatalf("Failed to create IP rotator: %v", err)
+	}
+
+	var wg sync.WaitGroup
+	totalRequests := 5000 // 请求量大一点，测试负载均衡
+
+	for i := 0; i < totalRequests; i++ {
+		wg.Add(1)
+		go func(reqNum int) {
+			defer wg.Done()
+			// 这里的 Fetch 会被均衡分发到 10 个 IP 上
+			resp, err := rotator.Fetch("GET", "https://ifconfig.me/ip", nil, nil)
+			if err != nil {
+				log.Printf("Req %d error: %v", reqNum, err)
+				return
+			}
+			defer resp.Body.Close()
+
+			body, _ := io.ReadAll(resp.Body)
+			fmt.Printf("%s\n", body)
+		}(i + 1)
+
+		if i%100 == 0 {
+			time.Sleep(1 * time.Millisecond)
+		}
+	}
+
+	wg.Wait()
+	log.Println("Done. Waiting for cleanup...")
+	time.Sleep(10 * time.Second)
 }
