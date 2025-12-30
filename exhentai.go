@@ -414,7 +414,7 @@ func ExhProxy() {
 		if mf.Count() > 1000 {
 			ipidx = (ipidx + 1) % len(ips)
 			defer func(ip string) {
-				time.Sleep(240 * time.Second)
+				time.Sleep(10 * time.Second)
 				my_if.DelAddr(ip)
 			}(ips[ipidx].String())
 			ips[ipidx] = my_if.NewAddr(prefix)
@@ -925,7 +925,7 @@ func addInlineChatRoom(html []byte) []byte {
 		if (localStorage.getItem("gscript") !== "false" && location.pathname.startsWith("/g/")) { 
 			{
 				var script = document.createElement("script");
-				script.src = "https://config.810114.xyz/exhentai/gallery.js";	
+				script.src = "https://config.810114.xyz/exhentai/gscript.js";	
 				document.body.appendChild(script);
 			}
 		}
@@ -1007,13 +1007,15 @@ func addFloatingIframeAtRightBottom(html []byte) []byte {
         <button id="moonchan-close-button" onclick="moonchanCloseIframe()">×</button>
         <div>
 			<p>moonchan.xyz有DNS污染迹象，请注意迁移到以下节点</p>
-			<p>New:<a href="https://ex.810114.xyz/">https://ex.810114.xyz/</a>（无污染永续）</p>			
+			<p style="color: black;">New:<a href="https://ex.810114.xyz/">https://ex.810114.xyz/</a>（无污染永续）</p>			
+			<p style="color: black;">新年快乐，更新一下程序，所以1月1日可能麻烦大家挡一下小白鼠</p>			
 			<p><a style="color: black;" href="/uconfig.php">点击上方Settings（点这句话也可以）选择希望开启的脚本</a></p>
+			<p><a style="color: black;" href="/uconfig.php">有的脚本没做是因为有技术限制，有想要的tamper monkey脚本可以发一下做fork，来https://810114.xyz/ (去掉ex就行)</a></p>
 		</div>
     </div>
 
     <script>
-		const mark = '1225';
+		const mark = '1228';
         // 检查 localStorage 中的值
         if (localStorage.getItem('iframeClosed') !== mark) {
             document.getElementById('moonchan-floating-iframe').style.display = 'block';
