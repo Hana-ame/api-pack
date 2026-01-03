@@ -12,6 +12,7 @@ import (
 	"time"
 
 	myfetch "github.com/Hana-ame/api-pack/tools/my_fetch/v2"
+	"github.com/joho/godotenv"
 )
 
 var defaultClient = &http.Client{
@@ -41,7 +42,7 @@ type client struct {
 
 const (
 	// DefaultRotationThreshold 单个槽位的轮换阈值
-	DefaultRotationThreshold = 10
+	DefaultRotationThreshold = 1000
 	// DefaultCleanupDelay 删除旧 IP 的延迟时间
 	DefaultCleanupDelay = 6 * time.Second
 	// DefaultPoolSize 默认并发 IP 数量
@@ -268,6 +269,8 @@ func Run(addr string) {
 	if addr == "" {
 		return
 	}
+	godotenv.Load(".env")
+
 	manager, err := myfetch.NewManager("sit1", "")
 	if err != nil {
 		log.Fatalf("Failed to create manager: %v", err)
@@ -279,31 +282,5 @@ func Run(addr string) {
 		log.Fatalf("Failed to create IP rotator: %v", err)
 	}
 
-	var wg sync.WaitGroup
-	totalRequests := 5000 // 请求量大一点，测试负载均衡
-
-	for i := 0; i < totalRequests; i++ {
-		wg.Add(1)
-		go func(reqNum int) {
-			defer wg.Done()
-			// 这里的 Fetch 会被均衡分发到 10 个 IP 上
-			resp, err := rotator.Fetch("GET", "https://ifconfig.me/ip", nil, nil)
-			if err != nil {
-				log.Printf("Req %d error: %v", reqNum, err)
-				return
-			}
-			defer resp.Body.Close()
-
-			body, _ := io.ReadAll(resp.Body)
-			fmt.Printf("%s\n", body)
-		}(i + 1)
-
-		if i%100 == 0 {
-			time.Sleep(1 * time.Millisecond)
-		}
-	}
-
-	wg.Wait()
-	log.Println("Done. Waiting for cleanup...")
-	time.Sleep(10 * time.Second)
+	ExhProxy(rotator, addr)
 }
