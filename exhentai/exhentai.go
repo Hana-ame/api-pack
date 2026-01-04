@@ -77,12 +77,18 @@ func (p *ProxyHandler) accessControlMiddleware() gin.HandlerFunc {
 		"/phpmyadmin", "/wp-admin", "/wp-content",
 		"/config", "/backup", "/etc/passwd",
 		"/fullimg", "/mytags",
+		"/actuator/",
 	}
 
 	// 预定义非法后缀
 	forbiddenSuffixes := []string{
 		".cgi", ".asp", ".aspx", ".jsp", ".jspx",
 		".sh", ".py", ".pl", ".sql", ".bak", ".log", ".swp",
+	}
+
+	forbiddenExact := []string{
+		"/fullimg", "/mytags", "/uconfig.php",
+		"/login",
 	}
 
 	return func(c *gin.Context) {
@@ -118,7 +124,7 @@ func (p *ProxyHandler) accessControlMiddleware() gin.HandlerFunc {
 		}
 
 		// 5. 功能级封禁 (保持原样)
-		if path == "/fullimg" || path == "/mytags" || path == "/uconfig.php" {
+		if slices.Contains(forbiddenExact, path) {
 			c.AbortWithStatus(http.StatusForbidden)
 			return
 		}
@@ -126,15 +132,15 @@ func (p *ProxyHandler) accessControlMiddleware() gin.HandlerFunc {
 		// 6. PHP 攻击防护 (白名单模式)
 		// 允许访问的 PHP 列表
 		allowPHP := []string{"/gallerytorrents.php", "/favorites.php", "/torrents.php", "/gallerypopups.php"}
+		allowedPHP := false
 		if strings.HasSuffix(path, ".php") {
-			isAllowed := false
 			for _, a := range allowPHP {
 				if path == a {
-					isAllowed = true
+					allowedPHP = true
 					break
 				}
 			}
-			if !isAllowed {
+			if !allowedPHP {
 				c.AbortWithStatus(http.StatusForbidden)
 				return
 			}
@@ -146,6 +152,12 @@ func (p *ProxyHandler) accessControlMiddleware() gin.HandlerFunc {
 		if !strings.Contains(acceptLang, "zh") && !slices.Contains([]string{"CN", ""}, country) {
 			c.String(http.StatusForbidden, "请使用大陆IP.\nPlease ensure you're in China Mainland\n中国・大陸以外のアクセスは制限されています\n Current Region: "+country)
 			c.Abort()
+			return
+		}
+
+		// 不是 allowed php，而且不是 get 的情况
+		if !allowedPHP && c.Request.Method != http.MethodGet {
+			c.AbortWithStatus(http.StatusForbidden)
 			return
 		}
 
