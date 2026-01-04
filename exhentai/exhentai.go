@@ -71,47 +71,81 @@ func ExhProxy(rotator *IPRotator, addr string) {
 
 // 访问控制中间件
 func (p *ProxyHandler) accessControlMiddleware() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		path := c.Request.URL.Path
+	// 预定义一些拒绝访问的敏感路径或关键词
+	forbiddenKeywords := []string{
+		"/.git", "/.env", "/.svn", "/.vscode",
+		"/phpmyadmin", "/wp-admin", "/wp-content",
+		"/config", "/backup", "/etc/passwd",
+		"/fullimg", "/mytags",
+	}
 
-		// 1. 静态资源与特殊参数放行
+	// 预定义非法后缀
+	forbiddenSuffixes := []string{
+		".cgi", ".asp", ".aspx", ".jsp", ".jspx",
+		".sh", ".py", ".pl", ".sql", ".bak", ".log", ".swp",
+	}
+
+	return func(c *gin.Context) {
+		// 使用 Path 而不是 RequestURI，Path 不包含查询参数，更安全
+		path := strings.ToLower(c.Request.URL.Path)
+
+		// 1. 静态资源与特殊参数放行 (保持原样)
 		if c.Query("redirect_to") != "" || strings.HasPrefix(path, "/static/") {
 			c.Next()
 			return
 		}
 
-		// 2. 内部阅读器放行
-		referer := c.Request.Referer()
-		if strings.Contains(referer, "moonchan") || strings.Contains(referer, "nmbyd") {
-			c.Next()
-			return
-		}
-
-		// 3. 中文用户放行
-		if strings.Contains(c.GetHeader("accept-language"), "zh") {
-			c.Next()
-			return
-		}
-
-		// 4. 功能级封禁
-		if path == "/fullimg" || path == "/mytags" {
+		// 2. 路径遍历防护 (Basic Directory Traversal)
+		if strings.Contains(path, "..") {
 			c.AbortWithStatus(http.StatusForbidden)
-			c.Abort()
 			return
 		}
 
-		// 5. GeoIP 屏蔽 (非中国 IP 且无通行证)
-		country := c.GetHeader("Cf-Ipcountry")
-		if !slices.Contains([]string{"CN", ""}, country) {
-			c.String(http.StatusForbidden, "请使用大陆IP. Current Region: "+country)
-			c.Abort()
+		// 3. 常见攻击路径/关键词屏蔽
+		for _, keyword := range forbiddenKeywords {
+			if strings.Contains(path, keyword) {
+				c.AbortWithStatus(http.StatusForbidden)
+				return
+			}
+		}
+
+		// 4. 非法脚本后缀屏蔽 (.cgi, .asp 等)
+		for _, suffix := range forbiddenSuffixes {
+			if strings.HasSuffix(path, suffix) {
+				c.AbortWithStatus(http.StatusForbidden)
+				return
+			}
+		}
+
+		// 5. 功能级封禁 (保持原样)
+		if path == "/fullimg" || path == "/mytags" || path == "/uconfig.php" {
+			c.AbortWithStatus(http.StatusForbidden)
 			return
 		}
 
-		// 6. PHP 攻击防护
+		// 6. PHP 攻击防护 (白名单模式)
+		// 允许访问的 PHP 列表
 		allowPHP := []string{"/gallerytorrents.php", "/favorites.php", "/torrents.php", "/gallerypopups.php"}
-		if strings.HasSuffix(path, ".php") && !slices.Contains(allowPHP, path) {
-			c.AbortWithStatus(http.StatusForbidden)
+		if strings.HasSuffix(path, ".php") {
+			isAllowed := false
+			for _, a := range allowPHP {
+				if path == a {
+					isAllowed = true
+					break
+				}
+			}
+			if !isAllowed {
+				c.AbortWithStatus(http.StatusForbidden)
+				return
+			}
+		}
+
+		// 7. GeoIP 屏蔽 (保持原样)
+		country := c.GetHeader("Cf-Ipcountry")
+		acceptLang := strings.ToLower(c.GetHeader("accept-language"))
+		if !strings.Contains(acceptLang, "zh") && !slices.Contains([]string{"CN", ""}, country) {
+			c.String(http.StatusForbidden, "请使用大陆IP.\nPlease ensure you're in China Mainland\n中国・大陸以外のアクセスは制限されています\n Current Region: "+country)
+			c.Abort()
 			return
 		}
 
@@ -236,24 +270,18 @@ func (p *ProxyHandler) prepareHeaders(c *gin.Context, isEH bool) http.Header {
 }
 
 func (p *ProxyHandler) transformContent(c *gin.Context, data []byte, targetURL string) []byte {
-	// 基础 URL 替换
-	data = bytes.ReplaceAll(data, []byte("https://exhentai.org"), []byte(""))
-	data = bytes.ReplaceAll(data, []byte("https://s.exhentai.org"), []byte("https://ehgt.org"))
+	// 注入外部 Script 标签
+	const scriptTag = `<script src="https://config.810114.xyz/exhentai/ex.js" defer></script>`
+	const headCloseTag = "</head>"
 
-	// 注入脚本和按钮
-	path := c.Request.URL.Path
-	if strings.HasPrefix(path, "/s/") {
-		data = []byte(addWaterFallViewButton(string(data)))
-	} else if !strings.HasPrefix(path, "/g/") {
-		data = addReloadCoverButton(data)
+	// 查找 </head> 标签的位置
+	if !bytes.Contains(data, []byte(headCloseTag)) {
+		// 如果没有找到 </head>，则直接返回处理过 URL 的 html
+		return data
 	}
 
-	data = addFloatingIframeAtRightBottom(data)
-	if !strings.Contains(targetURL, StaticHost) {
-		data = addInlineChatRoom(data)
-	}
-
-	return data
+	// 执行替换：将 </head> 替换为 <script ...></script></head>
+	return bytes.Replace(data, []byte(headCloseTag), []byte(scriptTag+headCloseTag), 1)
 }
 
 func (p *ProxyHandler) handleSpecialRedirects(c *gin.Context, data []byte) bool {
