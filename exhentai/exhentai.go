@@ -180,13 +180,16 @@ func (p *ProxyHandler) mainProxyHandler(c *gin.Context) {
 	path := c.Request.URL.Path
 	host := TargetHost
 
-	if c.Query("host") != "" {
-		host = c.Query("host")
-	}
-
 	// 静态资源路由映射
-	if strings.HasPrefix(path, "/static/") || path == "/sw.js" || path == "/manifest.json" {
-		host = StaticHost
+	if c.Query("host") != "" || strings.HasPrefix(path, "/static/") || path == "/sw.js" || path == "/manifest.json" {
+		resp, err := http.Get("https://" + StaticHost + c.Request.URL.String())
+		if tools.AbortWithError(c, http.StatusBadGateway, err) {
+			return
+		}
+		c.DataFromReader(resp.StatusCode, resp.ContentLength, resp.Header.Get("Content-Type"), resp.Body, map[string]string{
+			"X-From": "page.moonchan.xyz",
+		})
+		return
 	}
 
 	p.doProxy(c, "https://"+host+c.Request.URL.String(), false)
@@ -252,7 +255,7 @@ func (p *ProxyHandler) prepareHeaders(c *gin.Context, isEH bool) http.Header {
 	h.Set("Cookie", cookie)
 
 	// User-Agent 修正
-	if strings.Contains(h.Get("User-Agent"), "Mobile") {
+	if strings.HasPrefix(c.Request.URL.String(), "/s/") && strings.Contains(h.Get("User-Agent"), "Mobile") {
 		h.Set("User-Agent", "myfetch/2025.4.14")
 	}
 
@@ -271,17 +274,18 @@ func (p *ProxyHandler) prepareHeaders(c *gin.Context, isEH bool) http.Header {
 
 func (p *ProxyHandler) transformContent(c *gin.Context, data []byte, targetURL string) []byte {
 	// 注入外部 Script 标签
+	const metaNoReferer = `<meta name="referrer" content="no-referrer">`
 	const scriptTag = `<script src="https://config.810114.xyz/exhentai/ex.js" defer></script>`
-	const headCloseTag = "</head>"
+	const headStartTag = "<head>"
 
 	// 查找 </head> 标签的位置
-	if !bytes.Contains(data, []byte(headCloseTag)) {
+	if !bytes.Contains(data, []byte(headStartTag)) {
 		// 如果没有找到 </head>，则直接返回处理过 URL 的 html
 		return data
 	}
 
 	// 执行替换：将 </head> 替换为 <script ...></script></head>
-	return bytes.Replace(data, []byte(headCloseTag), []byte(scriptTag+headCloseTag), 1)
+	return bytes.Replace(data, []byte(headStartTag), []byte(headStartTag+metaNoReferer+scriptTag), 1)
 }
 
 func (p *ProxyHandler) handleSpecialRedirects(c *gin.Context, data []byte) bool {
