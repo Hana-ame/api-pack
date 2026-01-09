@@ -2,12 +2,12 @@ package exhentai
 
 import (
 	"bytes"
-	"compress/gzip"
 	"io"
 	"net/http"
 	"net/url"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 
 	myfetch "github.com/Hana-ame/api-pack/tools/my_fetch/v2"
@@ -59,6 +59,8 @@ func ExhProxy(rotator *IPRotator, addr string) {
 		})
 		special.GET("/uconfig.php", p.handleUConfig)
 		special.GET("/image/*any", p.handleImageLegacy)
+
+		// special.GET("/fullimg/*any", p.handleOrigin)
 	}
 
 	// D. 核心代理逻辑 (包含屏蔽逻辑和内容注入)
@@ -78,6 +80,7 @@ func (p *ProxyHandler) accessControlMiddleware() gin.HandlerFunc {
 		"/config", "/backup", "/etc/passwd",
 		"/fullimg", "/mytags",
 		"/actuator/",
+		"/../",
 	}
 
 	// 预定义非法后缀
@@ -86,9 +89,13 @@ func (p *ProxyHandler) accessControlMiddleware() gin.HandlerFunc {
 		".sh", ".py", ".pl", ".sql", ".bak", ".log", ".swp",
 	}
 
+	// 3. 预定义精确匹配的非法路径 (添加了日志中出现的 DoH 相关路径)
 	forbiddenExact := []string{
 		"/fullimg", "/mytags", "/uconfig.php",
 		"/login",
+		"/dns-query", "/query", "/resolve", // 屏蔽常见的 DoH 路径
+		"/.well-known",
+		"/sw.js", "/manifest.json", // 不是在这里用的
 	}
 
 	return func(c *gin.Context) {
@@ -168,14 +175,34 @@ func (p *ProxyHandler) accessControlMiddleware() gin.HandlerFunc {
 // --- 处理函数部分 ---
 
 func (p *ProxyHandler) handleUConfig(c *gin.Context) {
-	resp, err := defaultClient.Get(ConfigURL)
-	if err != nil {
-		tools.AbortWithError(c, http.StatusBadGateway, err)
+
+	file, err := os.Open("./exhentai/settings.html")
+	if tools.AbortWithError(c, http.StatusInternalServerError, err) {
 		return
 	}
-	defer resp.Body.Close()
-	c.DataFromReader(resp.StatusCode, resp.ContentLength, resp.Header.Get("Content-Type"), resp.Body, nil)
+	fileInfo, err := file.Stat()
+	if tools.AbortWithError(c, http.StatusInternalServerError, err) {
+		return
+	}
+
+	// Create the map with your custom 1-week cache setting
+	headers := map[string]string{
+		"Cache-Control": "public, max-age=604800",
+		"X-From":        ".",
+	}
+
+	// DataFromReader handles the Content-Type and Content-Length via arguments,
+	// and the rest via the map.
+	c.DataFromReader(
+		http.StatusOK,
+		fileInfo.Size(),
+		"text/html; charset=utf-8",
+		file,
+		headers,
+	)
+
 	c.Abort()
+	return
 }
 
 func (p *ProxyHandler) handleImageLegacy(c *gin.Context) {
@@ -193,11 +220,41 @@ func (p *ProxyHandler) mainProxyHandler(c *gin.Context) {
 	host := TargetHost
 
 	// 静态资源路由映射
-	if c.Query("host") != "" || strings.HasPrefix(path, "/static/") || path == "/sw.js" || path == "/manifest.json" {
+	if strings.HasPrefix(path, "/exhentai/") {
+
+		file, err := os.Open(path)
+		if tools.AbortWithError(c, http.StatusInternalServerError, err) {
+			return
+		}
+		fileInfo, err := file.Stat()
+		if tools.AbortWithError(c, http.StatusInternalServerError, err) {
+			return
+		}
+
+		// Create the map with your custom 1-week cache setting
+		headers := map[string]string{
+			"Cache-Control": "public, max-age=604800",
+			"X-From":        ".",
+		}
+
+		// DataFromReader handles the Content-Type and Content-Length via arguments,
+		// and the rest via the map.
+		c.DataFromReader(
+			http.StatusOK,
+			fileInfo.Size(),
+			"application/javascript; charset=utf-8",
+			file,
+			headers,
+		)
+
+		return
+	}
+	if c.Query("host") != "" || strings.HasPrefix(path, "/static/") || path == "/sw.js" || path == "/manifest.json" || path == "/logo192.png" {
 		resp, err := http.Get("https://" + StaticHost + c.Request.URL.String())
 		if tools.AbortWithError(c, http.StatusBadGateway, err) {
 			return
 		}
+		defer resp.Body.Close()
 		c.DataFromReader(resp.StatusCode, resp.ContentLength, resp.Header.Get("Content-Type"), resp.Body, map[string]string{
 			"X-From": "page.moonchan.xyz",
 		})
@@ -227,7 +284,7 @@ func (p *ProxyHandler) doProxy(c *gin.Context, targetURL string, isEH bool) {
 
 	body, err := myfetch.ResponseToReader(resp)
 	if err != nil {
-		tools.AbortWithError(c, http.StatusBadGateway, err)
+		tools.AbortWithError(c, http.StatusServiceUnavailable, err)
 		return
 	}
 
@@ -246,15 +303,29 @@ func (p *ProxyHandler) doProxy(c *gin.Context, targetURL string, isEH bool) {
 	// 内容替换逻辑
 	finalData := p.transformContent(c, bodyData, targetURL)
 
-	// 5. 响应客户端 (Gzip 压缩)
+	// 5. 响应客户端 (不压缩，由 Cloudflare 负责压缩)
 	copyHeaders(c, resp.Header)
-	c.Header("Content-Length", "") // 强制 Chunked
-	c.Header("Content-Encoding", "gzip")
+
+	// 【重要】确保删除 Content-Encoding
+	// 如果 copyHeaders 从上游把 content-encoding: gzip 拷过来了，必须删掉，
+	// 否则浏览器会以为数据是压缩的，结果收到明文会报错。
+	c.Writer.Header().Del("Content-Encoding")
+
+	// 【建议】设置 Content-Length
+	// 之前用 Gzip 是因为不知道压缩后多大，所以置空强制 Chunked。
+	// 现在直接发原数据，长度是已知的，设置 Content-Length 对 HTTP 传输效率更高。
+	c.Header("Content-Length", strconv.Itoa(len(finalData)))
+
+	// 再次确保 Content-Type 是 html (防止 copyHeaders 没拷过来)
+	// 如果 copyHeaders 已经有了可以省略这一行
+	if c.Writer.Header().Get("Content-Type") == "" {
+		c.Header("Content-Type", "text/html; charset=utf-8")
+	}
+
 	c.Status(resp.StatusCode)
 
-	gz := gzip.NewWriter(c.Writer)
-	defer gz.Close()
-	gz.Write(finalData)
+	// 【核心修改】直接写入原始数据，不再套用 gzip writer
+	c.Writer.Write(finalData)
 }
 
 // --- 辅助工具函数 ---
@@ -287,7 +358,8 @@ func (p *ProxyHandler) prepareHeaders(c *gin.Context, isEH bool) http.Header {
 func (p *ProxyHandler) transformContent(c *gin.Context, data []byte, targetURL string) []byte {
 	// 注入外部 Script 标签
 	const metaNoReferer = `<meta name="referrer" content="no-referrer">`
-	const scriptTag = `<script src="https://config.810114.xyz/exhentai/ex.js" defer></script>`
+	const scriptTag = `<script src="/exhentai/ex.js" defer></script>`
+	// const cssTag = `<link rel="stylesheet" type="text/css" href="/z/0381/x.css">`
 	const headStartTag = "<head>"
 
 	// 查找 </head> 标签的位置
@@ -295,8 +367,11 @@ func (p *ProxyHandler) transformContent(c *gin.Context, data []byte, targetURL s
 		// 如果没有找到 </head>，则直接返回处理过 URL 的 html
 		return data
 	}
+	data = bytes.Replace(data, []byte("https://exhentai.org"), []byte{}, -1)
+	data = bytes.Replace(data, []byte("https://s.exhentai.org"), []byte("https://ehgt.org"), -1)
 
 	// 执行替换：将 </head> 替换为 <script ...></script></head>
+	// return bytes.Replace(data, []byte(headStartTag), []byte(headStartTag+metaNoReferer+scriptTag+cssTag), 1)
 	return bytes.Replace(data, []byte(headStartTag), []byte(headStartTag+metaNoReferer+scriptTag), 1)
 }
 

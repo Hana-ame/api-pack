@@ -9,12 +9,15 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-~/script/scp.sh -v ex.bin root@cloudcone.moonchan.xyz:~/exhentai/ex.temp
+~/script/scp.sh -v ex.bin root@cloudcone.moonchan.xyz:~/exhentai/temp
 # 检查 SCP 是否成功
 if [ $? -ne 0 ]; then
     echo "文件传输失败，退出。"
     exit 1
 fi  
 
+~/script/scp.sh -v -r exhentai root@cloudcone.moonchan.xyz:~/exhentai/
+
+date;
 echo "done"
 # exit 0
