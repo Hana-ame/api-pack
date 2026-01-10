@@ -3,12 +3,15 @@ package exhentai
 import (
 	"bytes"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	myfetch "github.com/Hana-ame/api-pack/tools/my_fetch/v2"
 	middleware "github.com/Hana-ame/api-pack/tools/my_gin_middleware"
@@ -17,6 +20,20 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 )
+
+var proxyClient = &http.Client{
+	Transport: &http.Transport{
+		DialContext: (&net.Dialer{
+			LocalAddr: &net.TCPAddr{IP: net.IPv4(142, 171, 157, 74)},
+			Timeout:   3 * time.Second,
+			KeepAlive: 3 * time.Second,
+		}).DialContext,
+		MaxIdleConns:        100,
+		IdleConnTimeout:     10 * time.Second,
+		TLSHandshakeTimeout: 3 * time.Second,
+	},
+	Timeout: 10 * time.Second,
+}
 
 // 配置常量
 var (
@@ -216,41 +233,48 @@ func (p *ProxyHandler) handleImageLegacy(c *gin.Context) {
 }
 
 func (p *ProxyHandler) mainProxyHandler(c *gin.Context) {
+	// 1. 定义资源存放的物理根目录
+	const assetsRoot = "./exhentai"
+
 	path := c.Request.URL.Path
 	host := TargetHost
 
 	// 静态资源路由映射
 	if strings.HasPrefix(path, "/exhentai/") {
 
-		file, err := os.Open(path)
-		if tools.AbortWithError(c, http.StatusInternalServerError, err) {
-			return
-		}
-		fileInfo, err := file.Stat()
-		if tools.AbortWithError(c, http.StatusInternalServerError, err) {
+		// 2. 获取去掉前缀后的子路径
+		// 例如 path 是 "/exhentai/images/1.jpg" -> subPath 是 "images/1.jpg"
+		subPath := strings.TrimPrefix(c.Request.URL.Path, "/exhentai/")
+
+		// 3. 拼接物理路径并 Clean
+		finalPath := filepath.Join(assetsRoot, subPath)
+
+		// 4. 安全检查：确保计算后的路径确实在 assetsRoot 内部
+		rel, err := filepath.Rel(assetsRoot, finalPath)
+		if err != nil || strings.HasPrefix(rel, "..") {
+			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "非法路径访问"})
 			return
 		}
 
-		// Create the map with your custom 1-week cache setting
-		headers := map[string]string{
-			"Cache-Control": "public, max-age=604800",
-			"X-From":        ".",
+		// 5. 检查是否是目录（防止打开目录流）
+		fi, err := os.Stat(finalPath)
+		if err != nil {
+			c.AbortWithStatus(http.StatusNotFound)
+			return
+		}
+		if fi.IsDir() {
+			c.AbortWithStatus(http.StatusForbidden)
+			return
 		}
 
-		// DataFromReader handles the Content-Type and Content-Length via arguments,
-		// and the rest via the map.
-		c.DataFromReader(
-			http.StatusOK,
-			fileInfo.Size(),
-			"application/javascript; charset=utf-8",
-			file,
-			headers,
-		)
+		// 6. 使用 Gin 内置方法（它会自动处理 Range, ETag, Content-Type 等）
+		c.File(finalPath)
 
 		return
 	}
+
 	if c.Query("host") != "" || strings.HasPrefix(path, "/static/") || path == "/sw.js" || path == "/manifest.json" || path == "/logo192.png" {
-		resp, err := http.Get("https://" + StaticHost + c.Request.URL.String())
+		resp, err := proxyClient.Get("https://" + StaticHost + c.Request.URL.String())
 		if tools.AbortWithError(c, http.StatusBadGateway, err) {
 			return
 		}
@@ -369,6 +393,7 @@ func (p *ProxyHandler) transformContent(c *gin.Context, data []byte, targetURL s
 	}
 	data = bytes.Replace(data, []byte("https://exhentai.org"), []byte{}, -1)
 	data = bytes.Replace(data, []byte("https://s.exhentai.org"), []byte("https://ehgt.org"), -1)
+	data = bytes.Replace(data, []byte("https://ehgt.org/api.php"), []byte("/api.php"), 1)
 
 	// 执行替换：将 </head> 替换为 <script ...></script></head>
 	// return bytes.Replace(data, []byte(headStartTag), []byte(headStartTag+metaNoReferer+scriptTag+cssTag), 1)

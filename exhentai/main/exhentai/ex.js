@@ -1,22 +1,23 @@
 (function () {
   "use strict";
 
-  if (location.pathname.startsWith("/g/")){
+  if (location.pathname.startsWith("/g/")) {
     base_url = "/";
     api_url = "/api.php";
-    popbase = base_url+"gallerypopups.php?gid=3723085&t=582d4b6579&act=";
+    popbase = base_url + "gallerypopups.php?gid=3723085&t=582d4b6579&act=";
   }
-  
+
   // 不让访问s.exhentai.org
   const originalOpen = XMLHttpRequest.prototype.open;
-  const BLOCKED_DOMAIN = "s.exhentai.org";
+  const BLOCKED_DOMAIN1 = "s.exhentai.org";
+  const BLOCKED_DOMAIN2 = "ehtg.org";
 
   XMLHttpRequest.prototype.open = function (method, url) {
     // 将 url 转换为字符串（以防传入的是 URL 对象）
     const urlString = String(url);
 
     // 检查是否包含禁止的域名
-    if (urlString.includes(BLOCKED_DOMAIN)) {
+    if (urlString.includes(BLOCKED_DOMAIN1) || urlString.includes(BLOCKED_DOMAIN2)) {
       console.error(`不样: ${urlString}`);
       // 抛出异常以阻止请求发送
       throw new Error("Blocked: Request to s.exhentai.org is not allowed.");
@@ -110,17 +111,17 @@
         const originalSrc = oldScript.getAttribute("src");
         if (originalSrc) {
           let newSrc = originalSrc.replace(targetRegex, "");
-  
+
           // 创建一个新的 script 标签以触发加载
           const newScript = document.createElement("script");
           newScript.src = newSrc;
           newScript.type = "text/javascript";
           // 显式声明异步，有时能解决加载死锁
-          newScript.async = true; 
-  
+          newScript.async = true;
+
           // 2. 关键修改：直接插入到 head 中，确保环境稳定
           document.head.appendChild(newScript);
-  
+
           oldScript.remove();
         }
 
@@ -297,20 +298,20 @@
     // 绑定点击事件
     btn.addEventListener(
       "click",
-async function () {
-    window.stop(); // 注意：如果你想检查图片是否加载成功，建议注释掉 window.stop()，否则所有图片都会停止加载
-    
-    const replace = async function (elements) {
-        const elArray = Array.from(elements);
+      async function () {
+        window.stop(); // 注意：如果你想检查图片是否加载成功，建议注释掉 window.stop()，否则所有图片都会停止加载
 
-        async function replaceElement(element) {
-          
+        const replace = async function (elements) {
+          const elArray = Array.from(elements);
+
+          async function replaceElement(element) {
+
             const link = element.querySelector("a");
             if (!link) return;
 
             const galleryUrl = link.href;
             const img = link.querySelector("img");
-            
+
             if (!img || !galleryUrl) return;
 
             // --- 新增判断逻辑 ---
@@ -318,58 +319,58 @@ async function () {
             // 2. img.naturalWidth > 0: 图片的实际宽度大于 0，说明数据有效且非破损图
             // 3. (可选) 检查 src 是否已经包含跳转参数，避免重复处理
             if (img.complete && img.naturalWidth > 0) {
-                if (img.src.includes("redirect_to=image")) {
-                    console.log(`[跳过] 已经是高清图: ${galleryUrl}`);
-                    return;
-                }
-                // 如果图片本身已经加载成功（缩略图正常），你可能也想跳过
-                // console.log(`[跳过] 图片已正常显示: ${galleryUrl}`);
-                // continue; 
+              if (img.src.includes("redirect_to=image")) {
+                console.log(`[跳过] 已经是高清图: ${galleryUrl}`);
+                return;
+              }
+              // 如果图片本身已经加载成功（缩略图正常），你可能也想跳过
+              // console.log(`[跳过] 图片已正常显示: ${galleryUrl}`);
+              // continue; 
             }
             // --------------------
 
             try {
-                // 如果图片未加载，或加载失败 (naturalWidth === 0)，则执行 fetch
-                const response = await fetch(galleryUrl);
-                const html = await response.text();
+              // 如果图片未加载，或加载失败 (naturalWidth === 0)，则执行 fetch
+              const response = await fetch(galleryUrl);
+              const html = await response.text();
 
-                const parser = new DOMParser();
-                const doc = parser.parseFromString(html, "text/html");
-                const gdtContainer = doc.getElementById("gdt");
+              const parser = new DOMParser();
+              const doc = parser.parseFromString(html, "text/html");
+              const gdtContainer = doc.getElementById("gdt");
 
-                if (gdtContainer) {
-                    const firstPageLink = gdtContainer.querySelector("a");
-                    if (firstPageLink) {
-                        const href = firstPageLink.href;
-                        const separator = href.includes("?") ? "&" : "?";
-                        const newSrc = href + separator + "redirect_to=image";
+              if (gdtContainer) {
+                const firstPageLink = gdtContainer.querySelector("a");
+                if (firstPageLink) {
+                  const href = firstPageLink.href;
+                  const separator = href.includes("?") ? "&" : "?";
+                  const newSrc = href + separator + "redirect_to=image";
 
-                        // 替换图片并打印日志
-                        console.log(`[替换成功] ${newSrc}`);
-                        // 建议直接用完整链接，或者根据站内规则替换
-                        img.src = newSrc.replace("https://exhentai.org/", "/"); 
-                        
-                        // 为了防止 window.stop() 干扰后续新图加载，可以手动触发加载
-                        img.onerror = function() {
-                            console.error("图片替换后加载失败:", newSrc);
-                        };
-                    }
+                  // 替换图片并打印日志
+                  console.log(`[替换成功] ${newSrc}`);
+                  // 建议直接用完整链接，或者根据站内规则替换
+                  img.src = newSrc.replace("https://exhentai.org/", "/");
+
+                  // 为了防止 window.stop() 干扰后续新图加载，可以手动触发加载
+                  img.onerror = function () {
+                    console.error("图片替换后加载失败:", newSrc);
+                  };
                 }
-            } catch (err) {
-                console.error("Fetch出错:", galleryUrl, err);
-            }
-        }
-              for (const element of elArray) {
-                replaceElement(element);
               }
-    };
+            } catch (err) {
+              console.error("Fetch出错:", galleryUrl, err);
+            }
+          }
+          for (const element of elArray) {
+            replaceElement(element);
+          }
+        };
 
-    const gl3tElements = document.getElementsByClassName("gl3t");
-    await replace(gl3tElements);
+        const gl3tElements = document.getElementsByClassName("gl3t");
+        await replace(gl3tElements);
 
-    const gl1eElements = document.getElementsByClassName("gl1e");
-    await replace(gl1eElements);
-},
+        const gl1eElements = document.getElementsByClassName("gl1e");
+        await replace(gl1eElements);
+      },
       false
     );
   }
@@ -597,7 +598,7 @@ async function () {
     const loadScript = (src) => {
       const script = document.createElement("script");
       script.src = src;
-        script.defer = true; // This adds the defer attribute
+      script.defer = true; // This adds the defer attribute
       document.body.appendChild(script);
     };
 
@@ -685,36 +686,36 @@ async function () {
     initFloatingNotice(); // 6. 悬浮窗
 
 
-// 假设 rangebar 是一个在当前作用域内可访问的变量，
-// 可能是通过 document.getElementById 或其他方式获取的DOM元素引用。
-// 同样，build_rangebar 也是一个在当前作用域内可访问的函数。
+    // 假设 rangebar 是一个在当前作用域内可访问的变量，
+    // 可能是通过 document.getElementById 或其他方式获取的DOM元素引用。
+    // 同样，build_rangebar 也是一个在当前作用域内可访问的函数。
 
-function checkAndBuildRangebar() {
-    // 重新评估 rangebar 的值，以防它在 DOM 加载后才出现
-    // 如果 rangebar 变量是动态获取的，例如每次都需要查找DOM，
-    // 则可以在这里重新获取它：
-    const rangebar = document.getElementById('rangebar');
+    function checkAndBuildRangebar() {
+      // 重新评估 rangebar 的值，以防它在 DOM 加载后才出现
+      // 如果 rangebar 变量是动态获取的，例如每次都需要查找DOM，
+      // 则可以在这里重新获取它：
+      const rangebar = document.getElementById('rangebar');
 
-    if (rangebar && build_rangebar) { // rangebar 存在 (不为 null, undefined, false, 0, "" 等)
+      if (rangebar && build_rangebar) { // rangebar 存在 (不为 null, undefined, false, 0, "" 等)
         if (rangebar.children.length > 0) {
-            console.log("rangebar 的子元素不为空");
+          console.log("rangebar 的子元素不为空");
         } else { // rangebar 存在，但子元素为空
-            console.log("rangebar 存在但子元素为空，尝试构建...");
-            build_rangebar?.();
-            // fixBaseUrls(); // 1. URL 替换
+          console.log("rangebar 存在但子元素为空，尝试构建...");
+          build_rangebar?.();
+          // fixBaseUrls(); // 1. URL 替换
         }
-    } else { // rangebar 不存在 (null 或 undefined)
+      } else { // rangebar 不存在 (null 或 undefined)
         console.log("rangebar 不存在，将在 0.2 秒后重试...");
         // 间隔0.2秒后再次运行此逻辑
         setTimeout(checkAndBuildRangebar, 200); // 200毫秒 = 0.2秒
+      }
     }
-}
 
-// 首次调用该函数以启动逻辑
-// setTimeout(checkAndBuildRangebar, 1500);
-
+    // 首次调用该函数以启动逻辑
+    // setTimeout(checkAndBuildRangebar, 1500);
 
 
-    
+
+
   }
 })();

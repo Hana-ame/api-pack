@@ -54,28 +54,6 @@ func SukebeiProxy() {
 
 	// 定义一个简单的 GET 路由
 	r.Any("/*any", func(c *gin.Context) {
-		// 送到新域名
-		if c.Request.Host == "sukebei.nmbyd1.top" {
-			// 获取请求中的 Cookie
-			href, err := url.Parse(c.Request.URL.String())
-			if err != nil {
-				c.Header("X-Error", c.Request.URL.String())
-				c.AbortWithStatus(http.StatusBadRequest)
-				return
-			}
-			href.Host = "sukebei.moonchan.xyz"
-			href.Scheme = "https"
-			c.Header("X-Location", href.String()) // 在那之前先在X-Location上看一看
-			// 闹钟
-			// if time.Now().Before(time.Date(2025, 4, 10, 0, 0, 0, 0, time.Local)) {
-			// 	return
-			// }
-			c.Redirect(http.StatusMovedPermanently, href.String())
-			c.Abort()
-			return
-		}
-
-	}, func(c *gin.Context) {
 		c.Header("X-Debug-Request-Host", c.Request.Host)     // 要设置 Host $http_host
 		c.Header("X-Debug-Header-Host", c.GetHeader("Host")) // never
 
