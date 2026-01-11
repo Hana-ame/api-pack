@@ -7,7 +7,6 @@ import (
 
 	_ "github.com/joho/godotenv/autoload"
 
-	"github.com/Hana-ame/api-pack/pastejson"
 	"github.com/Hana-ame/api-pack/qwen"
 	shijima "github.com/Hana-ame/api-pack/shijima"
 	"github.com/Hana-ame/api-pack/tools/debug"
@@ -22,32 +21,26 @@ func main() {
 
 	debug.LogLevel = debug.Trace
 
-	if os.Getenv("SEX_PROXY") != "" {
-		go SProxy() //127.25.23.3:8080
-	}
-	if os.Getenv("EX_PROXY") != "" {
-		go ExhProxy() //EX_PROXY="127.25.23.2:8080"
-	}
-	if tools.HasEnv("EX_API_PROXY") {
-		// go ExOrigin("127.25.23.2:8080")
-	}
 	if os.Getenv("NYAA_PROXY") != "" {
 		go NyaaProxy() //127.25.23.4:8080
 	}
 	if os.Getenv("SUKEBEI_PROXY") != "" {
 		go SukebeiProxy() //127.25.23.5:8080
 	}
+
 	if tools.HasEnv("GROQ_PROXY") {
 		go OpenaiProxy(os.Getenv("GROQ_PROXY")) //127.25.2.9:8080
 		go OpenaiProxyAlt("127.25.11.6:8080")   //127.25.2.9:8080
 	}
+
 	if tools.HasEnv("SHIJIMA") {
 		go shijima.Run(os.Getenv("SHIJIMA"))
 	}
-	// go EhProxy()      //127.25.23.6:8080
-	go pastejson.Run(os.Getenv("PASTEJSON"), os.Getenv("PASTEJSON_CONN_STR")) // 127.25.9.10:8080
 
-	go TwimgProxy(os.Getenv("TWIMG")) // 127.25.9.15:8080
+	// go EhProxy()      //127.25.23.6:8080
+	// go pastejson.Run(os.Getenv("PASTEJSON"), os.Getenv("PASTEJSON_CONN_STR")) // 127.25.9.10:8080
+
+	// go TwimgProxy(os.Getenv("TWIMG")) // 127.25.9.15:8080
 	go PximgProxy(os.Getenv("PXIMG")) // 127.25.9.16:8080
 
 	go EchoJSON() // 127.25.23.101:8080

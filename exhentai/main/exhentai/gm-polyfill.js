@@ -23,7 +23,7 @@
       os: "Windows",
     },
   };
-// --- 2. 同步 API (GM_*) - IndexedDB 版 ---
+  // --- 2. 同步 API (GM_*) - IndexedDB 版 ---
 
   // 配置常量
   const DB_NAME = "GM_Polyfill_DB";
@@ -37,6 +37,29 @@
 
   // 跨标签页通讯通道
   const syncChannel = new BroadcastChannel(BROADCAST_CHANNEL_NAME);
+
+
+  /**
+   * 触发值改变监听器
+   * @param {string} key - 被修改的键名
+   * @param {any} value - 新值
+   * @param {any} oldValue - 旧值
+   * @param {boolean} remote - 是否来自其他标签页 (true) 还是当前页面 (false)
+   */
+  function triggerListeners(key, value, oldValue, remote) {
+    // 检查是否有该 key 的监听器
+    const list = listeners.get(key);
+    if (list && list.length > 0) {
+      list.forEach((item) => {
+        try {
+          // 按照 Tampermonkey 标准接口回调: (name, old_value, new_value, remote)
+          item.callback(key, oldValue, value, remote);
+        } catch (e) {
+          console.error(`GM_Polyfill: 监听器回调执行出错 [Key: ${key}]`, e);
+        }
+      });
+    }
+  }
 
   /**
    * 初始化 IndexedDB 并预加载数据到内存缓存
@@ -55,7 +78,7 @@
       const db = event.target.result;
       const transaction = db.transaction(STORE_NAME, "readonly");
       const store = transaction.objectStore(STORE_NAME);
-      
+
       // 遍历所有数据存入缓存
       const cursorRequest = store.openCursor();
       cursorRequest.onsuccess = (e) => {
@@ -126,13 +149,13 @@
 
   window.GM_setValue = function (key, value) {
     const oldValue = valueCache.get(key);
-    
+
     // 1. 更新内存缓存
     valueCache.set(key, value);
-    
+
     // 2. 异步持久化到 IndexedDB
     dbSave(key, value);
-    
+
     // 3. 触发本页面的监听器
     // 注意：IndexedDB 能够直接存储对象，所以这里传给监听器的就是原值，不需要 JSON.stringify
     // 为了兼容旧代码的监听器逻辑（旧代码可能期待字符串），你可能需要调整监听器回调，
@@ -150,13 +173,13 @@
 
   window.GM_deleteValue = function (key) {
     const oldValue = valueCache.get(key);
-    
+
     // 1. 更新内存
     valueCache.delete(key);
-    
+
     // 2. 异步删除
     dbDelete(key);
-    
+
     // 3. 触发监听器
     triggerListeners(key, undefined, oldValue, false);
 
@@ -400,8 +423,7 @@
         // 场景 B: 检查版本号。如果本地版本与当前脚本版本不一致，则覆盖
         if (parsedData.version !== CURRENT_VERSION) {
           console.log(
-            `🆙 版本更新: ${
-              parsedData.version || "unknown"
+            `🆙 版本更新: ${parsedData.version || "unknown"
             } -> ${CURRENT_VERSION}`
           );
           needUpdate = true;
