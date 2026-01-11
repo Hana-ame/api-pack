@@ -19,16 +19,20 @@ import (
 )
 
 // 配置常量
-var (
-	OldDomain = []string{"nmbyd1.top"}
-	NewDomain = []string{"ex.nmbyd2.top"}
-)
+// var (
+// 	OldDomain = []string{"nmbyd1.top"}
+// 	NewDomain = []string{"ex.nmbyd2.top"}
+// )
 
 const (
-	ConfigURL     = "https://config.810114.xyz/exhentai/settings"
-	TargetHost    = "exhentai.org"
-	StaticHost    = "page.moonchan.xyz"
-	MigrationDate = "2025-04-10T00:00:00Z"
+	// 	ConfigURL = "https://config.810114.xyz/exhentai/settings"
+
+	TargetHost = "exhentai.org"
+
+	StaticHost = "page.moonchan.xyz"
+
+// MigrationDate = "2025-04-10T00:00:00Z"
+
 )
 
 type ProxyHandler struct {
@@ -60,7 +64,7 @@ func ExhProxy(rotator *IPRotator, addr string) {
 		special.GET("/uconfig.php", p.handleUConfig)
 		special.GET("/image/*any", p.handleImageLegacy)
 
-		// special.GET("/fullimg/*any", p.handleOrigin)
+		special.GET("/fullimg/*any", p.handleOrigin)
 	}
 
 	// D. 核心代理逻辑 (包含屏蔽逻辑和内容注入)
@@ -402,6 +406,10 @@ func (p *ProxyHandler) handleSpecialRedirects(c *gin.Context, data []byte) bool 
 		}
 	}
 	return false
+}
+
+func (p *ProxyHandler) handleOrigin(c *gin.Context) {
+	c.Redirect(302, "https://exhentai.org"+c.Request.URL.String())
 }
 
 func copyHeaders(c *gin.Context, h http.Header) {
