@@ -1,3 +1,6 @@
+// 26.01.11
+// 适配myfetchv2
+
 package main
 
 import (
@@ -11,7 +14,7 @@ import (
 	"strconv"
 	"strings"
 
-	myfetch "github.com/Hana-ame/api-pack/tools/my_fetch"
+	myfetch "github.com/Hana-ame/api-pack/tools/my_fetch/v2"
 	middleware "github.com/Hana-ame/api-pack/tools/my_gin_middleware"
 	tools "github.com/Hana-ame/api-pack/tools/utils"
 	"github.com/gin-gonic/gin"
@@ -35,8 +38,7 @@ func SukebeiProxy() {
 		}
 	}()
 
-	cp := myfetch.NewClientPool([]*http.Client{client})
-	mf := myfetch.NewFetcher(nil, cp)
+	mf := &myfetch.Client{Client: client}
 
 	// 使用 gin.New() 创建新的 Gin 实例，避免默认的日志中间件
 	r := gin.New()
@@ -115,7 +117,7 @@ func SukebeiProxy() {
 		data = bytes.ReplaceAll(data, []byte("https://"+host), []byte{})
 		// remove ad
 		data = bytes.ReplaceAll(data, []byte(`magsrv.com`), []byte(`localhost`))
-		// data = bytes.ReplaceAll(data, []byte(`<div id="dd4ce992-766a-4df0-a01d-86f13e43fd61"></div>`), []byte{})
+		data = bytes.ReplaceAll(data, []byte(`cdn.tsyndicate.com`), []byte(`localhost`))
 		// data = bytes.ReplaceAll(data, []byte(`<div id="e7a3ddb6-efae-4f74-a719-607fdf4fa1a1"></div>`), []byte{})
 
 		// 为什么自带的方法这么贵物

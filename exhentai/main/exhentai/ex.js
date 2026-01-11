@@ -7,24 +7,22 @@
     popbase = base_url + "gallerypopups.php?gid=3723085&t=582d4b6579&act=";
   }
 
-  // 不让访问s.exhentai.org
+
   const originalOpen = XMLHttpRequest.prototype.open;
-  const BLOCKED_DOMAIN1 = "s.exhentai.org";
-  const BLOCKED_DOMAIN2 = "ehtg.org";
 
   XMLHttpRequest.prototype.open = function (method, url) {
-    // 将 url 转换为字符串（以防传入的是 URL 对象）
-    const urlString = String(url);
+    // 1. Call the original open function first
+    const result = originalOpen.apply(this, arguments);
 
-    // 检查是否包含禁止的域名
-    if (urlString.includes(BLOCKED_DOMAIN1) || urlString.includes(BLOCKED_DOMAIN2)) {
-      console.error(`不样: ${urlString}`);
-      // 抛出异常以阻止请求发送
-      throw new Error("Blocked: Request to s.exhentai.org is not allowed.");
+    // 2. setRequestHeader must be called AFTER open() but BEFORE send()
+    // Note: This works for custom headers, but browsers will BLOCK 'Referer'
+    try {
+      this.setRequestHeader('X-Referer', window.location.href);
+    } catch (e) {
+      console.warn('Could not set header', e);
     }
 
-    // 如果不是黑名单域名，则正常执行
-    return originalOpen.apply(this, arguments);
+    return result;
   };
 
   // =========================================================================

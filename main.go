@@ -1,16 +1,21 @@
+// 26.01.11
+// 适配myfetchv2
+// TODO: 遇到jandan图床 redirect时会爆炸。
 package main
 
 import (
+	"net"
 	"net/http"
 	"os"
 	"strconv"
+	"time"
 
 	_ "github.com/joho/godotenv/autoload"
 
 	"github.com/Hana-ame/api-pack/qwen"
 	shijima "github.com/Hana-ame/api-pack/shijima"
 	"github.com/Hana-ame/api-pack/tools/debug"
-	myfetch "github.com/Hana-ame/api-pack/tools/my_fetch"
+	myfetch "github.com/Hana-ame/api-pack/tools/my_fetch/v2"
 	middleware "github.com/Hana-ame/api-pack/tools/my_gin_middleware"
 	tools "github.com/Hana-ame/api-pack/tools/utils"
 	"github.com/Hana-ame/api-pack/tools/wasm/v"
@@ -18,6 +23,21 @@ import (
 )
 
 func main() {
+
+	// 我不行了。
+	http.DefaultClient = &http.Client{
+		Transport: &http.Transport{
+			DialContext: (&net.Dialer{
+				LocalAddr: &net.TCPAddr{IP: net.IPv4(142, 171, 157, 74)},
+				Timeout:   90 * time.Second,
+				KeepAlive: 90 * time.Second,
+			}).DialContext,
+			MaxIdleConns:        32,
+			IdleConnTimeout:     10 * time.Second,
+			TLSHandshakeTimeout: 30 * time.Second,
+		},
+		Timeout: 30 * time.Second,
+	}
 
 	debug.LogLevel = debug.Trace
 
@@ -85,7 +105,7 @@ func main() {
 			}
 		} else if c.Request.Host == host {
 			c.Header("X-Error", c.Request.Host)
-			c.Redirect(http.StatusFound, "https://page.moonchan.xyz/")
+			c.Redirect(http.StatusFound, "https://moonchan.xyz/")
 			return
 		}
 

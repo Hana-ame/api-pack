@@ -1,3 +1,6 @@
+// 26.01.11
+// 并不使用这里的代码
+
 // 在 .env 中设置 EXHENTAI_PROXY_COOKIE 项目以更新Cookie
 
 package main

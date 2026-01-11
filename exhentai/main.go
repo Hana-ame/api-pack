@@ -93,6 +93,57 @@ func newClientSlot(id int, manager *myfetch.Manager) (*clientSlot, error) {
 	return slot, nil
 }
 
+/*
+
+// 备用逻辑
+
+type dialer struct {
+	host string
+	*net.Dialer
+}
+
+func (dialer dialer) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
+	return dialer.Dialer.DialContext(ctx, network, dialer.host)
+}
+
+// prepareNewClient 生成 IP 并创建 Client
+func (s *clientSlot) prepareNewClient() (*client, error) {
+	ip, err := s.ipManager.GenerateIP()
+	if err != nil {
+		return nil, fmt.Errorf("slot %d generate ip failed: %w", s.id, err)
+	}
+
+	if err := s.ipManager.AddAddr(ip); err != nil {
+		return nil, fmt.Errorf("slot %d add addr failed: %w", s.id, err)
+	}
+
+	c := &client{
+		Addr: &ip,
+		Client: &myfetch.Client{
+			Client: &http.Client{
+				Transport: &http.Transport{
+					DialContext: (dialer{"exhentai.org:443", &net.Dialer{ // dialer
+						// LocalAddr 用于指定本地 IP 地址
+						LocalAddr: &net.TCPAddr{
+							IP: ip.AsSlice(),
+						},
+						Timeout:   5 * time.Second,  // 连接超时时间
+						KeepAlive: 30 * time.Second, // Keep-Alive 超时时间
+					}}).DialContext,
+					MaxIdleConns:        100,
+					IdleConnTimeout:     10 * time.Second,
+					TLSHandshakeTimeout: 3 * time.Second,
+				},
+				CheckRedirect: func(req *http.Request, via []*http.Request) error {
+					return http.ErrUseLastResponse
+				},
+			},
+		},
+	}
+	return c, nil
+}
+*/
+
 // prepareNewClient 生成 IP 并创建 Client
 func (s *clientSlot) prepareNewClient() (*client, error) {
 	ip, err := s.ipManager.GenerateIP()

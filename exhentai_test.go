@@ -1,3 +1,6 @@
+// 26.01.11
+// 并不使用这里的代码
+
 package main
 
 import (

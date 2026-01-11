@@ -79,6 +79,7 @@ func ExhProxy(rotator *IPRotator, addr string) {
 			c.Redirect(301, "https://exhentai.org"+c.Request.URL.String())
 		})
 		special.GET("/uconfig.php", p.handleUConfig)
+		special.POST("/api.php", p.handleAPI)
 		special.GET("/image/*any", p.handleImageLegacy)
 
 		special.GET("/fullimg/*any", p.handleOrigin)
@@ -159,7 +160,7 @@ func (p *ProxyHandler) accessControlMiddleware() gin.HandlerFunc {
 
 		// 6. PHP 攻击防护 (白名单模式)
 		// 允许访问的 PHP 列表
-		allowPHP := []string{"/gallerytorrents.php", "/favorites.php", "/torrents.php", "/gallerypopups.php"}
+		allowPHP := []string{"/gallerytorrents.php", "/favorites.php", "/torrents.php", "/gallerypopups.php", "/api.php"}
 		allowedPHP := false
 		if strings.HasSuffix(path, ".php") {
 			for _, a := range allowPHP {
@@ -270,6 +271,9 @@ func (p *ProxyHandler) mainProxyHandler(c *gin.Context) {
 			c.AbortWithStatus(http.StatusForbidden)
 			return
 		}
+
+		// Set Cache-Control for 1 hour (3600 seconds)
+		c.Header("Cache-Control", "public, max-age=86400")
 
 		// 6. 使用 Gin 内置方法（它会自动处理 Range, ETag, Content-Type 等）
 		c.File(finalPath)
@@ -435,6 +439,11 @@ func (p *ProxyHandler) handleSpecialRedirects(c *gin.Context, data []byte) bool 
 
 func (p *ProxyHandler) handleOrigin(c *gin.Context) {
 	c.Redirect(302, "https://exhentai.org"+c.Request.URL.String())
+	return
+}
+
+func (p *ProxyHandler) handleAPI(c *gin.Context) {
+	return // TODO
 }
 
 func copyHeaders(c *gin.Context, h http.Header) {

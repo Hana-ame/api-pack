@@ -1,3 +1,6 @@
+// 26.01.11
+// 适配myfetchv2
+
 package main
 
 import (
@@ -11,7 +14,7 @@ import (
 	"strconv"
 	"strings"
 
-	myfetch "github.com/Hana-ame/api-pack/tools/my_fetch"
+	myfetch "github.com/Hana-ame/api-pack/tools/my_fetch/v2"
 	middleware "github.com/Hana-ame/api-pack/tools/my_gin_middleware"
 	tools "github.com/Hana-ame/api-pack/tools/utils"
 	"github.com/gin-gonic/gin"
@@ -51,8 +54,7 @@ func NyaaProxy() {
 		}
 	}()
 
-	cp := myfetch.NewClientPool([]*http.Client{client})
-	mf := myfetch.NewFetcher(nil, cp)
+	mf := &myfetch.Client{Client: client}
 
 	// 使用 gin.New() 创建新的 Gin 实例，避免默认的日志中间件
 	r := gin.New()
