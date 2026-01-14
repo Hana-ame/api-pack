@@ -85,6 +85,27 @@ func ExhProxy(rotator *IPRotator, addr string) {
 		special.GET("/fullimg/*any", p.handleOrigin)
 	}
 
+	r.GET("/sw.js", func(c *gin.Context) {
+		// 1. Force the correct MIME type (Required by some browsers)
+		c.Header("Content-Type", "application/javascript")
+
+		// 2. Prevent the script itself from being cached by the browser
+		// This ensures that when you change sw.js, the browser sees the change immediately
+		c.Header("Cache-Control", "no-cache, no-store, must-revalidate")
+
+		c.File("sw.js")
+	})
+	r.GET("/failed.html", func(c *gin.Context) {
+		// 1. Force the correct MIME type (Required by some browsers)
+		c.Header("Content-Type", "text/html")
+
+		// 2. Prevent the script itself from being cached by the browser
+		// This ensures that when you change sw.js, the browser sees the change immediately
+		c.Header("Cache-Control", "no-cache, no-store, must-revalidate")
+
+		c.File("failed.html")
+	})
+
 	// D. 核心代理逻辑 (包含屏蔽逻辑和内容注入)
 	r.NoRoute(p.accessControlMiddleware(), p.mainProxyHandler)
 
@@ -117,7 +138,7 @@ func (p *ProxyHandler) accessControlMiddleware() gin.HandlerFunc {
 		"/login",
 		"/dns-query", "/query", "/resolve", // 屏蔽常见的 DoH 路径
 		"/.well-known",
-		"/sw.js", "/manifest.json", // 不是在这里用的
+		"/manifest.json", // 不是在这里用的
 	}
 
 	return func(c *gin.Context) {
@@ -281,7 +302,7 @@ func (p *ProxyHandler) mainProxyHandler(c *gin.Context) {
 		return
 	}
 
-	if c.Query("host") != "" || strings.HasPrefix(path, "/static/") || path == "/sw.js" || path == "/manifest.json" || path == "/logo192.png" {
+	if c.Query("host") != "" || strings.HasPrefix(path, "/static/") || path == "/manifest.json" || path == "/logo192.png" {
 		resp, err := proxyClient.Get("https://" + StaticHost + c.Request.URL.String())
 		if tools.AbortWithError(c, http.StatusBadGateway, err) {
 			return
@@ -390,6 +411,7 @@ func (p *ProxyHandler) prepareHeaders(c *gin.Context, isEH bool) http.Header {
 func (p *ProxyHandler) transformContent(c *gin.Context, data []byte, targetURL string) []byte {
 	// 注入外部 Script 标签
 	const metaNoReferer = `<meta name="referrer" content="no-referrer">`
+	const sw = `<script> window.onbeforeinstallprompt = (e) => e.preventDefault(); if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('/sw.js'); }); } </script>`
 	const scriptTag = `<script src="/exhentai/ex.js" defer></script>`
 	// const cssTag = `<link rel="stylesheet" type="text/css" href="/z/0381/x.css">`
 	const headStartTag = "<head>"
@@ -405,7 +427,7 @@ func (p *ProxyHandler) transformContent(c *gin.Context, data []byte, targetURL s
 
 	// 执行替换：将 </head> 替换为 <script ...></script></head>
 	// return bytes.Replace(data, []byte(headStartTag), []byte(headStartTag+metaNoReferer+scriptTag+cssTag), 1)
-	return bytes.Replace(data, []byte(headStartTag), []byte(headStartTag+metaNoReferer+scriptTag), 1)
+	return bytes.Replace(data, []byte(headStartTag), []byte(headStartTag+sw+metaNoReferer+scriptTag), 1)
 }
 
 func (p *ProxyHandler) handleSpecialRedirects(c *gin.Context, data []byte) bool {

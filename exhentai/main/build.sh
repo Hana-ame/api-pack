@@ -17,7 +17,8 @@ if [ $? -ne 0 ]; then
 fi  
 
 ~/script/scp.sh -v -r exhentai root@cloudcone.moonchan.xyz:~/exhentai/
-
+~/script/scp.sh -v sw.js root@cloudcone.moonchan.xyz:~/exhentai/
+~/script/scp.sh -v failed.html root@cloudcone.moonchan.xyz:~/exhentai/
 date;
 echo "done"
 # exit 0

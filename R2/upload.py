@@ -1,3 +1,5 @@
+# 去用rclone
+
 import os
 import hashlib
 import sqlite3

@@ -167,7 +167,7 @@ func getRandomRecordHandlerBili(c *gin.Context) {
 	}
 
 	// u.Query().Add("proxy_host", u.Host)
-	u.Scheme, u.Host, u.RawQuery = "https", "proxy.moonchan.xyz", "proxy_host="+u.Host
+	u.Scheme, u.Host, u.RawQuery = "https", "proxy.moonchan.xyz", "proxy_host="+u.Host+"&proxy_referer=https://bilibili.com"
 
 	c.Redirect(http.StatusFound, u.String())
 }

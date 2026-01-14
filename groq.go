@@ -1,4 +1,6 @@
 // moved to tools
+// 26.01.11
+// 不再使用
 
 package main
 

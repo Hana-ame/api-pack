@@ -1,3 +1,6 @@
+// 直接oss里面存就行了，不用这么麻烦。
+// 虽然会duplicate。
+
 package main
 
 import (

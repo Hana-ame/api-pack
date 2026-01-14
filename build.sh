@@ -61,3 +61,4 @@ pkill api-pack-new; nohup ./api-pack-new &
 
 FILE="1.bin"; TARGET="api-pack-new"; URL="https://wsl-5500.moonchan.xyz/$FILE"; wget "$URL"; ls "$FILE" && { pkill "$TARGET"; rm -f "$TARGET"; mv "$FILE" "$TARGET"; chmod +x "$TARGET"; nohup "./$TARGET" & }
 
+cd; ls temp && { pkill shijima.bin; rm -f shijima.bin; mv temp shijima.bin; ls -l shijima.bin; nohup ./shijima.bin & } 

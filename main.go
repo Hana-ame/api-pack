@@ -29,14 +29,19 @@ func main() {
 		Transport: &http.Transport{
 			DialContext: (&net.Dialer{
 				LocalAddr: &net.TCPAddr{IP: net.IPv4(142, 171, 157, 74)},
-				Timeout:   90 * time.Second,
+				Timeout:   15 * time.Second,
 				KeepAlive: 90 * time.Second,
 			}).DialContext,
-			MaxIdleConns:        32,
+			MaxIdleConns:        256,
 			IdleConnTimeout:     10 * time.Second,
 			TLSHandshakeTimeout: 30 * time.Second,
 		},
 		Timeout: 30 * time.Second,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			// This special error stops the redirect but returns nil error
+			// and the 301 response object to the caller
+			return http.ErrUseLastResponse
+		},
 	}
 
 	debug.LogLevel = debug.Trace
@@ -159,5 +164,7 @@ func main() {
 	})
 
 	// 启动服务器
-	r.Run("127.24.11.16:8080") // 在 8080 端口启动服务
+	if os.Getenv("PROXY") != "" {
+		r.Run(os.Getenv("PROXY")) // 在 8080 端口启动服务
+	}
 }

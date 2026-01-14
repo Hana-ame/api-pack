@@ -157,6 +157,7 @@ func getThreadByNo(no int) (*Thread, error) {
 	return &thread, nil
 }
 
+// 找到回复
 func getReplies(no, pn int) ([]*Thread, error) {
 	replies := make([]*Thread, 0, pageSize)
 	offset := pn * pageSize
@@ -191,6 +192,7 @@ func getReplies(no, pn int) ([]*Thread, error) {
 	return replies, nil
 }
 
+// 找到回复，用在board页面
 func getRepliesPreview(no int) ([]*Thread, error) {
 	replies := make([]*Thread, 0, 5)
 	// CHANGED: ? -> $1
