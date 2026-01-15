@@ -118,12 +118,12 @@ func ExhProxy(rotator *IPRotator, addr string) {
 func (p *ProxyHandler) accessControlMiddleware() gin.HandlerFunc {
 	// 预定义一些拒绝访问的敏感路径或关键词
 	forbiddenKeywords := []string{
-		"/.git", "/.env", "/.svn", "/.vscode",
-		"/phpmyadmin", "/wp-admin", "/wp-content",
-		"/config", "/backup", "/etc/passwd",
-		"/fullimg", "/mytags",
+		"/.git/", "/.env/", "/.svn/", "/.vscode/", "/.well-known/",
+		"/phpmyadmin/", "/wp-admin/", "/wp-content/",
+		"/config/", "/backup/", "/etc/passwd/",
 		"/actuator/",
 		"/../",
+		"/.streamlit/", "/ipfs/",
 	}
 
 	// 预定义非法后缀
@@ -134,6 +134,10 @@ func (p *ProxyHandler) accessControlMiddleware() gin.HandlerFunc {
 
 	// 3. 预定义精确匹配的非法路径 (添加了日志中出现的 DoH 相关路径)
 	forbiddenExact := []string{
+		"/1", "/fb", "/fwc", "/fzh", "/via_inject_blocker.css", "/aaabbbccc",
+		"/.env", "/.svn",
+		"/config", "/backup", "/etc/passwd", "/actuator",
+		"/g/", "/s/",
 		"/fullimg", "/mytags", "/uconfig.php",
 		"/login",
 		"/dns-query", "/query", "/resolve", // 屏蔽常见的 DoH 路径
@@ -314,12 +318,12 @@ func (p *ProxyHandler) mainProxyHandler(c *gin.Context) {
 		return
 	}
 
-	p.doProxy(c, "https://"+host+c.Request.URL.String(), false)
+	p.doProxy(c, "https://"+host+c.Request.URL.String())
 }
 
 // 核心转发逻辑
-func (p *ProxyHandler) doProxy(c *gin.Context, targetURL string, isEH bool) {
-	reqHeader := p.prepareHeaders(c, isEH)
+func (p *ProxyHandler) doProxy(c *gin.Context, targetURL string) {
+	reqHeader := p.prepareHeaders(c)
 
 	resp, err := p.Fetch(c.Request.Method, targetURL, reqHeader, c.Request.Body)
 	if err != nil {
@@ -329,7 +333,7 @@ func (p *ProxyHandler) doProxy(c *gin.Context, targetURL string, isEH bool) {
 	defer resp.Body.Close()
 
 	// 2. 特殊文件直接流式返回 (Torrent/JS)
-	if strings.HasPrefix(targetURL, "/torrent") || strings.HasPrefix(targetURL, "/z/") {
+	if strings.HasPrefix(targetURL, "/torrent") || strings.HasPrefix(targetURL, "/z/") || strings.HasPrefix(targetURL, "/api.php") {
 		copyHeaders(c, resp.Header)
 		c.DataFromReader(resp.StatusCode, resp.ContentLength, resp.Header.Get("Content-Type"), resp.Body, nil)
 		return
@@ -383,7 +387,7 @@ func (p *ProxyHandler) doProxy(c *gin.Context, targetURL string, isEH bool) {
 
 // --- 辅助工具函数 ---
 
-func (p *ProxyHandler) prepareHeaders(c *gin.Context, isEH bool) http.Header {
+func (p *ProxyHandler) prepareHeaders(c *gin.Context) http.Header {
 	h := c.Request.Header.Clone()
 
 	// 设置 Cookie
@@ -391,8 +395,8 @@ func (p *ProxyHandler) prepareHeaders(c *gin.Context, isEH bool) http.Header {
 	h.Set("Cookie", cookie)
 
 	// User-Agent 修正
-	if strings.HasPrefix(c.Request.URL.String(), "/s/") && strings.Contains(h.Get("User-Agent"), "Mobile") {
-		h.Set("User-Agent", "myfetch/2025.4.14")
+	if strings.HasPrefix(c.Request.URL.String(), "/s/") {
+		h.Set("User-Agent", strings.Replace(h.Get("User-Agent"), "Mobile", "Myfetch", 1))
 	}
 
 	// Referer 修正
@@ -404,6 +408,8 @@ func (p *ProxyHandler) prepareHeaders(c *gin.Context, isEH bool) http.Header {
 	} else {
 		h.Set("Referer", "https://exhentai.org/")
 	}
+
+	h.Set("Origin", "https://exhentai.org")
 
 	return h
 }
@@ -465,7 +471,8 @@ func (p *ProxyHandler) handleOrigin(c *gin.Context) {
 }
 
 func (p *ProxyHandler) handleAPI(c *gin.Context) {
-	return // TODO
+	p.doProxy(c, "/api.php")
+	return
 }
 
 func copyHeaders(c *gin.Context, h http.Header) {

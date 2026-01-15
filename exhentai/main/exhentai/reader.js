@@ -85,7 +85,7 @@
   // 3. 启动按钮
   // -----------------------------------------------------------
   const btn = document.createElement("button");
-  btn.innerText = "Start Ultimate Reader";
+  btn.innerText = "翻页阅读器";
   btn.style.cssText =
     "position:fixed; top:10px; right:10px; z-index:999999; padding:10px; background:#e91e63; color:#fff; border:none; cursor:pointer; font-weight:bold; box-shadow:0 2px 5px rgba(0,0,0,0.5); border-radius:4px;";
   document.body.append(btn);
@@ -321,7 +321,7 @@
                         alignSelf: "center"
                     }
                 },
-                "⚠️ Image Failed - Tap to Reload"
+                "⚠️ 点击重新加载"
             ),
 
           // Layer 4: Page Number

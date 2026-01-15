@@ -7,12 +7,14 @@ import (
 	"bytes"
 	"crypto/tls"
 	"io"
+	"net"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	myfetch "github.com/Hana-ame/api-pack/tools/my_fetch/v2"
 	middleware "github.com/Hana-ame/api-pack/tools/my_gin_middleware"
@@ -25,25 +27,17 @@ func NyaaProxy() {
 	var client *http.Client = func() *http.Client {
 		jar, _ := cookiejar.New(nil)
 		u, _ := url.Parse("nyaa.si")
-		jar.SetCookies(u, []*http.Cookie{{
-			Name:  "__ddg1_",
-			Value: "NJm1gjWf3g8gHO4Pnsfo",
-			Path:  "/",
-		}, {
-			Name:  "__ddg8_",
-			Value: "DTC69NGk8W8EhWY0",
-			Path:  "/",
-		}, {
-			Name:  "__ddg9_",
-			Value: "45.130.22.56",
-			Path:  "/",
-		}, {
-			Name:  "__ddg10_",
-			Value: "1732013313",
-			Path:  "/",
-		}})
+		jar.SetCookies(u, []*http.Cookie{})
 		tr := &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+			DialContext: (&net.Dialer{
+				LocalAddr: &net.TCPAddr{IP: net.IPv4(142, 171, 157, 74)},
+				Timeout:   15 * time.Second,
+				KeepAlive: 90 * time.Second,
+			}).DialContext,
+			MaxIdleConns:        256,
+			IdleConnTimeout:     10 * time.Second,
+			TLSHandshakeTimeout: 30 * time.Second,
+			TLSClientConfig:     &tls.Config{InsecureSkipVerify: true},
 		}
 		return &http.Client{
 			CheckRedirect: func(req *http.Request, via []*http.Request) error {
@@ -133,6 +127,7 @@ func NyaaProxy() {
 		data = bytes.ReplaceAll(data, []byte("https://"+host), []byte{})
 		// remove ad
 		data = bytes.ReplaceAll(data, []byte(`a.magsrv.com`), []byte(`localhost`))
+		data = bytes.ReplaceAll(data, []byte(`cdn.tsyndicate.com`), []byte(`localhost`))
 		data = bytes.ReplaceAll(data, []byte(`<div id="dd4ce992-766a-4df0-a01d-86f13e43fd61"></div>`), []byte{})
 		data = bytes.ReplaceAll(data, []byte(`<div id="e7a3ddb6-efae-4f74-a719-607fdf4fa1a1"></div>`), []byte{})
 

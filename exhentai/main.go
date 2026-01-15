@@ -1,6 +1,7 @@
 package exhentai
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log"
@@ -93,8 +94,6 @@ func newClientSlot(id int, manager *myfetch.Manager) (*clientSlot, error) {
 	return slot, nil
 }
 
-/*
-
 // 备用逻辑
 
 type dialer struct {
@@ -142,7 +141,9 @@ func (s *clientSlot) prepareNewClient() (*client, error) {
 	}
 	return c, nil
 }
-*/
+
+// 正常逻辑
+/*
 
 // prepareNewClient 生成 IP 并创建 Client
 func (s *clientSlot) prepareNewClient() (*client, error) {
@@ -163,7 +164,7 @@ func (s *clientSlot) prepareNewClient() (*client, error) {
 					DialContext: (&net.Dialer{
 						LocalAddr: &net.TCPAddr{IP: ip.AsSlice()},
 						Timeout:   3 * time.Second,
-						KeepAlive: 3 * time.Second,
+						KeepAlive: 30 * time.Second,
 					}).DialContext,
 					MaxIdleConns:        100,
 					IdleConnTimeout:     10 * time.Second,
@@ -178,6 +179,7 @@ func (s *clientSlot) prepareNewClient() (*client, error) {
 	return c, nil
 }
 
+*/
 func (s *clientSlot) getCurrentClient() *client {
 	return s.currentClientHolder.Load().(*client)
 }

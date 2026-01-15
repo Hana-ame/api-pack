@@ -7,12 +7,14 @@ import (
 	"bytes"
 	"crypto/tls"
 	"io"
+	"net"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	myfetch "github.com/Hana-ame/api-pack/tools/my_fetch/v2"
 	middleware "github.com/Hana-ame/api-pack/tools/my_gin_middleware"
@@ -27,7 +29,15 @@ func SukebeiProxy() {
 		u, _ := url.Parse("sukebei.nyaa.si")
 		jar.SetCookies(u, []*http.Cookie{})
 		tr := &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+			DialContext: (&net.Dialer{
+				LocalAddr: &net.TCPAddr{IP: net.IPv4(142, 171, 157, 74)},
+				Timeout:   15 * time.Second,
+				KeepAlive: 90 * time.Second,
+			}).DialContext,
+			MaxIdleConns:        256,
+			IdleConnTimeout:     10 * time.Second,
+			TLSHandshakeTimeout: 30 * time.Second,
+			TLSClientConfig:     &tls.Config{InsecureSkipVerify: true},
 		}
 		return &http.Client{
 			CheckRedirect: func(req *http.Request, via []*http.Request) error {
