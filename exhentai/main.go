@@ -97,12 +97,12 @@ func newClientSlot(id int, manager *myfetch.Manager) (*clientSlot, error) {
 // 备用逻辑
 
 type dialer struct {
-	host string
+	address string
 	*net.Dialer
 }
 
 func (dialer dialer) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
-	return dialer.Dialer.DialContext(ctx, network, dialer.host)
+	return dialer.Dialer.DialContext(ctx, network, dialer.address)
 }
 
 // prepareNewClient 生成 IP 并创建 Client

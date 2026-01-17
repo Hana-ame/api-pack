@@ -7,23 +7,27 @@
     popbase = base_url + "gallerypopups.php?gid=3723085&t=582d4b6579&act=";
   }
 
+  (function () {
+    const originalOpen = XMLHttpRequest.prototype.open;
 
-  const originalOpen = XMLHttpRequest.prototype.open;
+    XMLHttpRequest.prototype.open = function (method, url) {
+      // 1. Convert url to string (it could be a URL object)
+      const urlString = url.toString();
 
-  XMLHttpRequest.prototype.open = function (method, url) {
-    // 1. Call the original open function first
-    const result = originalOpen.apply(this, arguments);
+      // 2. Check if the path is /api.php
+      // This regex looks for /api.php at the end of the string OR followed by a ? (query params)
+      if (/\/api\.php($|\?)/.test(urlString)) {
+        console.error('Blocked request to: ' + urlString);
 
-    // 2. setRequestHeader must be called AFTER open() but BEFORE send()
-    // Note: This works for custom headers, but browsers will BLOCK 'Referer'
-    try {
-      this.setRequestHeader('X-Referer', window.location.href);
-    } catch (e) {
-      console.warn('Could not set header', e);
-    }
+        // Throwing an error is the safest way to ensure the request 
+        // is completely halted and 'send()' cannot be called.
+        throw new Error("403 Forbidden: Requests to /api.php are disallowed.");
+      }
 
-    return result;
-  };
+      // 3. If it's not /api.php, proceed normally
+      return originalOpen.apply(this, arguments);
+    };
+  })();
 
   // =========================================================================
   // 1. 基础 URL 替换功能 (对应 Go 中的 bytes.ReplaceAll)
