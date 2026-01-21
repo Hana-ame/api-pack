@@ -124,12 +124,14 @@ func (p *ProxyHandler) accessControlMiddleware() gin.HandlerFunc {
 		"/actuator/",
 		"/../",
 		"/.streamlit/", "/ipfs/",
+		"/[object request]", "/sdk/", "/app/", "/template/", "/addons/", "/login/", "/portal/", "/home/", "/api/",
 	}
 
 	// 预定义非法后缀
 	forbiddenSuffixes := []string{
 		".cgi", ".asp", ".aspx", ".jsp", ".jspx",
 		".sh", ".py", ".pl", ".sql", ".bak", ".log", ".swp",
+		".env", ".dist", ".environment", ".do", ".dockerignore", ".txt", ".json", ".yml", ".ini", ".gradle", ".backup", ".old",
 	}
 
 	// 3. 预定义精确匹配的非法路径 (添加了日志中出现的 DoH 相关路径)
@@ -143,6 +145,7 @@ func (p *ProxyHandler) accessControlMiddleware() gin.HandlerFunc {
 		"/dns-query", "/query", "/resolve", // 屏蔽常见的 DoH 路径
 		"/.well-known",
 		"/manifest.json", // 不是在这里用的
+		"/phpinfo",
 	}
 
 	return func(c *gin.Context) {
@@ -203,7 +206,7 @@ func (p *ProxyHandler) accessControlMiddleware() gin.HandlerFunc {
 		// 7. GeoIP 屏蔽 (保持原样)
 		country := c.GetHeader("Cf-Ipcountry")
 		acceptLang := strings.ToLower(c.GetHeader("accept-language"))
-		if !strings.Contains(acceptLang, "zh") && !slices.Contains([]string{"CN", ""}, country) {
+		if !strings.Contains(acceptLang, "zh") && !slices.Contains([]string{"CN"}, country) {
 			c.String(http.StatusForbidden, "请使用大陆IP.\nPlease ensure you're in China Mainland\n中国・大陸以外のアクセスは制限されています\n Current Region: "+country)
 			c.Abort()
 			return
