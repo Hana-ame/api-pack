@@ -59,24 +59,25 @@ func main() {
 	}
 
 	if tools.HasEnv("GROQ_PROXY") {
-		go OpenaiProxy(os.Getenv("GROQ_PROXY")) //127.25.2.9:8080
-		go OpenaiProxyAlt("127.25.11.6:8080")   //127.25.2.9:8080
+		go OpenaiProxy(os.Getenv("GROQ_PROXY"))        //127.25.2.9:8080
+		go OpenaiProxyAlt(os.Getenv("GROQ_PROXY_ALT")) //127.25.2.9:8080
 	}
 
 	if tools.HasEnv("SHIJIMA") {
 		go shijima.Run(os.Getenv("SHIJIMA"))
 	}
 
-	go exhentai.Run(os.Getenv("EX_PROXY"))
 	// go EhProxy() //127.25.23.6:8080
 	// go pastejson.Run(os.Getenv("PASTEJSON"), os.Getenv("PASTEJSON_CONN_STR")) // 127.25.9.10:8080
 
-	// go TwimgProxy(os.Getenv("TWIMG")) // 127.25.9.15:8080
+	go TwimgProxy(os.Getenv("TWIMG")) // 127.25.9.15:8080
 	go PximgProxy(os.Getenv("PXIMG")) // 127.25.9.16:8080
 
 	go EchoJSON() // 127.25.23.101:8080
 
 	go qwen.Run(os.Getenv("QWEN_PROXY")) // 127.25.12.16:8080
+
+	go exhentai.Run(os.Getenv("EX_PROXY"))
 
 	//127.24.11.16:8080
 	// 创建 Gin 引擎

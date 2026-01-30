@@ -100,7 +100,7 @@ func ExhProxy(rotator *IPRotator, addr string) {
 		// This ensures that when you change sw.js, the browser sees the change immediately
 		c.Header("Cache-Control", "no-cache, no-store, must-revalidate")
 
-		c.File("sw.js")
+		c.File("./exhentai/sw.js")
 	})
 	r.GET("/failed.html", func(c *gin.Context) {
 		// 1. Force the correct MIME type (Required by some browsers)
@@ -110,7 +110,7 @@ func ExhProxy(rotator *IPRotator, addr string) {
 		// This ensures that when you change sw.js, the browser sees the change immediately
 		c.Header("Cache-Control", "no-cache, no-store, must-revalidate")
 
-		c.File("failed.html")
+		c.File("./exhentai/failed.html")
 	})
 
 	// D. 核心代理逻辑 (包含屏蔽逻辑和内容注入)

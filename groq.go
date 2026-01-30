@@ -361,6 +361,9 @@ func OpenaiProxy(addr string) {
 // 删除了一些配置使得能适配 groq 和 沉浸式翻译
 // 运行在"127.25.11.6:8080" helper.moonchan.xyz
 func OpenaiProxyAlt(addr string) {
+	if addr == "" {
+		return
+	}
 	r := gin.Default()
 
 	// 设置 CORS 头

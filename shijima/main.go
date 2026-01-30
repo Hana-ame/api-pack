@@ -1,3 +1,6 @@
+// wait for test
+// 26.01.30 改回去，checkout还没试
+
 package shijima
 
 import (
@@ -60,17 +63,17 @@ func uploadAndCache(image image.Image, path string) error {
 }
 
 var db, _ = func() (*sql.DB, error) {
-	// CHANGED: Expecting a postgres connection string or URL
-	dsn := os.Getenv("POSTGRES_URL")
-	db, err := sql.Open("postgres", dsn)
+	dsn := os.Getenv("MARIADB")
+	db, err := sql.Open("mysql", dsn)
 	if err != nil {
 		return nil, err
 	}
 
-	db.SetMaxOpenConns(100)
-	db.SetMaxIdleConns(30)
-	db.SetConnMaxLifetime(5 * time.Minute)
-	db.SetConnMaxIdleTime(30 * time.Minute)
+	// 连接池参数
+	db.SetMaxOpenConns(100)                 // 最大活跃连接数
+	db.SetMaxIdleConns(30)                  // 最大空闲连接数
+	db.SetConnMaxLifetime(5 * time.Minute)  // 连接最长存活时间
+	db.SetConnMaxIdleTime(30 * time.Minute) // 空闲连接最长保留时间
 
 	return db, nil
 }()
@@ -105,43 +108,43 @@ type Board struct {
 func getThreadByNo(no int) (*Thread, error) {
 	var thread Thread
 	thread.No = uint(no)
-	// CHANGED: ? -> $1
 	err := db.QueryRow(
 		`SELECT t,n,ts,id,p,txt,r
 		FROM thread
-		WHERE no = $1 AND del >= 0;`,
+		WHERE no = ? AND del >= 0;`,
 		no,
 	).Scan(
 		&thread.T, &thread.N, &thread.Ts, &thread.ID, &thread.P, &thread.Txt, &thread.R,
 	)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if err == sql.ErrNoRows || thread.Del < 0 {
 			return nil, fmt.Errorf("主题不存在")
 		}
 		return nil, fmt.Errorf("数据库查询失败: %w", err)
 	}
 
-	if thread.R != 0 {
-		// CHANGED: ? -> $1
+	if err == nil && thread.R != 0 {
 		err := db.QueryRow(
 			`SELECT del
 			FROM thread
-			WHERE no = $1 AND del >= 0;`,
+			WHERE no = ? AND del >= 0;`,
 			thread.R,
 		).Scan(
 			&thread.Del,
 		)
-		if err != nil {
-			return nil, fmt.Errorf("主帖不存在或已删除")
+		if err != nil || thread.Del < 0 {
+			if err == sql.ErrNoRows || thread.Del < 0 {
+				return nil, fmt.Errorf("主题不存在")
+			}
+			return nil, fmt.Errorf("数据库查询失败: %w", err)
 		}
 	}
 
-	if thread.R == 0 {
-		// CHANGED: ? -> $1
+	if err == nil && thread.R == 0 {
 		err := db.QueryRow(
 			`SELECT replynum
 			FROM board
-			WHERE tid = $1`,
+			WHERE tid = ?`,
 			thread.No,
 		).Scan(
 			&thread.Num,
@@ -157,18 +160,19 @@ func getThreadByNo(no int) (*Thread, error) {
 	return &thread, nil
 }
 
-// 找到回复
+// 获得回复no的最新的5条作为replies
 func getReplies(no, pn int) ([]*Thread, error) {
 	replies := make([]*Thread, 0, pageSize)
-	offset := pn * pageSize
 
-	// CHANGED: ? -> $1, $2, $3
+	offset := pn * (pageSize)
+
+	// 执行分页查询
 	rows, err := db.Query(
 		`SELECT t, n, ts, id, no, p, txt 
          FROM thread 
-         WHERE r = $1 AND del >= 0 
+         WHERE r = ? AND del >= 0 
          ORDER BY no ASC 
-         LIMIT $2 OFFSET $3`,
+         LIMIT ? OFFSET ?`,
 		no, pageSize, offset,
 	)
 	if err != nil {
@@ -176,9 +180,12 @@ func getReplies(no, pn int) ([]*Thread, error) {
 	}
 	defer rows.Close()
 
+	// 遍历结果集
 	for rows.Next() {
 		var t Thread
-		if err := rows.Scan(&t.T, &t.N, &t.Ts, &t.ID, &t.No, &t.P, &t.Txt); err != nil {
+		if err := rows.Scan(
+			&t.T, &t.N, &t.Ts, &t.ID, &t.No, &t.P, &t.Txt,
+		); err != nil {
 			return nil, fmt.Errorf("数据解析失败: %w", err)
 		}
 		replies = append(replies, &t)
@@ -192,26 +199,30 @@ func getReplies(no, pn int) ([]*Thread, error) {
 	return replies, nil
 }
 
-// 找到回复，用在board页面
+// 获得最新的5条作为replies
 func getRepliesPreview(no int) ([]*Thread, error) {
 	replies := make([]*Thread, 0, 5)
-	// CHANGED: ? -> $1
+
+	// 使用 Query 获取多行结果（网页5][网页7）
 	rows, err := db.Query(
 		`SELECT t, n, ts, id, no, p, txt 
         FROM thread 
-        WHERE r = $1 AND del >= 0 
+        WHERE r = ? AND del >= 0 
         ORDER BY no DESC 
-        LIMIT 5`,
+        LIMIT 5`, // 网页6 分页语法参考
 		no,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("数据库查询失败: %w", err)
 	}
-	defer rows.Close()
+	defer rows.Close() // 确保关闭连接（网页7强调）
 
+	// 遍历结果集（网页5][网页7）
 	for rows.Next() {
 		var t Thread
-		if err := rows.Scan(&t.T, &t.N, &t.Ts, &t.ID, &t.No, &t.P, &t.Txt); err != nil {
+		if err := rows.Scan(
+			&t.T, &t.N, &t.Ts, &t.ID, &t.No, &t.P, &t.Txt,
+		); err != nil {
 			return nil, fmt.Errorf("数据解析失败: %w", err)
 		}
 		replies = append(replies, &t)
@@ -228,6 +239,7 @@ func getRepliesPreview(no int) ([]*Thread, error) {
 	// }
 
 	tools.ReverseInPlace(replies)
+
 	return replies, nil
 }
 
@@ -270,24 +282,29 @@ func getThread(tid, pn int) (*Thread, error) {
 // 获得board的pn页的回复
 func getBoardThreads(bid, pn int) ([]*Thread, error) {
 	threads := make([]*Thread, 0, pageSize/2)
-	// CHANGED: ? -> $1, $2, $3
+	// 使用 Query 获取多行结果（网页5][网页7）
 	rows, err := db.Query(
 		`SELECT t.t, t.n, t.ts, t.id, t.no, t.p, t.txt, b.replynum 
 		FROM board AS b
-		INNER JOIN thread AS t ON b.tid = t.no
-		WHERE b.bid = $1 AND t.del >= 0 
+		INNER JOIN thread AS t
+			ON b.tid = t.no
+		WHERE b.bid = ? 
+			AND t.del >= 0 
 		ORDER BY b.last DESC 
-		LIMIT $2 OFFSET $3`,
+		LIMIT ? OFFSET ?`,
 		bid, pageSize/2, (pageSize/2)*pn,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("数据库查询失败: %w", err)
 	}
-	defer rows.Close()
+	defer rows.Close() // 确保关闭连接（网页7强调）
 
+	// 遍历结果集（网页5][网页7）
 	for rows.Next() {
 		var t Thread
-		if err := rows.Scan(&t.T, &t.N, &t.Ts, &t.ID, &t.No, &t.P, &t.Txt, &t.Num); err != nil {
+		if err := rows.Scan(
+			&t.T, &t.N, &t.Ts, &t.ID, &t.No, &t.P, &t.Txt, &t.Num,
+		); err != nil {
 			return nil, fmt.Errorf("数据解析失败: %w", err)
 		}
 		threads = append(threads, &t)
@@ -366,9 +383,9 @@ func getMaxNo() (int, error) {
 }
 
 func postThreadToBoard(bid, tid int) (int, error) {
-	// CHANGED: INSERT IGNORE -> ON CONFLICT DO NOTHING
+	// 插入到板中
 	result, err := db.Exec(
-		"INSERT INTO board (bid, tid) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+		"INSERT IGNORE  INTO board (bid, tid) VALUES (?, ?)",
 		bid, tid,
 	)
 	if err != nil {
@@ -384,45 +401,40 @@ func postThreadToBoard(bid, tid int) (int, error) {
 }
 
 func updateReplyNum(tid int) error {
-	// CHANGED: ? -> $1, CURRENT_TIMESTAMP() -> now()
 	_, err := db.Exec(
 		`UPDATE board 
 		SET replynum = (
 			SELECT COUNT(*) 
 			FROM thread
-			WHERE r = $1 AND del >= 0
+			WHERE r = ? AND del >= 0
 		),
-		last = CURRENT_TIMESTAMP
-		WHERE tid = $2`,
+		last = CURRENT_TIMESTAMP()
+		WHERE tid = ?`,
 		tid, tid,
 	)
+
 	return err
 }
 
 func postThread(thread *Thread, bid int) (int64, error) {
-	// CHANGED: PostgreSQL does not support LastInsertId().
-	// We must use "RETURNING no" and QueryRow.
-	var lastInsertID int64
-	query := `
-		INSERT INTO thread (t, n, id, p, txt, r, del, c, ip) 
-		VALUES ($1, $2, $3, $4, $5, $6, 0, $7, $8) 
-		RETURNING no`
 
-	err := db.QueryRow(query,
+	// 执行插入
+	result, err := db.Exec(
+		"INSERT INTO thread (t, n, id, p, txt, r, del, c, ip) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)",
 		thread.T, thread.N, thread.ID, thread.P, thread.Txt, thread.R, thread.C, thread.IP,
-	).Scan(&lastInsertID)
-
+	)
 	if err != nil {
 		return -1, fmt.Errorf("插入主题失败: %w", err)
 	}
 
 	// 获取插入的ID
-	// lastInsertID, err = result.LastInsertId()
-	// if err != nil {
-	// 	return -1, fmt.Errorf("获取插入ID失败: %w", err)
-	// }
+	lastInsertID, err := result.LastInsertId()
+	if err != nil {
+		return -1, fmt.Errorf("获取插入ID失败: %w", err)
+	}
 	thread.No = uint(lastInsertID)
 
+	// 如果指定了bid，则添加到板中
 	if thread.R == 0 && bid > 0 {
 		_, err = postThreadToBoard(bid, int(lastInsertID))
 		if err != nil {
@@ -430,6 +442,7 @@ func postThread(thread *Thread, bid int) (int64, error) {
 		}
 	}
 
+	// 如果是回复，那么更新replynum和lastreply（自动）
 	if thread.R != 0 {
 		if err := updateReplyNum(int(thread.R)); err != nil {
 			return -1, fmt.Errorf("更新回复数失败: %w", err)
@@ -490,9 +503,9 @@ func post(c *gin.Context) {
 }
 
 func deleteThread(no int, id, ip string) error {
-	// CHANGED: ? -> $1, $2, $3
+	// 执行插入
 	_, err := db.Exec(
-		"UPDATE thread SET del = -1 WHERE no = $1 AND (id = $2 OR ip = $3)",
+		"UPDATE thread SET del = -1 WHERE no = ? AND (id = ? OR ip = ?)",
 		no, id, ip,
 	)
 	return err

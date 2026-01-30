@@ -1,6 +1,10 @@
+// wait for test
+// 26.01.30 改回去，checkout还没试
+
 package shijima
 
 import (
+	"database/sql"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -22,10 +26,9 @@ func getReactions(tid int, myIP string) (*orderedmap.OrderedMap, string, error) 
 	rows, err := db.Query(
 		`SELECT ip, reaction
 		FROM reactions
-		WHERE tid = $1`, // Changed from ? to $1
+		WHERE tid = ?`,
 		tid,
 	)
-
 	if err != nil {
 		return nil, "", fmt.Errorf("查询失败: %w", err)
 	}
@@ -67,36 +70,66 @@ func getReactions(tid int, myIP string) (*orderedmap.OrderedMap, string, error) 
 //
 //	如果 reaction 为空字符串或特定“取消”值（例如 "none" 或 "cancel"），则表示取消/删除反馈。
 func setReaction(tid int, myIP string, reaction string) error {
+	// 启动事务，确保操作的原子性
 	tx, err := db.Begin()
 	if err != nil {
 		return fmt.Errorf("无法开始事务: %w", err)
 	}
-	defer tx.Rollback()
-
-	isCancelling := (reaction == "" || reaction == "none")
-
-	if isCancelling {
-		// 1. Logic for Deleting
-		_, err = tx.Exec(`DELETE FROM reactions WHERE tid = $1 AND ip = $2`, tid, myIP)
-		if err != nil {
-			return fmt.Errorf("删除reaction失败: %w", err)
+	defer tx.Rollback() //：如果函数在Commit之前返回错误，会自动回滚
+	defer func() {
+		if r := recover(); r != nil { // 捕获 panic
+			tx.Rollback()
+			panic(r) // 重新抛出 panic
+		} else if err != nil { // 如果存在错误 (err != nil)，则回滚
+			tx.Rollback()
 		}
-	} else {
-		// 2. Logic for UPSERT (Insert or Update if exists)
-		// This requires a UNIQUE constraint on (tid, ip) in your table schema
-		query := `
-			INSERT INTO reactions (tid, ip, reaction) 
-			VALUES ($1, $2, $3)
-			ON CONFLICT (tid, ip) 
-			DO UPDATE SET reaction = EXCLUDED.reaction 
-			WHERE reactions.reaction IS DISTINCT FROM EXCLUDED.reaction`
+	}()
 
-		_, err = tx.Exec(query, tid, myIP, reaction)
-		if err != nil {
-			return fmt.Errorf("写入reaction失败: %w", err)
-		}
+	// 1. 查询用户是否已对该 tid 做出反应
+	var oldReaction string
+	// 使用 ForUpdate 锁住行，防止并发更新问题（某些数据库可能不支持，如 SQLite）
+	// For SQLite, a simple SELECT is usually fine as it uses table-level locks.
+	// For MySQL/PostgreSQL, consider "FOR UPDATE"
+	err = tx.QueryRow(`SELECT reaction FROM reactions WHERE tid = ? AND ip = ?`, tid, myIP).Scan(&oldReaction)
+
+	oldReactionFound := true
+	if err == sql.ErrNoRows {
+		oldReactionFound = false
+	} else if err != nil {
+		return fmt.Errorf("查询现有reaction失败: %w", err)
 	}
 
+	// 判断新的 reaction 是否意味着取消/删除
+	// 定义一个取消指令，这里以空字符串或 "none" 为例
+	isCancelling := (reaction == "" || reaction == "none")
+
+	if oldReactionFound {
+		if isCancelling {
+			// 用户有旧 reaction，现在想取消它
+			_, err = tx.Exec(`DELETE FROM reactions WHERE tid = ? AND ip = ?`, tid, myIP)
+			if err != nil {
+				return fmt.Errorf("删除reaction失败: %w", err)
+			}
+		} else if oldReaction != reaction {
+			// 用户有旧 reaction，现在想更新为新的不同 reaction
+			_, err = tx.Exec(`UPDATE reactions SET reaction = ? WHERE tid = ? AND ip = ?`, reaction, tid, myIP)
+			if err != nil {
+				return fmt.Errorf("更新reaction失败: %w", err)
+			}
+		}
+		// else if oldReaction == reaction, do nothing, it's already set.
+	} else { // 没有找到旧 reaction
+		if !isCancelling {
+			// 用户没有 reaction，现在想添加一个新的 reaction
+			_, err = tx.Exec(`INSERT INTO reactions (tid, ip, reaction) VALUES (?, ?, ?)`, tid, myIP, reaction)
+			if err != nil {
+				return fmt.Errorf("插入reaction失败: %w", err)
+			}
+		}
+		// else if isCancelling and no old reaction, do nothing (cannot cancel something that doesn't exist)
+	}
+
+	// 如果所有操作都成功，提交事务
 	return tx.Commit()
 }
 
