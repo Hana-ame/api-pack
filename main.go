@@ -4,21 +4,21 @@
 package main
 
 import (
+	"fmt"
 	"net"
 	"net/http"
 	"os"
-	"strconv"
+	"strings"
 	"time"
 
 	_ "github.com/joho/godotenv/autoload"
 
+	"github.com/Hana-ame/api-pack/exhentai"
 	"github.com/Hana-ame/api-pack/qwen"
 	shijima "github.com/Hana-ame/api-pack/shijima"
 	"github.com/Hana-ame/api-pack/tools/debug"
-	myfetch "github.com/Hana-ame/api-pack/tools/my_fetch/v2"
 	middleware "github.com/Hana-ame/api-pack/tools/my_gin_middleware"
 	tools "github.com/Hana-ame/api-pack/tools/utils"
-	"github.com/Hana-ame/api-pack/tools/wasm/v"
 	"github.com/gin-gonic/gin"
 )
 
@@ -28,7 +28,14 @@ func main() {
 	http.DefaultClient = &http.Client{
 		Transport: &http.Transport{
 			DialContext: (&net.Dialer{
-				LocalAddr: &net.TCPAddr{IP: net.IPv4(142, 171, 157, 74)},
+				LocalAddr: func() *net.TCPAddr {
+					if ipStr := os.Getenv("LOCAL_IP"); ipStr != "" {
+						if ip := net.ParseIP(ipStr); ip != nil {
+							return &net.TCPAddr{IP: ip}
+						}
+					}
+					return nil // 默认让系统选择，否则 127.0.0.2 无法访问公网
+				}(),
 				Timeout:   15 * time.Second,
 				KeepAlive: 90 * time.Second,
 			}).DialContext,
@@ -38,9 +45,7 @@ func main() {
 		},
 		Timeout: 30 * time.Second,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			// This special error stops the redirect but returns nil error
-			// and the 301 response object to the caller
-			return http.ErrUseLastResponse
+			return http.ErrUseLastResponse // 保持原样，将 301/302 转发给客户端
 		},
 	}
 
@@ -62,7 +67,8 @@ func main() {
 		go shijima.Run(os.Getenv("SHIJIMA"))
 	}
 
-	// go EhProxy()      //127.25.23.6:8080
+	go exhentai.Run(os.Getenv("EX_PROXY"))
+	// go EhProxy() //127.25.23.6:8080
 	// go pastejson.Run(os.Getenv("PASTEJSON"), os.Getenv("PASTEJSON_CONN_STR")) // 127.25.9.10:8080
 
 	// go TwimgProxy(os.Getenv("TWIMG")) // 127.25.9.15:8080
@@ -80,91 +86,110 @@ func main() {
 	r.Use(middleware.CORSMiddleware())
 	r.Use(middleware.ProxyMiddleware())
 
-	// 定义一个简单的 GET 路由
+	// 2. 路由处理函数
 	r.Any("/*any", func(c *gin.Context) {
-		c.Header("X-Debug-Request-Host", c.Request.Host)     // 要设置 Host $http_host
-		c.Header("X-Debug-Header-Host", c.GetHeader("Host")) // never
-
-		if c.Request.Body != nil {
-			defer c.Request.Body.Close()
-		}
-
-		v := v.V(c.Request.URL.Path)
-		if strconv.Itoa(int(v)) != c.Query("v") {
-			// 届时添加阻止内容
-		}
-
-		// 读取 URL 参数
 		path := c.Request.URL.Path
-
 		host := tools.Or(c.Query("proxy_host"), c.GetHeader("X-Host"))
 
+		// --- 参数校验 ---
 		if host == "" {
 			if path == "/favicon.ico" {
 				c.Redirect(http.StatusFound, "https://moonchan.xyz/favicon.ico")
-				return
 			} else {
-				c.Header("X-Error", "host not found")
 				c.Redirect(http.StatusFound, "https://page.moonchan.xyz/")
-				return
 			}
-		} else if c.Request.Host == host {
-			c.Header("X-Error", c.Request.Host)
-			c.Redirect(http.StatusFound, "https://moonchan.xyz/")
 			return
 		}
 
-		header := tools.NewHeader(c.Request.Header)
-
-		header.Set("Host", host)
-		header.Set("Origin", tools.Or(c.Query("proxy_origin"), c.GetHeader("X-Origin"), c.GetHeader("Origin")))
-		header.Set("Referer", tools.Or(c.Query("proxy_referer"), c.GetHeader("X-Referer") /*c.GetHeader("Referer")*/))
-		header.Set("Cookie", tools.Or(c.Query("proxy_cookie"), c.GetHeader("X-Cookie"), header.Get("Cookie")))
-
+		// 构造新的 URL
 		scheme := tools.Or(c.Query("proxy_scheme"), c.GetHeader("X-Scheme"), "https")
-
 		search := c.Request.URL.Query()
+		// 删除代理专用参数，避免传给后端
 		search.Del("proxy_host")
 		search.Del("proxy_origin")
 		search.Del("proxy_referer")
 		search.Del("proxy_cookie")
+		search.Del("proxy_scheme")
 
-		newUrl := scheme + "://" + host + path + tools.Ternary(len(search) > 0, "?", "") + search.Encode()
+		targetURL := fmt.Sprintf("%s://%s%s", scheme, host, path)
+		if len(search) > 0 {
+			targetURL += "?" + search.Encode()
+		}
 
-		resp, err := myfetch.Fetch(c.Request.Method, newUrl,
-			(header.Header), c.Request.Body)
-		if tools.AbortWithError(c, 500, err) {
+		// --- 构造请求 ---
+		// 必须使用 http.NewRequest 来手动控制
+		req, err := http.NewRequest(c.Request.Method, targetURL, c.Request.Body)
+		if err != nil {
+			c.AbortWithError(http.StatusInternalServerError, err)
+			return
+		}
+
+		// --- 处理请求头 (Request Headers) ---
+		for k, vv := range c.Request.Header {
+			// 跳过逐段传输头 (Hop-by-hop headers)
+			if isHopByHop(k) {
+				continue
+			}
+			for _, v := range vv {
+				req.Header.Add(k, v)
+			}
+		}
+
+		// 关键：设置正确的 Host
+		// 在 Go 中，req.Header.Set("Host", ...) 会被忽略，必须直接设置 req.Host
+		req.Host = host
+
+		// 覆盖特定的 Header
+		req.Header.Set("Origin", tools.Or(c.Query("proxy_origin"), c.GetHeader("X-Origin")))
+		req.Header.Set("Referer", tools.Or(c.Query("proxy_referer"), c.GetHeader("X-Referer")))
+		if cookie := tools.Or(c.Query("proxy_cookie"), c.GetHeader("X-Cookie")); cookie != "" {
+			req.Header.Set("Cookie", cookie)
+		}
+
+		// --- 执行请求 ---
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			c.String(http.StatusBadGateway, "Proxy Error: %v", err)
 			return
 		}
 		defer resp.Body.Close()
 
-		// 为什么自带的方法这么贵物
-		// exposeHeaders := make([]string, 0, len(resp.Header)) // move to middle ware
-		for k, vs := range resp.Header {
-			// exposeHeaders = append(exposeHeaders, k)
-			if c.Writer.Header().Get(k) != "" {
+		// --- 转发响应头 (Response Headers) ---
+		for k, vv := range resp.Header {
+			if isHopByHop(k) {
 				continue
 			}
-			for _, v := range vs {
+			for _, v := range vv {
 				c.Writer.Header().Add(k, v)
 			}
 		}
-		c.Writer.Header().Set("cross-origin-resource-policy", "cross-origin")
 
-		// slices.Sort(exposeHeaders)
-		// c.Writer.Header().Add("Access-Control-Expose-Headers", strings.Join(exposeHeaders, ", "))
+		// 自定义 Header
+		c.Writer.Header().Set("X-Proxy-Status", "success")
+		c.Writer.Header().Set("Cross-Origin-Resource-Policy", "cross-origin")
 
-		c.DataFromReader(resp.StatusCode, resp.ContentLength, resp.Header.Get("Content-Type"), resp.Body, map[string]string{
-			"X-Host":    host,
-			"X-Origin":  header.Get("Origin"),
-			"X-Referer": header.Get("Referer"),
-			"X-Cookie":  header.Get("Cookie"),
-			"V":         strconv.Itoa(int(v)),
-		})
+		// --- 返回响应内容 ---
+		c.DataFromReader(resp.StatusCode, resp.ContentLength, resp.Header.Get("Content-Type"), resp.Body, nil)
 	})
+}
 
-	// 启动服务器
-	if os.Getenv("PROXY") != "" {
-		r.Run(os.Getenv("PROXY")) // 在 8080 端口启动服务
+// 辅助函数：过滤 Hop-by-hop 头
+func isHopByHop(header string) bool {
+	hopHeaders := []string{
+		"Connection",
+		"Proxy-Connection",
+		"Keep-Alive",
+		"Proxy-Authenticate",
+		"Proxy-Authorization",
+		"Te",
+		"Trailer",
+		"Transfer-Encoding",
+		"Upgrade",
 	}
+	for _, h := range hopHeaders {
+		if strings.EqualFold(header, h) {
+			return true
+		}
+	}
+	return false
 }

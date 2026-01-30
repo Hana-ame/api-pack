@@ -36,7 +36,7 @@ fi
 #     exit 1
 # fi
 
-~/script/scp.sh -4 api-pack-new root@cloudcone.moonchan.xyz:~/temp
+~/script/scp.sh -4 api-pack-new root@vps.moonchan.xyz:~/temp
 # 检查 SCP 是否成功
 if [ $? -ne 0 ]; then
     echo "文件传输失败，退出。"

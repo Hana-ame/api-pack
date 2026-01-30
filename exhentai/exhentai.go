@@ -24,7 +24,14 @@ import (
 var proxyClient = &http.Client{
 	Transport: &http.Transport{
 		DialContext: (&net.Dialer{
-			LocalAddr: &net.TCPAddr{IP: net.IPv4(142, 171, 157, 74)},
+			LocalAddr: &net.TCPAddr{IP: func() net.IP {
+				if ipStr := os.Getenv("LOCAL_IP"); ipStr != "" {
+					if ip := net.ParseIP(ipStr); ip != nil {
+						return ip
+					}
+				}
+				return nil // 默认让系统选择，否则 127.0.0.2 无法访问公网
+			}()},
 			Timeout:   3 * time.Second,
 			KeepAlive: 3 * time.Second,
 		}).DialContext,
