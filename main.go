@@ -172,6 +172,8 @@ func main() {
 		// --- 返回响应内容 ---
 		c.DataFromReader(resp.StatusCode, resp.ContentLength, resp.Header.Get("Content-Type"), resp.Body, nil)
 	})
+
+	r.Run(os.Getenv("PROXY"))
 }
 
 // 辅助函数：过滤 Hop-by-hop 头
