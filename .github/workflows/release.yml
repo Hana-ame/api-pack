@@ -11,9 +11,8 @@ jobs:
     name: Build Binary
     runs-on: ubuntu-latest
     strategy:
-      # 矩阵模式：同时构建 Linux 和 Windows 的 AMD64 版本
       matrix:
-        goos: [linux, windows]
+        goos: [linux]
         goarch: [amd64]
 
     steps:
