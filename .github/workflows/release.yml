@@ -39,7 +39,7 @@ jobs:
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
-          # CGO_ENABLED: 0
+          CGO_ENABLED: 0
         run: |
           # 定义文件名，Windows 需要加上 .exe 后缀
           BINARY_NAME=myapp-${{ matrix.goos }}-${{ matrix.goarch }}
