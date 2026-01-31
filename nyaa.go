@@ -1,5 +1,7 @@
 // 26.01.11
 // 适配myfetchv2
+// 26.01.31
+// localTCPAddrFromEnv() 本地地址出错
 
 package main
 
@@ -30,7 +32,7 @@ func NyaaProxy() {
 		jar.SetCookies(u, []*http.Cookie{})
 		tr := &http.Transport{
 			DialContext: (&net.Dialer{
-				LocalAddr: &net.TCPAddr{IP: net.IPv4(142, 171, 157, 74)},
+				LocalAddr: localTCPAddrFromEnv(),
 				Timeout:   15 * time.Second,
 				KeepAlive: 90 * time.Second,
 			}).DialContext,

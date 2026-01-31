@@ -22,20 +22,23 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+func localTCPAddrFromEnv() *net.TCPAddr {
+	if ipStr := os.Getenv("LOCAL_IP"); ipStr != "" {
+		if ip := net.ParseIP(ipStr); ip != nil {
+			return &net.TCPAddr{IP: ip}
+		}
+	}
+	// 返回 nil 默认让系统选择（解决 127.0.0.2 无法访问公网的问题）
+	return nil
+}
+
 func main() {
 
 	// 我不行了。
 	http.DefaultClient = &http.Client{
 		Transport: &http.Transport{
 			DialContext: (&net.Dialer{
-				LocalAddr: func() *net.TCPAddr {
-					if ipStr := os.Getenv("LOCAL_IP"); ipStr != "" {
-						if ip := net.ParseIP(ipStr); ip != nil {
-							return &net.TCPAddr{IP: ip}
-						}
-					}
-					return nil // 默认让系统选择，否则 127.0.0.2 无法访问公网
-				}(),
+				LocalAddr: localTCPAddrFromEnv(),
 				Timeout:   15 * time.Second,
 				KeepAlive: 90 * time.Second,
 			}).DialContext,
