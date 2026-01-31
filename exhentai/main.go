@@ -20,7 +20,7 @@ var defaultClient = &http.Client{
 	Transport: &http.Transport{
 		DialContext: (&net.Dialer{
 			LocalAddr: &net.TCPAddr{
-				IP:   net.IPv4(142, 171, 157, 74),
+				IP:   nil,
 				Port: 0,
 			},
 			Timeout:   3 * time.Second,
