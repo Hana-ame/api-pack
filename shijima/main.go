@@ -671,7 +671,7 @@ func Run(addr string) error {
 	r.GET("/api/v2/new_reactions", getNewReactions)
 	// r.GET("/api/v2/reactions", checkID, GetReactionsBatchHandler) // no longer used
 	r.GET("/api/v2/cover", getRandomRecordHandler)
-	r.GET("/api/v2/bilicover", getRandomRecordHandlerBili)
+	r.GET("/api/v2/bilicover", getRandomRecordHandlerBili) // 为啥在这。不知道
 	r.POST("/api/v2/cover", checkID, addURLHandler)
 	r.GET("/api/v2/random", getRandomHandler)
 	r.POST("/api/v2/random", addRandomHandler)
