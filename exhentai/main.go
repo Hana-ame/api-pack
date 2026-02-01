@@ -217,9 +217,21 @@ func (s *clientSlot) execute(method, url string, header http.Header, body io.Rea
 	}
 
 	// 4. 发起请求
-	return current.Fetch(method, url, header, body)
+	resp, err := current.Fetch(method, url, header, body)
+	if err != nil {
+		atomic.AddInt64(&s.usageCounter, 100) // add 100 to pass a non-work ip quickly
+		return resp, err
+	}
+
+	resp.Header.Add("X-SERVED-BY", current.Addr.String())
+	return resp, err
+
+	// old logic
+	// // 4. 发起请求
+	// return current.Fetch(method, url, header, body)
 }
 
+// do not use.
 func (s *clientSlot) executeWithRetry(method, url string, header http.Header, body io.Reader) (*http.Response, error) {
 	var resp *http.Response
 	var err error
@@ -381,11 +393,26 @@ func (r *IPRotator) Fetch(method, url string, header http.Header, body io.Reader
 
 	// 2. 委托给选中的槽位执行
 	// return selectedSlot.executeWithRetry(method, url, header, body)
-	// return selectedSlot.execute(method, url, header, body)
-	resp, err := selectedSlot.executeWithRetry(method, url, header, body)
+	return selectedSlot.execute(method, url, header, body)
+}
+
+func (r *IPRotator) FetchWithRetry(method, url string, header http.Header, body io.Reader) (*http.Response, error) {
+
+	resp, err := r.Fetch(method, url, header, body)
+
+	if err != nil {
+		for cnt := 0; cnt < 3; cnt++ {
+			resp, err = r.Fetch(method, url, header, body)
+			if err == nil && resp.StatusCode < 500 {
+				return resp, nil // Success!
+			}
+		}
+	}
+
 	if err != nil && r.backupClient != nil {
 		return r.backupClient.Fetch(method, url, header, body)
 	}
+
 	return resp, err
 }
 
