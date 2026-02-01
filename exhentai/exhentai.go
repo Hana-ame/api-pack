@@ -2,6 +2,7 @@ package exhentai
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -500,8 +501,60 @@ func copyHeaders(c *gin.Context, h http.Header) {
 		if k == "Content-Length" || k == "Content-Encoding" {
 			continue
 		}
+
+		// 特殊处理Content-Disposition头部，修复编码问题
+		if k == "Content-Disposition" {
+			for _, v := range vs {
+				// 尝试修复编码问题
+				fixedValue := fixContentDisposition(v)
+				c.Writer.Header().Add(k, fixedValue)
+			}
+			continue
+		}
+
 		for _, v := range vs {
 			c.Writer.Header().Add(k, v)
 		}
 	}
+}
+
+// 修复Content-Disposition头部的编码问题
+func fixContentDisposition(header string) string {
+	// 检查是否包含乱码字符
+	if strings.Contains(header, "ã") || strings.Contains(header, "ã") {
+		// 提取文件名部分
+		if idx := strings.Index(header, "filename="); idx != -1 {
+			filenamePart := header[idx+9:] // "filename=" 长度是9
+
+			// 如果文件名被引号包围
+			if strings.HasPrefix(filenamePart, "\"") {
+				filenamePart = filenamePart[1:]
+				if endIdx := strings.Index(filenamePart, "\""); endIdx != -1 {
+					filenamePart = filenamePart[:endIdx]
+				}
+			}
+
+			// 解码乱码（假设是UTF-8被错误解析为ISO-8859-1）
+			decodedFilename := fixUTF8Mojibake(filenamePart)
+
+			// 使用RFC 5987编码规范
+			return fmt.Sprintf(`attachment; filename="%s"; filename*=UTF-8''%s`,
+				url.PathEscape(decodedFilename),
+				url.PathEscape(decodedFilename))
+		}
+	}
+	return header
+}
+
+// 修复UTF-8乱码（双重编码问题）
+func fixUTF8Mojibake(s string) string {
+	// 假设字符串是UTF-8被错误地解释为ISO-8859-1
+	// 首先将字符串转换为字节（作为ISO-8859-1）
+	isoBytes := make([]byte, len(s))
+	for i, r := range s {
+		isoBytes[i] = byte(r)
+	}
+
+	// 然后将这些字节解码为UTF-8
+	return string(isoBytes)
 }
