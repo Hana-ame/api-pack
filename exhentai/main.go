@@ -50,7 +50,7 @@ const (
 	// DefaultCleanupDelay 删除旧 IP 的延迟时间
 	DefaultCleanupDelay = 6 * time.Second
 	// DefaultPoolSize 默认并发 IP 数量
-	DefaultPoolSize = 5
+	DefaultPoolSize = 3
 )
 
 // -------------------------------------------------------
