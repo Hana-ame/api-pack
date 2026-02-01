@@ -1,5 +1,7 @@
 // 26.01.11
 // 适配myfetchv2
+// 26.01.31
+// localTCPAddrFromEnv() 本地地址出错
 
 package main
 

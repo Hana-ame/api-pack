@@ -61,6 +61,7 @@ var (
 )
 
 func main() {
+
 	r := gin.Default()
 
 	// CORS Middleware (Allow frontend access)

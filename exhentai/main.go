@@ -360,6 +360,7 @@ func NewIPRotator(manager *myfetch.Manager, poolSize int, backupIP string) (*IPR
 					},
 				},
 			}
+			log.Println("IPRotator backup IP ready", rotator.backupClient, addr, backupIP)
 		}
 	}
 

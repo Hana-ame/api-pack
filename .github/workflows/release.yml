@@ -4,8 +4,7 @@ name: Build and Release
 on:
   push:
     tags:
-      - 'v*'
-
+      - "v*"
 jobs:
   build:
     name: Build Binary
@@ -27,7 +26,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.25.5' # 指定你的 Go 版本
+          go-version: "1.25.5" # 指定你的 Go 版本
           cache: true # 开启缓存，加快后续构建速度
 
       - name: Install dependencies
@@ -46,10 +45,10 @@ jobs:
           if [ "${{ matrix.goos }}" = "windows" ]; then
             BINARY_NAME="${BINARY_NAME}.exe"
           fi
-          
+
           # 执行编译
           go build -v -o "$BINARY_NAME" .
-          
+
           # 存储文件名供后续步骤使用
           echo "BINARY_NAME=$BINARY_NAME" >> $GITHUB_ENV
 
