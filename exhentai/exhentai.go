@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -41,6 +42,15 @@ var proxyClient = &http.Client{
 	},
 	Timeout: 10 * time.Second,
 }
+
+// 预编译正则，提高性能
+var (
+	reUploader = regexp.MustCompile(`^/uploader/.*`)
+	reTag      = regexp.MustCompile(`^/tag/.*`)
+	reZ        = regexp.MustCompile(`^/z/.*`)
+	reImage    = regexp.MustCompile(`^/s/[0-9a-f]+/\d+-\d+`)
+	reGallery  = regexp.MustCompile(`^/g/\d+/[0-9a-f]+(/.*)?`)
+)
 
 // 配置常量
 // var (
@@ -122,105 +132,97 @@ func ExhProxy(rotator *IPRotator, addr string) {
 // --- 中间件部分 ---
 
 // 访问控制中间件
+// 访问控制中间件
 func (p *ProxyHandler) accessControlMiddleware() gin.HandlerFunc {
-	// 预定义一些拒绝访问的敏感路径或关键词
-	forbiddenKeywords := []string{
-		"/.git/", "/.env/", "/.svn/", "/.vscode/", "/.well-known/",
-		"/phpmyadmin/", "/wp-admin/", "/wp-content/",
-		"/config/", "/backup/", "/etc/passwd/",
-		"/actuator/",
-		"/../",
-		"/.streamlit/", "/ipfs/",
-		"/[object request]", "/sdk/", "/app/", "/template/", "/addons/", "/login/", "/portal/", "/home/", "/api/",
+	// 1. 定义分类白名单
+	categories := []string{
+		"/doujinshi", "/manga", "/artistcg", "/gamecg", "/non-h",
+		"/imageset", "/cosplay", "/asianporn", "/misc", "/western",
 	}
 
-	// 预定义非法后缀
-	forbiddenSuffixes := []string{
-		".cgi", ".asp", ".aspx", ".jsp", ".jspx",
-		".sh", ".py", ".pl", ".sql", ".bak", ".log", ".swp",
-		".env", ".dist", ".environment", ".do", ".dockerignore", ".txt", ".json", ".yml", ".ini", ".gradle", ".backup", ".old",
-	}
-
-	// 3. 预定义精确匹配的非法路径 (添加了日志中出现的 DoH 相关路径)
-	forbiddenExact := []string{
-		"/1", "/fb", "/fwc", "/fzh", "/via_inject_blocker.css", "/aaabbbccc",
-		"/.env", "/.svn",
-		"/config", "/backup", "/etc/passwd", "/actuator",
-		"/g/", "/s/",
-		"/fullimg", "/mytags", "/uconfig.php",
-		"/login",
-		"/dns-query", "/query", "/resolve", // 屏蔽常见的 DoH 路径
-		"/.well-known",
-		"/manifest.json", // 不是在这里用的
-		"/phpinfo",
+	// 2. 定义系统必要路径白名单 (js, css, logo 等)
+	systemPaths := []string{
+		"/", "/sw.js", "/favicon.ico", "/manifest.json", "/logo192.png", "/failed.html",
 	}
 
 	return func(c *gin.Context) {
-		// 使用 Path 而不是 RequestURI，Path 不包含查询参数，更安全
+		// 获取不带参数的路径并转小写
 		path := strings.ToLower(c.Request.URL.Path)
 
-		// 1. 静态资源与特殊参数放行 (保持原样)
-		if c.Query("redirect_to") != "" || strings.HasPrefix(path, "/static/") {
-			c.Next()
-			return
+		// --- A. 白名单放行逻辑 ---
+		isWhite := false
+
+		// 1. 首页及系统文件
+		if slices.Contains(systemPaths, path) {
+			isWhite = true
 		}
 
-		// 2. 路径遍历防护 (Basic Directory Traversal)
+		// 2. 十大分类
+		if !isWhite && slices.Contains(categories, path) {
+			isWhite = true
+		}
+
+		// 3. PHP 文件 (通配 *.php)
+		if !isWhite && strings.HasSuffix(path, ".php") {
+			isWhite = true
+		}
+
+		// 4. 正则匹配: uploader, tag, gallery, image
+		if !isWhite {
+			if reUploader.MatchString(path) ||
+				reTag.MatchString(path) ||
+				reZ.MatchString(path) ||
+				reImage.MatchString(path) ||
+				reGallery.MatchString(path) {
+				isWhite = true
+			}
+		}
+
+		// 5. 内部代理资源路径 (exhentai 资源和 static 资源)
+		if !isWhite && (strings.HasPrefix(path, "/exhentai/") || strings.HasPrefix(path, "/static/")) {
+			isWhite = true
+		}
+
+		// --- B. 拦截逻辑 ---
+		// 如果不在白名单内，直接拦截
+		if !isWhite {
+			// 如果有 redirect_to 参数，说明是点击了某些跳转，可以考虑放行
+			if c.Query("redirect_to") == "" {
+				c.AbortWithStatus(http.StatusNotFound) // 没在白名单里的一律 404
+				return
+			}
+		}
+
+		// --- C. 基础防护 (即使在白名单，也要防止路径遍历) ---
 		if strings.Contains(path, "..") {
 			c.AbortWithStatus(http.StatusForbidden)
 			return
 		}
 
-		// 3. 常见攻击路径/关键词屏蔽
-		for _, keyword := range forbiddenKeywords {
-			if strings.Contains(path, keyword) {
-				c.AbortWithStatus(http.StatusForbidden)
-				return
-			}
-		}
-
-		// 4. 非法脚本后缀屏蔽 (.cgi, .asp 等)
-		for _, suffix := range forbiddenSuffixes {
-			if strings.HasSuffix(path, suffix) {
-				c.AbortWithStatus(http.StatusForbidden)
-				return
-			}
-		}
-
-		// 5. 功能级封禁 (保持原样)
-		if slices.Contains(forbiddenExact, path) {
-			c.AbortWithStatus(http.StatusForbidden)
-			return
-		}
-
-		// 6. PHP 攻击防护 (白名单模式)
-		// 允许访问的 PHP 列表
-		allowPHP := []string{"/gallerytorrents.php", "/favorites.php", "/torrents.php", "/gallerypopups.php", "/api.php"}
-		allowedPHP := false
+		// --- D. PHP 细化过滤 (可选：如果你只想放行特定的 PHP) ---
 		if strings.HasSuffix(path, ".php") {
-			for _, a := range allowPHP {
-				if path == a {
-					allowedPHP = true
-					break
-				}
+			allowPHP := []string{
+				"/gallerytorrents.php", "/favorites.php", "/torrents.php",
+				"/gallerypopups.php", "/api.php", "/uconfig.php", "/archiver.php",
 			}
-			if !allowedPHP {
+			if !slices.Contains(allowPHP, path) {
 				c.AbortWithStatus(http.StatusForbidden)
 				return
 			}
 		}
 
-		// 7. GeoIP 屏蔽 (保持原样)
+		// --- E. GeoIP 屏蔽 (保留你的原逻辑) ---
 		country := c.GetHeader("Cf-Ipcountry")
 		acceptLang := strings.ToLower(c.GetHeader("accept-language"))
 		if !strings.Contains(acceptLang, "zh") && !slices.Contains([]string{"CN"}, country) {
-			c.String(http.StatusForbidden, "请使用大陆IP.\nPlease ensure you're in China Mainland\n中国・大陸以外のアクセスは制限されています\n Current Region: "+country)
+			c.String(http.StatusForbidden, "Restricted Region: "+country)
 			c.Abort()
 			return
 		}
 
-		// 不是 allowed php，而且不是 get 的情况
-		if !allowedPHP && c.Request.Method != http.MethodGet {
+		// --- F. 方法限制 ---
+		// 只有 .php 允许 POST，其他一律 GET
+		if !strings.HasSuffix(path, ".php") && c.Request.Method != http.MethodGet {
 			c.AbortWithStatus(http.StatusForbidden)
 			return
 		}
