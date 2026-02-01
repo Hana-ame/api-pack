@@ -219,7 +219,7 @@ func (s *clientSlot) execute(method, url string, header http.Header, body io.Rea
 	// 4. 发起请求
 	resp, err := current.Fetch(method, url, header, body)
 	if err != nil {
-		atomic.AddInt64(&s.usageCounter, 100) // add 100 to pass a non-work ip quickly
+		atomic.AddInt64(&s.usageCounter, DefaultRotationThreshold/3) // add 100 to pass a non-work ip quickly
 		return resp, err
 	}
 
