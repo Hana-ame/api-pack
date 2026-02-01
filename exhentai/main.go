@@ -8,12 +8,14 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	myfetch "github.com/Hana-ame/api-pack/tools/my_fetch/v2"
 	"github.com/joho/godotenv"
+	tls "github.com/refraction-networking/utls"
 )
 
 var defaultClient = &http.Client{
@@ -35,6 +37,11 @@ var defaultClient = &http.Client{
 	},
 }
 
+// 定义上下文键
+type contextKey string
+
+const fingerprintKey contextKey = "tls_fingerprint"
+
 // client 保持不变
 type client struct {
 	*myfetch.Client
@@ -51,7 +58,49 @@ const (
 )
 
 // -------------------------------------------------------
-// ClientSlot: 代表连接池中的一个“槽位”，负责管理单个IP的生命周期
+// utlsDialer: 使用 uTLS 的拨号器
+// -------------------------------------------------------
+type utlsDialer struct {
+	targetAddr  string            // Cloudflare IP
+	localIP     net.IP            // 本地生成的 IP
+	netDialer   *net.Dialer       // 基础拨号器
+	fingerprint tls.ClientHelloID // TLS 指纹
+}
+
+// DialTLSContext 使用 uTLS 建立 TLS 连接
+func (d *utlsDialer) DialTLSContext(ctx context.Context, network, addr string) (net.Conn, error) {
+	// 从上下文中获取指纹（如果存在）
+	id, ok := ctx.Value(fingerprintKey).(tls.ClientHelloID)
+	if !ok {
+		// 使用拨号器自身的指纹作为默认值
+		id = d.fingerprint
+	}
+
+	// 1. 建立 TCP 连接
+	d.netDialer.LocalAddr = &net.TCPAddr{IP: d.localIP}
+	tcpConn, err := d.netDialer.DialContext(ctx, "tcp6", d.targetAddr)
+	if err != nil {
+		return nil, fmt.Errorf("TCP dial failed: %w", err)
+	}
+
+	// 2. 使用 uTLS 包装连接
+	config := &tls.Config{
+		ServerName: "exhentai.org", // SNI 必须是 exhentai.org
+	}
+
+	uConn := tls.UClient(tcpConn, config, id)
+
+	// 3. 执行 TLS 握手
+	if err := uConn.HandshakeContext(ctx); err != nil {
+		tcpConn.Close()
+		return nil, fmt.Errorf("uTLS handshake failed: %w", err)
+	}
+
+	return uConn, nil
+}
+
+// -------------------------------------------------------
+// ClientSlot: 代表连接池中的一个"槽位"，负责管理单个IP的生命周期
 // -------------------------------------------------------
 type clientSlot struct {
 	id        int              // 槽位ID，用于日志区分
@@ -67,13 +116,20 @@ type clientSlot struct {
 	rotationMu sync.Mutex
 	// nextClient 预备好的下一个客户端
 	nextClient *client
+
+	// targetAddr 目标地址 (Cloudflare IP)
+	targetAddr string
+	// defaultFingerprint 默认的 TLS 指纹
+	defaultFingerprint tls.ClientHelloID
 }
 
 // newClientSlot 初始化一个槽位
-func newClientSlot(id int, manager *myfetch.Manager) (*clientSlot, error) {
+func newClientSlot(id int, manager *myfetch.Manager, targetAddr string, fingerprint tls.ClientHelloID) (*clientSlot, error) {
 	slot := &clientSlot{
-		id:        id,
-		ipManager: manager,
+		id:                 id,
+		ipManager:          manager,
+		targetAddr:         targetAddr,
+		defaultFingerprint: fingerprint,
 	}
 
 	// 1. 初始化当前 client
@@ -94,18 +150,7 @@ func newClientSlot(id int, manager *myfetch.Manager) (*clientSlot, error) {
 	return slot, nil
 }
 
-// 备用逻辑
-
-type dialer struct {
-	address string
-	*net.Dialer
-}
-
-func (dialer dialer) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
-	return dialer.Dialer.DialContext(ctx, network, dialer.address)
-}
-
-// prepareNewClient 生成 IP 并创建 Client
+// prepareNewClient 生成 IP 并创建使用 uTLS 的 Client
 func (s *clientSlot) prepareNewClient() (*client, error) {
 	ip, err := s.ipManager.GenerateIP()
 	if err != nil {
@@ -116,44 +161,15 @@ func (s *clientSlot) prepareNewClient() (*client, error) {
 		return nil, fmt.Errorf("slot %d add addr failed: %w", s.id, err)
 	}
 
-	c := &client{
-		Addr: &ip,
-		Client: &myfetch.Client{
-			Client: &http.Client{
-				Transport: &http.Transport{
-					DialContext: (dialer{"exhentai.org:443", &net.Dialer{ // dialer
-						// LocalAddr 用于指定本地 IP 地址
-						LocalAddr: &net.TCPAddr{
-							IP: ip.AsSlice(),
-						},
-						Timeout:   5 * time.Second,  // 连接超时时间
-						KeepAlive: 30 * time.Second, // Keep-Alive 超时时间
-					}}).DialContext,
-					MaxIdleConns:        100,
-					IdleConnTimeout:     10 * time.Second,
-					TLSHandshakeTimeout: 3 * time.Second,
-				},
-				CheckRedirect: func(req *http.Request, via []*http.Request) error {
-					return http.ErrUseLastResponse
-				},
-			},
+	// 创建使用 uTLS 的 Transport
+	utlsDialer := &utlsDialer{
+		targetAddr: s.targetAddr,
+		localIP:    ip.AsSlice(),
+		netDialer: &net.Dialer{
+			Timeout:   5 * time.Second,
+			KeepAlive: 30 * time.Second,
 		},
-	}
-	return c, nil
-}
-
-// 正常逻辑
-/*
-
-// prepareNewClient 生成 IP 并创建 Client
-func (s *clientSlot) prepareNewClient() (*client, error) {
-	ip, err := s.ipManager.GenerateIP()
-	if err != nil {
-		return nil, fmt.Errorf("slot %d generate ip failed: %w", s.id, err)
-	}
-
-	if err := s.ipManager.AddAddr(ip); err != nil {
-		return nil, fmt.Errorf("slot %d add addr failed: %w", s.id, err)
+		fingerprint: s.defaultFingerprint,
 	}
 
 	c := &client{
@@ -161,14 +177,18 @@ func (s *clientSlot) prepareNewClient() (*client, error) {
 		Client: &myfetch.Client{
 			Client: &http.Client{
 				Transport: &http.Transport{
+					// 使用自定义的 DialTLSContext
+					DialTLSContext: utlsDialer.DialTLSContext,
+					// 注意：这里不再使用 DialContext，因为 TLS 连接由 DialTLSContext 处理
+					// 但是我们需要设置 TCP 拨号器用于非 TLS 连接（虽然这里可能不需要）
 					DialContext: (&net.Dialer{
 						LocalAddr: &net.TCPAddr{IP: ip.AsSlice()},
-						Timeout:   3 * time.Second,
+						Timeout:   5 * time.Second,
 						KeepAlive: 30 * time.Second,
 					}).DialContext,
 					MaxIdleConns:        100,
 					IdleConnTimeout:     10 * time.Second,
-					TLSHandshakeTimeout: 3 * time.Second,
+					TLSHandshakeTimeout: 10 * time.Second, // 增加超时时间
 				},
 				CheckRedirect: func(req *http.Request, via []*http.Request) error {
 					return http.ErrUseLastResponse
@@ -179,12 +199,52 @@ func (s *clientSlot) prepareNewClient() (*client, error) {
 	return c, nil
 }
 
-*/
+// getCurrentClient 获取当前客户端
 func (s *clientSlot) getCurrentClient() *client {
 	return s.currentClientHolder.Load().(*client)
 }
 
-// execute 执行请求并处理该槽位的轮换逻辑
+// getFingerprintFromUA 根据 User-Agent 获取对应的 TLS 指纹
+func getFingerprintFromUA(ua string) tls.ClientHelloID {
+	ua = strings.ToLower(ua)
+	if strings.Contains(ua, "firefox") {
+		return tls.HelloFirefox_Auto
+	}
+	if strings.Contains(ua, "iphone") || strings.Contains(ua, "ipad") {
+		return tls.HelloIOS_Auto
+	}
+	if strings.Contains(ua, "android") {
+		return tls.HelloAndroid_11_OkHttp // 移动应用常用
+	}
+	// 默认使用 Chrome (Desktop Chrome, Edge, Safari)
+	return tls.HelloChrome_Auto
+}
+
+// DoProxyRequest 执行代理请求，使用用户的真实 User-Agent 确定 TLS 指纹
+func (s *clientSlot) DoProxyRequest(userReq *http.Request) (*http.Response, error) {
+	// 1. 根据真实用户的 User-Agent 确定指纹
+	ua := userReq.Header.Get("User-Agent")
+	fingerprint := getFingerprintFromUA(ua)
+
+	// 2. 将指纹放入上下文
+	ctx := context.WithValue(userReq.Context(), fingerprintKey, fingerprint)
+
+	// 3. 创建到 ExHentai 的请求
+	proxyReq, _ := http.NewRequestWithContext(ctx, userReq.Method, userReq.URL.String(), userReq.Body)
+
+	// 4. 复制所有用户头（包括 UA 和 Cookies）
+	for k, vv := range userReq.Header {
+		for _, v := range vv {
+			proxyReq.Header.Add(k, v)
+		}
+	}
+
+	// 5. 使用当前客户端执行请求
+	current := s.getCurrentClient()
+	return current.Fetch(proxyReq.Method, proxyReq.URL.String(), proxyReq.Header, proxyReq.Body)
+}
+
+// execute 执行请求并处理该槽位的轮换逻辑（兼容旧版）
 func (s *clientSlot) execute(method, url string, header http.Header, body io.Reader) (*http.Response, error) {
 	// 1. 获取当前客户端
 	current := s.getCurrentClient()
@@ -203,10 +263,24 @@ func (s *clientSlot) execute(method, url string, header http.Header, body io.Rea
 		}
 	}
 
-	// 4. 发起请求
-	return current.Fetch(method, url, header, body)
+	// 4. 检查是否有 User-Agent 头，决定是否使用指纹
+	var ctx context.Context
+	if ua := header.Get("User-Agent"); ua != "" {
+		fingerprint := getFingerprintFromUA(ua)
+		ctx = context.WithValue(context.Background(), fingerprintKey, fingerprint)
+	} else {
+		ctx = context.Background()
+	}
+
+	// 5. 创建带有上下文的请求
+	req, _ := http.NewRequestWithContext(ctx, method, url, body)
+	req.Header = header
+
+	// 6. 发起请求
+	return current.Fetch(req.Method, req.URL.String(), req.Header, req.Body)
 }
 
+// performRotation 执行客户端轮换
 func (s *clientSlot) performRotation(oldClient *client) {
 	// 检查 next 是否就绪
 	if s.nextClient == nil {
@@ -260,16 +334,22 @@ type IPRotator struct {
 
 // NewIPRotator 创建包含多个 IP 的 Rotator
 // poolSize: 同时维护多少个 IP (例如 5 或 10)
-func NewIPRotator(manager *myfetch.Manager, poolSize int) (*IPRotator, error) {
+// targetAddr: Cloudflare IP 地址 (例如 "104.20.134.65:443")
+// fingerprint: 默认的 TLS 指纹
+func NewIPRotator(manager *myfetch.Manager, poolSize int, targetAddr string, fingerprint tls.ClientHelloID) (*IPRotator, error) {
 	if poolSize <= 0 {
 		poolSize = DefaultPoolSize
+	}
+
+	if targetAddr == "" {
+		targetAddr = "exhentai.org:443" // 默认目标地址
 	}
 
 	rotator := &IPRotator{
 		slots: make([]*clientSlot, poolSize),
 	}
 
-	log.Printf("Initializing IPRotator with pool size: %d...", poolSize)
+	log.Printf("Initializing IPRotator with pool size: %d, target: %s...", poolSize, targetAddr)
 
 	// 并行初始化所有槽位，加快启动速度
 	var wg sync.WaitGroup
@@ -280,7 +360,7 @@ func NewIPRotator(manager *myfetch.Manager, poolSize int) (*IPRotator, error) {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
-			slot, err := newClientSlot(idx, manager)
+			slot, err := newClientSlot(idx, manager, targetAddr, fingerprint)
 			if err != nil {
 				errMu.Lock()
 				initErr = err
@@ -317,6 +397,17 @@ func (r *IPRotator) Fetch(method, url string, header http.Header, body io.Reader
 	return selectedSlot.execute(method, url, header, body)
 }
 
+// DoProxyRequest 代理请求，自动使用用户 User-Agent 的 TLS 指纹
+func (r *IPRotator) DoProxyRequest(userReq *http.Request) (*http.Response, error) {
+	// 1. Round-Robin 算法选择一个槽位
+	reqNum := atomic.AddUint64(&r.rrCounter, 1)
+	slotIdx := reqNum % uint64(len(r.slots))
+	selectedSlot := r.slots[slotIdx]
+
+	// 2. 委托给选中的槽位执行代理请求
+	return selectedSlot.DoProxyRequest(userReq)
+}
+
 // Run 模拟运行
 func Run(addr string) {
 	if addr == "" {
@@ -329,8 +420,8 @@ func Run(addr string) {
 		log.Fatalf("Failed to create manager: %v", err)
 	}
 
-	// 比如开启 10 个并发 IP
-	rotator, err := NewIPRotator(manager, 10)
+	// 使用 Cloudflare IP 地址和默认的 Chrome 指纹
+	rotator, err := NewIPRotator(manager, 10, "exhentai.org:443", tls.HelloChrome_Auto)
 	if err != nil {
 		log.Fatalf("Failed to create IP rotator: %v", err)
 	}

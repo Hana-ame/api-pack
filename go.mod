@@ -27,7 +27,7 @@ require (
 	github.com/things-go/go-socks5 v0.0.6
 	github.com/valyala/fastjson v1.6.4
 	golang.org/x/image v0.27.0
-	golang.org/x/net v0.37.0
+	golang.org/x/net v0.38.0
 	golang.org/x/sys v0.32.0
 )
 
@@ -76,6 +76,7 @@ require (
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.3 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
+	github.com/refraction-networking/utls v1.8.2 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rogpeppe/go-internal v1.14.1 // indirect
 	github.com/tetratelabs/wazero v1.9.0 // indirect
