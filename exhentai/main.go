@@ -231,9 +231,10 @@ func (s *clientSlot) executeWithRetry(method, url string, header http.Header, bo
 		}
 
 		// If we get a 502 or a Reset, wait a moment and try again
-		time.Sleep(time.Duration(i+1) * time.Second)
+		time.Sleep(time.Duration(i+1) * time.Second / 5)
 		// log.Printf("Request failed (attempt %d), retrying...", i+1)
 	}
+
 	return resp, err
 }
 
@@ -286,11 +287,13 @@ func (s *clientSlot) backgroundPrepare(oldClient *client) {
 type IPRotator struct {
 	slots     []*clientSlot // 固定数量的槽位池
 	rrCounter uint64        // Round-Robin 计数器
+
+	backupClient *myfetch.Client
 }
 
 // NewIPRotator 创建包含多个 IP 的 Rotator
 // poolSize: 同时维护多少个 IP (例如 5 或 10)
-func NewIPRotator(manager *myfetch.Manager, poolSize int) (*IPRotator, error) {
+func NewIPRotator(manager *myfetch.Manager, poolSize int, backupIP string) (*IPRotator, error) {
 	if poolSize <= 0 {
 		poolSize = DefaultPoolSize
 	}
@@ -328,6 +331,38 @@ func NewIPRotator(manager *myfetch.Manager, poolSize int) (*IPRotator, error) {
 		return nil, fmt.Errorf("failed to init slots: %w", initErr)
 	}
 
+	if backupIP != "" {
+		if addr, err := netip.ParseAddr(backupIP); err == nil {
+			rotator.backupClient = &myfetch.Client{
+				Client: &http.Client{
+					Transport: &http.Transport{
+						// Use the IP address for the TCP connection
+						DialContext: (&net.Dialer{
+							LocalAddr: &net.TCPAddr{
+								IP: addr.AsSlice(),
+							},
+							Timeout:   5 * time.Second,
+							KeepAlive: 30 * time.Second,
+						}).DialContext,
+
+						// 2. CRITICAL: You must tell TLS that we are still talking to exhentai.org
+						// Otherwise, the SNI will be the IP address and the handshake will fail.
+						TLSClientConfig: &tls.Config{
+							ServerName: "exhentai.org",
+						},
+
+						MaxIdleConns:        100,
+						IdleConnTimeout:     10 * time.Second,
+						TLSHandshakeTimeout: 5 * time.Second,
+					},
+					CheckRedirect: func(req *http.Request, via []*http.Request) error {
+						return http.ErrUseLastResponse
+					},
+				},
+			}
+		}
+	}
+
 	log.Println("IPRotator initialized successfully.")
 	return rotator, nil
 }
@@ -344,8 +379,13 @@ func (r *IPRotator) Fetch(method, url string, header http.Header, body io.Reader
 	selectedSlot := r.slots[slotIdx]
 
 	// 2. 委托给选中的槽位执行
-	return selectedSlot.executeWithRetry(method, url, header, body)
+	// return selectedSlot.executeWithRetry(method, url, header, body)
 	// return selectedSlot.execute(method, url, header, body)
+	resp, err := selectedSlot.executeWithRetry(method, url, header, body)
+	if err != nil && r.backupClient != nil {
+		return r.backupClient.Fetch(method, url, header, body)
+	}
+	return resp, err
 }
 
 // Run 模拟运行
@@ -355,13 +395,13 @@ func Run(addr string) {
 	}
 	godotenv.Load(".env")
 
-	manager, err := myfetch.NewManager("sit1", "")
+	manager, err := myfetch.NewManager("sit1", os.Getenv("IPV6_PREFIX"))
 	if err != nil {
 		log.Fatalf("Failed to create manager: %v", err)
 	}
 
 	// 比如开启 10 个并发 IP
-	rotator, err := NewIPRotator(manager, 10)
+	rotator, err := NewIPRotator(manager, 0, os.Getenv("EX_BACKUP_IP"))
 	if err != nil {
 		log.Fatalf("Failed to create IP rotator: %v", err)
 	}

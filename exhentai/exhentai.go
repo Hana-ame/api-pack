@@ -32,7 +32,7 @@ var proxyClient = &http.Client{
 						return ip
 					}
 				}
-				return nil // 默认让系统选择，否则 127.0.0.2 无法访问公网
+				return nil
 			}()},
 			Timeout:   3 * time.Second,
 			KeepAlive: 3 * time.Second,
