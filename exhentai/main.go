@@ -2,17 +2,20 @@ package exhentai
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"io"
 	"log"
 	"net"
 	"net/http"
 	"net/netip"
+	"os"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	myfetch "github.com/Hana-ame/api-pack/tools/my_fetch/v2"
+	tools "github.com/Hana-ame/api-pack/tools/utils"
 	"github.com/joho/godotenv"
 )
 
@@ -104,8 +107,6 @@ type dialer struct {
 func (dialer dialer) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
 	return dialer.Dialer.DialContext(ctx, network, dialer.address)
 }
-
-// prepareNewClient 生成 IP 并创建 Client
 func (s *clientSlot) prepareNewClient() (*client, error) {
 	ip, err := s.ipManager.GenerateIP()
 	if err != nil {
@@ -116,22 +117,33 @@ func (s *clientSlot) prepareNewClient() (*client, error) {
 		return nil, fmt.Errorf("slot %d add addr failed: %w", s.id, err)
 	}
 
+	// 1. Specify the exact Cloudflare IP you want to hit (like /etc/hosts)
+	// You can rotate these or hardcode one: [2a06:98c1:3120::]:443 or [2a06:98c1:3121::]:443
+	targetIP := tools.Or(os.Getenv("EX_TARGET_IP"), "exhentai.org:443")
+
 	c := &client{
 		Addr: &ip,
 		Client: &myfetch.Client{
 			Client: &http.Client{
 				Transport: &http.Transport{
-					DialContext: (dialer{"exhentai.org:443", &net.Dialer{ // dialer
-						// LocalAddr 用于指定本地 IP 地址
+					// Use the IP address for the TCP connection
+					DialContext: (dialer{targetIP, &net.Dialer{
 						LocalAddr: &net.TCPAddr{
 							IP: ip.AsSlice(),
 						},
-						Timeout:   5 * time.Second,  // 连接超时时间
-						KeepAlive: 30 * time.Second, // Keep-Alive 超时时间
+						Timeout:   5 * time.Second,
+						KeepAlive: 30 * time.Second,
 					}}).DialContext,
+
+					// 2. CRITICAL: You must tell TLS that we are still talking to exhentai.org
+					// Otherwise, the SNI will be the IP address and the handshake will fail.
+					TLSClientConfig: &tls.Config{
+						ServerName: "exhentai.org",
+					},
+
 					MaxIdleConns:        100,
 					IdleConnTimeout:     10 * time.Second,
-					TLSHandshakeTimeout: 3 * time.Second,
+					TLSHandshakeTimeout: 5 * time.Second,
 				},
 				CheckRedirect: func(req *http.Request, via []*http.Request) error {
 					return http.ErrUseLastResponse
