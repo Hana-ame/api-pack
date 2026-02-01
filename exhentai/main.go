@@ -107,6 +107,7 @@ type dialer struct {
 func (dialer dialer) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
 	return dialer.Dialer.DialContext(ctx, network, dialer.address)
 }
+
 func (s *clientSlot) prepareNewClient() (*client, error) {
 	ip, err := s.ipManager.GenerateIP()
 	if err != nil {
@@ -219,6 +220,23 @@ func (s *clientSlot) execute(method, url string, header http.Header, body io.Rea
 	return current.Fetch(method, url, header, body)
 }
 
+func (s *clientSlot) executeWithRetry(method, url string, header http.Header, body io.Reader) (*http.Response, error) {
+	var resp *http.Response
+	var err error
+
+	for i := 0; i < 3; i++ { // Try up to 3 times
+		resp, err = s.execute(method, url, header, body)
+		if err == nil && resp.StatusCode < 500 {
+			return resp, nil // Success!
+		}
+
+		// If we get a 502 or a Reset, wait a moment and try again
+		time.Sleep(time.Duration(i+1) * time.Second)
+		// log.Printf("Request failed (attempt %d), retrying...", i+1)
+	}
+	return resp, err
+}
+
 func (s *clientSlot) performRotation(oldClient *client) {
 	// 检查 next 是否就绪
 	if s.nextClient == nil {
@@ -326,7 +344,8 @@ func (r *IPRotator) Fetch(method, url string, header http.Header, body io.Reader
 	selectedSlot := r.slots[slotIdx]
 
 	// 2. 委托给选中的槽位执行
-	return selectedSlot.execute(method, url, header, body)
+	return selectedSlot.executeWithRetry(method, url, header, body)
+	// return selectedSlot.execute(method, url, header, body)
 }
 
 // Run 模拟运行
