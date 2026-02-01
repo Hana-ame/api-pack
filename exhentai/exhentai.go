@@ -48,6 +48,8 @@ var (
 	reUploader = regexp.MustCompile(`^/uploader/.*`)
 	reTag      = regexp.MustCompile(`^/tag/.*`)
 	reZ        = regexp.MustCompile(`^/z/.*`)
+	reImg      = regexp.MustCompile(`^/img/.*`)
+	reTorrent  = regexp.MustCompile(`^/torrent/.*`)
 	reImage    = regexp.MustCompile(`^/s/[0-9a-f]+/\d+-\d+`)
 	reGallery  = regexp.MustCompile(`^/g/\d+/[0-9a-f]+(/.*)?`)
 )
@@ -143,6 +145,7 @@ func (p *ProxyHandler) accessControlMiddleware() gin.HandlerFunc {
 	// 2. 定义系统必要路径白名单 (js, css, logo 等)
 	systemPaths := []string{
 		"/", "/sw.js", "/favicon.ico", "/manifest.json", "/logo192.png", "/failed.html",
+		"/popular", "/watched",
 	}
 
 	return func(c *gin.Context) {
@@ -172,6 +175,8 @@ func (p *ProxyHandler) accessControlMiddleware() gin.HandlerFunc {
 			if reUploader.MatchString(path) ||
 				reTag.MatchString(path) ||
 				reZ.MatchString(path) ||
+				reImg.MatchString(path) ||
+				reTorrent.MatchString(path) ||
 				reImage.MatchString(path) ||
 				reGallery.MatchString(path) {
 				isWhite = true
@@ -188,7 +193,7 @@ func (p *ProxyHandler) accessControlMiddleware() gin.HandlerFunc {
 		if !isWhite {
 			// 如果有 redirect_to 参数，说明是点击了某些跳转，可以考虑放行
 			if c.Query("redirect_to") == "" {
-				c.AbortWithStatus(http.StatusNotFound) // 没在白名单里的一律 404
+				c.AbortWithStatus(http.StatusForbidden) // 没在白名单里的一律 404
 				return
 			}
 		}
@@ -381,6 +386,7 @@ func (p *ProxyHandler) doProxy(c *gin.Context, targetURL string) {
 	// 如果 copyHeaders 从上游把 content-encoding: gzip 拷过来了，必须删掉，
 	// 否则浏览器会以为数据是压缩的，结果收到明文会报错。
 	c.Writer.Header().Del("Content-Encoding")
+	c.Writer.Header().Del("Content-Length")
 
 	// 【建议】设置 Content-Length
 	// 之前用 Gzip 是因为不知道压缩后多大，所以置空强制 Chunked。
