@@ -132,7 +132,7 @@ func (s *clientSlot) prepareNewClient() (*client, error) {
 						LocalAddr: &net.TCPAddr{
 							IP: ip.AsSlice(),
 						},
-						Timeout:   5 * time.Second,
+						Timeout:   15 * time.Second,
 						KeepAlive: 30 * time.Second,
 					}}).DialContext,
 
@@ -143,8 +143,8 @@ func (s *clientSlot) prepareNewClient() (*client, error) {
 					},
 
 					MaxIdleConns:        100,
-					IdleConnTimeout:     10 * time.Second,
-					TLSHandshakeTimeout: 5 * time.Second,
+					IdleConnTimeout:     15 * time.Second,
+					TLSHandshakeTimeout: 10 * time.Second,
 				},
 				CheckRedirect: func(req *http.Request, via []*http.Request) error {
 					return http.ErrUseLastResponse
@@ -399,21 +399,22 @@ func (r *IPRotator) Fetch(method, url string, header http.Header, body io.Reader
 func (r *IPRotator) FetchWithRetry(method, url string, header http.Header, body io.Reader) (*http.Response, error) {
 
 	resp, err := r.Fetch(method, url, header, body)
+	if err == nil {
+		return resp, err
+	}
 
-	if err != nil {
-		for cnt := 0; cnt < 3; cnt++ {
-			resp, err = r.Fetch(method, url, header, body)
-			if err == nil && resp.StatusCode < 500 {
-				return resp, nil // Success!
-			}
+	for cnt := 0; cnt < 3; cnt++ {
+		resp, err = r.Fetch(method, url, header, body)
+		if err == nil {
+			return resp, err
 		}
 	}
 
 	if err != nil && r.backupClient != nil {
 		return r.backupClient.Fetch(method, url, header, body)
 	}
-
 	return resp, err
+
 }
 
 // Run 模拟运行

@@ -343,7 +343,7 @@ func (p *ProxyHandler) mainProxyHandler(c *gin.Context) {
 func (p *ProxyHandler) doProxy(c *gin.Context, targetURL string) {
 	reqHeader := p.prepareHeaders(c)
 
-	resp, err := p.Fetch(c.Request.Method, targetURL, reqHeader, c.Request.Body)
+	resp, err := p.FetchWithRetry(c.Request.Method, targetURL, reqHeader, c.Request.Body)
 	if err != nil {
 		tools.AbortWithError(c, http.StatusBadGateway, err)
 		return
