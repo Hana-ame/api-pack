@@ -219,7 +219,7 @@ func (s *clientSlot) execute(method, url string, header http.Header, body io.Rea
 	// 4. 发起请求
 	resp, err := current.Fetch(method, url, header, body)
 	if err != nil {
-		atomic.AddInt64(&s.usageCounter, DefaultRotationThreshold/3) // add 100 to pass a non-work ip quickly
+		atomic.AddInt64(&s.usageCounter, DefaultRotationThreshold/10) // add 100 to pass a non-work ip quickly
 		return resp, err
 	}
 
@@ -398,12 +398,14 @@ func (r *IPRotator) Fetch(method, url string, header http.Header, body io.Reader
 
 func (r *IPRotator) FetchWithRetry(method, url string, header http.Header, body io.Reader) (*http.Response, error) {
 
+	maxCnt := tools.Atoi(os.Getenv("EX_MAX_RETRY"), 0)
+
 	resp, err := r.Fetch(method, url, header, body)
 	if err == nil {
 		return resp, err
 	}
 
-	for cnt := 0; cnt < 3; cnt++ {
+	for cnt := 0; cnt < maxCnt; cnt++ {
 		resp, err = r.Fetch(method, url, header, body)
 		if err == nil {
 			return resp, err
@@ -413,6 +415,7 @@ func (r *IPRotator) FetchWithRetry(method, url string, header http.Header, body 
 	if err != nil && r.backupClient != nil {
 		return r.backupClient.Fetch(method, url, header, body)
 	}
+
 	return resp, err
 
 }
@@ -430,7 +433,7 @@ func Run(addr string) {
 	}
 
 	// 比如开启 10 个并发 IP
-	rotator, err := NewIPRotator(manager, 0, os.Getenv("EX_BACKUP_IP"))
+	rotator, err := NewIPRotator(manager, -1, os.Getenv("EX_BACKUP_IP"))
 	if err != nil {
 		log.Fatalf("Failed to create IP rotator: %v", err)
 	}
