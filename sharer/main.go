@@ -192,5 +192,6 @@ func main() {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Not found"})
 	})
 
-	r.Run("127.26.1.31:8080")
+	r.Run("0.0.0.0:8888")
+	// r.Run("127.26.1.31:8080")
 }
