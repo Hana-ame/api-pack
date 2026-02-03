@@ -403,20 +403,21 @@ func (r *IPRotator) FetchWithRetry(method, url string, header http.Header, body 
 
 	resp, err := r.Fetch(method, url, header, body)
 	if err == nil {
+		resp.Header.Add("X-Retry-Count", strconv.Itoa(0))
 		return resp, err
 	}
 
 	for cnt := 0; cnt < maxCnt; cnt++ {
 		resp, err = r.Fetch(method, url, header, body)
 		if err == nil {
-			resp.Header.Add("X-RETRY-CNT", strconv.Itoa(cnt))
+			resp.Header.Add("X-Retry-Count", strconv.Itoa(cnt))
 			return resp, err
 		}
 	}
 
 	if err != nil && r.backupClient != nil {
 		resp, err = r.backupClient.Fetch(method, url, header, body)
-		resp.Header.Add("X-RETRY-CNT", strconv.Itoa(-1))
+		resp.Header.Add("X-Retry-Count", strconv.Itoa(-1))
 		return resp, err
 	}
 
