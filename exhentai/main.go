@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/netip"
 	"os"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -243,7 +244,7 @@ func (s *clientSlot) executeWithRetry(method, url string, header http.Header, bo
 		}
 
 		// If we get a 502 or a Reset, wait a moment and try again
-		time.Sleep(time.Duration(i+1) * time.Second / 5)
+		// time.Sleep(time.Duration(i+1) * time.Second / 5)
 		// log.Printf("Request failed (attempt %d), retrying...", i+1)
 	}
 
@@ -408,12 +409,15 @@ func (r *IPRotator) FetchWithRetry(method, url string, header http.Header, body 
 	for cnt := 0; cnt < maxCnt; cnt++ {
 		resp, err = r.Fetch(method, url, header, body)
 		if err == nil {
+			resp.Header.Add("X-RETRY-CNT", strconv.Itoa(cnt))
 			return resp, err
 		}
 	}
 
 	if err != nil && r.backupClient != nil {
-		return r.backupClient.Fetch(method, url, header, body)
+		resp, err = r.backupClient.Fetch(method, url, header, body)
+		resp.Header.Add("X-RETRY-CNT", strconv.Itoa(-1))
+		return resp, err
 	}
 
 	return resp, err
