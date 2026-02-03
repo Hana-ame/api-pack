@@ -5,7 +5,8 @@ on:
   push:
     tags:
       - 'v*'
-      # 只能用单引号？
+# 只能用单引号？!
+
 jobs:
   build:
     name: Build Binary
