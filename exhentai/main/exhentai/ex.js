@@ -643,7 +643,7 @@
   // 6. 右下角悬浮窗
   // =========================================================================
   function initFloatingNotice() {
-    const mark = "1228";
+    const mark = "0204";
     if (localStorage.getItem("iframeClosed") === mark) {
       return;
     }
@@ -653,9 +653,7 @@
     div.innerHTML = `
             <button id="moonchan-close-button">×</button>
             <div style="padding: 10px; font-size: 14px;">
-                <p>moonchan.xyz有DNS污染迹象，请注意迁移到以下节点</p>
-                <p style="color: black;">New:<a href="https://ex.810114.xyz/" target="_blank">https://ex.810114.xyz/</a>（无污染永续）</p>			
-                <p style="color: black;">更了下程序，如果有问题，及时反馈<a href="https://810114.xyz/" target="_blank">https://810114.xyz/</a></p>			
+              <p style="color: black;">每月1T: <a href="https://c.810114.xyz/sub/a7r03an0fbqsmmbn">https://c.810114.xyz/sub/a7r03an0fbqsmmbn</a></p>
             </div>
         `;
     document.body.appendChild(div);
