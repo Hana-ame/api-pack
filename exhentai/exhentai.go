@@ -451,6 +451,7 @@ func (p *ProxyHandler) transformContent(c *gin.Context, data []byte, targetURL s
 	data = bytes.Replace(data, []byte("https://exhentai.org"), []byte{}, -1)
 	data = bytes.Replace(data, []byte("https://s.exhentai.org"), []byte("https://ehgt.org"), -1)
 	data = bytes.Replace(data, []byte("https://ehgt.org/api.php"), []byte("/api.php"), 1)
+	data = bytes.Replace(data, []byte("static.cloudflareinsights.com"), []byte("localhost"), 1)
 
 	// 执行替换：将 </head> 替换为 <script ...></script></head>
 	// return bytes.Replace(data, []byte(headStartTag), []byte(headStartTag+metaNoReferer+scriptTag+cssTag), 1)
