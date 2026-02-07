@@ -28,6 +28,60 @@
     };
   })();
 
+  (function() {
+    // 1. THE KILL SWITCH (Images/CSS)
+    // Set global policy to 'no-referrer'. Browsers apply this to all 
+    // subresources (images, backgrounds) immediately and natively.
+    if (!document.querySelector('meta[name="referrer"]')) {
+        const meta = document.createElement('meta');
+        meta.name = "referrer";
+        meta.content = "no-referrer";
+        document.head.appendChild(meta);
+    }
+
+    // 2. THE LINK FIXER
+    // This function resets links to send referrers.
+    const fixLink = (link) => {
+        if (link.tagName === 'A' && !link.hasAttribute('referrerpolicy')) {
+            link.setAttribute('referrerpolicy', 'no-referrer-when-downgrade');
+        }
+    };
+
+    // 3. INITIAL SCAN (Fast)
+    // Runs as soon as this script is injected.
+    document.querySelectorAll('a').forEach(fixLink);
+
+    // 4. THE RELIABILITY LAYER (For "Open in New Window" & Dynamic Links)
+    // Watches for new links added via AJAX/React or infinite scroll.
+    // This is efficient because it only reacts when the DOM actually changes.
+    const observer = new MutationObserver((mutations) => {
+        for (const mutation of mutations) {
+            mutation.addedNodes.forEach(node => {
+                if (node.nodeType === 1) { // If it's an element
+                    if (node.tagName === 'A') fixLink(node);
+                    else node.querySelectorAll('a').forEach(fixLink);
+                }
+            });
+        }
+    });
+
+    observer.observe(document.documentElement, {
+        childList: true,
+        subtree: true
+    });
+
+    // 5. THE SAFETY NET (Event Delegation)
+    // Covers anything the Observer might have missed (extremely rare).
+    // Fired on touch start or mouse hover so it's ready BEFORE the context menu.
+    const handleInteraction = (e) => {
+        const link = e.target.closest('a');
+        if (link) fixLink(link);
+    };
+
+    document.addEventListener('pointerdown', handleInteraction, { passive: true });
+    document.addEventListener('focusin', handleInteraction, { passive: true });
+  })();
+  
   // =========================================================================
   // 1. 基础 URL 替换功能 (对应 Go 中的 bytes.ReplaceAll)
   // =========================================================================
