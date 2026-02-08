@@ -435,6 +435,14 @@ func (p *ProxyHandler) prepareHeaders(c *gin.Context) http.Header {
 	return h
 }
 
+// Compile once globally for performance
+var beaconRegex = regexp.MustCompile(`(?i)<script[^>]*?static\.cloudflareinsights\.com/beacon\.min\.js[^>]*?>.*?</script>`)
+
+func stripCloudflareBeacon(input []byte) []byte {
+	// ReplaceAll operates directly on byte slices
+	return beaconRegex.ReplaceAll(input, []byte(""))
+}
+
 func (p *ProxyHandler) transformContent(c *gin.Context, data []byte, targetURL string) []byte {
 	// 注入外部 Script 标签
 	const metaNoReferer = `<meta name="referrer" content="no-referrer">`
@@ -451,7 +459,7 @@ func (p *ProxyHandler) transformContent(c *gin.Context, data []byte, targetURL s
 	data = bytes.Replace(data, []byte("https://exhentai.org"), []byte{}, -1)
 	data = bytes.Replace(data, []byte("https://s.exhentai.org"), []byte("https://ehgt.org"), -1)
 	data = bytes.Replace(data, []byte("https://ehgt.org/api.php"), []byte("/api.php"), 1)
-	data = bytes.Replace(data, []byte("static.cloudflareinsights.com"), []byte("localhost"), 1)
+	data = stripCloudflareBeacon(data)
 
 	// 执行替换：将 </head> 替换为 <script ...></script></head>
 	// return bytes.Replace(data, []byte(headStartTag), []byte(headStartTag+metaNoReferer+scriptTag+cssTag), 1)
