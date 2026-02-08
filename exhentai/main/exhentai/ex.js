@@ -4,7 +4,6 @@
   if (location.pathname.startsWith("/g/")) {
     base_url = "/";
     api_url = "/api.php";
-    popbase = base_url + "gallerypopups.php?gid=3723085&t=582d4b6579&act=";
   }
 
   (function () {
@@ -19,7 +18,7 @@
       if (/\/api\.php($|\?)/.test(urlString)) {
         console.error('Blocked request to: ' + urlString);
 
-        // Throwing an error is the safest way to ensure the request 
+        // Throwing an error is the safest way to ensure the request
         // is completely halted and 'send()' cannot be called.
         throw new Error("403 Forbidden: Requests to /api.php are disallowed.");
       }
@@ -29,6 +28,60 @@
     };
   })();
 
+  (function() {
+    // 1. THE KILL SWITCH (Images/CSS)
+    // Set global policy to 'no-referrer'. Browsers apply this to all 
+    // subresources (images, backgrounds) immediately and natively.
+    if (!document.querySelector('meta[name="referrer"]')) {
+        const meta = document.createElement('meta');
+        meta.name = "referrer";
+        meta.content = "no-referrer";
+        document.head.appendChild(meta);
+    }
+
+    // 2. THE LINK FIXER
+    // This function resets links to send referrers.
+    const fixLink = (link) => {
+        if (link.tagName === 'A' && !link.hasAttribute('referrerpolicy')) {
+            link.setAttribute('referrerpolicy', 'no-referrer-when-downgrade');
+        }
+    };
+
+    // 3. INITIAL SCAN (Fast)
+    // Runs as soon as this script is injected.
+    document.querySelectorAll('a').forEach(fixLink);
+
+    // 4. THE RELIABILITY LAYER (For "Open in New Window" & Dynamic Links)
+    // Watches for new links added via AJAX/React or infinite scroll.
+    // This is efficient because it only reacts when the DOM actually changes.
+    const observer = new MutationObserver((mutations) => {
+        for (const mutation of mutations) {
+            mutation.addedNodes.forEach(node => {
+                if (node.nodeType === 1) { // If it's an element
+                    if (node.tagName === 'A') fixLink(node);
+                    else node.querySelectorAll('a').forEach(fixLink);
+                }
+            });
+        }
+    });
+
+    observer.observe(document.documentElement, {
+        childList: true,
+        subtree: true
+    });
+
+    // 5. THE SAFETY NET (Event Delegation)
+    // Covers anything the Observer might have missed (extremely rare).
+    // Fired on touch start or mouse hover so it's ready BEFORE the context menu.
+    const handleInteraction = (e) => {
+        const link = e.target.closest('a');
+        if (link) fixLink(link);
+    };
+
+    document.addEventListener('pointerdown', handleInteraction, { passive: true });
+    document.addEventListener('focusin', handleInteraction, { passive: true });
+  })();
+  
   // =========================================================================
   // 1. 基础 URL 替换功能 (对应 Go 中的 bytes.ReplaceAll)
   // =========================================================================
@@ -152,6 +205,12 @@
                 overflow: hidden;
                 background-color: rgba(255,255,255,0.9);
             }
+            #moonchan-floating-iframe a {
+            color: blue;
+            }
+            #moonchan-floating-iframe p {
+            color: black;
+            }
             #moonchan-close-button {
                 position: absolute;
                 top: 10px;
@@ -168,7 +227,7 @@
                 line-height: 48px;
                 transition: 0.2s;
             }
-            
+
             /* 按钮容器默认样式 (PC) */
             .custom-btn-container {
                 height: 60px;
@@ -183,18 +242,18 @@
 
             /* 右侧按钮位置 (默认) */
             .right-container {
-                right: 20px; 
+                right: 20px;
                 top: 20px;
             }
 
             /* 左侧按钮位置 (默认) */
             .left-container {
-                left: 20px; 
+                left: 20px;
                 top: 20px;
             }
 
             .custom-btn {
-                width: 100%;    
+                width: 100%;
                 flex: 1;
                 font-size: 16px;
                 cursor: pointer;
@@ -243,7 +302,7 @@
                     border-radius: 8px;
                     box-shadow: 0 2px 5px rgba(0,0,0,0.3);
                 }
-                
+
                 .custom-btn:active {
                     opacity: 1;
                     background: #eee;
@@ -272,7 +331,7 @@
     width: 100px;
     text-align: center;
     position: fixed;
-    right: 20px; 
+    right: 20px;
     top: 20px;
     z-index: 99;
     display: table-cell;
@@ -287,10 +346,10 @@
     // 注意：原 HTML 中是 display: none，但根据你 JS 注释 "直接判断后显示"，
     // 这里我将其改为 display: block 以便代码运行后你能直接看到按钮
     btn.style.cssText = `
-    width: 100%;    
+    width: 100%;
     height: 100%;
     font-size: x-large;
-    display: block; 
+    display: block;
 `;
 
     // 3. 组装并添加到页面
@@ -327,7 +386,7 @@
               }
               // 如果图片本身已经加载成功（缩略图正常），你可能也想跳过
               // console.log(`[跳过] 图片已正常显示: ${galleryUrl}`);
-              // continue; 
+              // continue;
             }
             // --------------------
 
@@ -643,7 +702,7 @@
   // 6. 右下角悬浮窗
   // =========================================================================
   function initFloatingNotice() {
-    const mark = "0204";
+    const mark = "0205";
     if (localStorage.getItem("iframeClosed") === mark) {
       return;
     }
@@ -652,8 +711,9 @@
     div.id = "moonchan-floating-iframe";
     div.innerHTML = `
             <button id="moonchan-close-button">×</button>
-            <div style="padding: 10px; font-size: 14px;">
-              <p style="color: black;">每月1T: <a href="https://c.810114.xyz/sub/a7r03an0fbqsmmbn">https://c.810114.xyz/sub/a7r03an0fbqsmmbn</a></p>
+            <div style="padding: 10px; font-size: 14px; ">
+              <p>每月1T: <a href="https://c.810114.xyz/sub/a7r03an0fbqsmmbn">https://c.810114.xyz/sub/a7r03an0fbqsmmbn</a></p>
+                <p>暂时不考虑wpa开发，但如果有意开发可使用本站后端，详情参见<a href="https://810114.xyz/?bid=114514" id="details-link">链接</a>。</p>
             </div>
         `;
     document.body.appendChild(div);
