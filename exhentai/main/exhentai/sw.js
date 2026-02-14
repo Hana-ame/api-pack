@@ -19,7 +19,7 @@ const OFFLINE_HTML_CONTENT = `
     <title>電波が届きません</title>
 </head>
 <body>
-    网噶了，去<a href="https://x.810114.xyz">https://x.810114.xyz</a>看看吧
+    网噶了，去<a href="https://h.810114.xyz">https://h.810114.xyz</a>看看吧
 
     
     <a href="https://reminder.810114.xyz">https://reminder.810114.xyz</a>

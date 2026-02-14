@@ -46,13 +46,15 @@ var proxyClient = &http.Client{
 
 // 预编译正则，提高性能
 var (
-	reUploader = regexp.MustCompile(`^/uploader/.*`)
-	reTag      = regexp.MustCompile(`^/tag/.*`)
-	reZ        = regexp.MustCompile(`^/z/.*`)
-	reImg      = regexp.MustCompile(`^/img/.*`)
-	reTorrent  = regexp.MustCompile(`^/torrent/.*`)
-	reImage    = regexp.MustCompile(`^/s/[0-9a-f]+/\d+-\d+`)
-	reGallery  = regexp.MustCompile(`^/g/\d+/[0-9a-f]+(/.*)?`)
+	reUploader       = regexp.MustCompile(`^/uploader/.*`)
+	reTag            = regexp.MustCompile(`^/tag/.*`)
+	reZ              = regexp.MustCompile(`^/z/.*`)
+	reImg            = regexp.MustCompile(`^/img/.*`)
+	reTorrent        = regexp.MustCompile(`^/torrent/.*`)
+	reImage          = regexp.MustCompile(`^/s/[0-9a-f]+/\d+-\d+`)
+	reGallery        = regexp.MustCompile(`^/g/\d+/[0-9a-f]+(/.*)?`)
+	reCover          = regexp.MustCompile(`https://s\.exhentai\.org/([^"'\s>]+)`)
+	coverReplacement = []byte("https://proxy.moonchan.xyz/$1?proxy_host=ehgt.org")
 )
 
 // 配置常量
@@ -457,7 +459,8 @@ func (p *ProxyHandler) transformContent(c *gin.Context, data []byte, targetURL s
 		return data
 	}
 	data = bytes.Replace(data, []byte("https://exhentai.org"), []byte{}, -1)
-	data = bytes.Replace(data, []byte("https://s.exhentai.org"), []byte("https://ehgt.org"), -1)
+	// data = bytes.Replace(data, []byte("https://s.exhentai.org"), []byte("https://ehgt.org"), -1)
+	data = reCover.ReplaceAll(data, coverReplacement) // 26.02.14
 	data = bytes.Replace(data, []byte("https://ehgt.org/api.php"), []byte("/api.php"), 1)
 	data = stripCloudflareBeacon(data)
 
