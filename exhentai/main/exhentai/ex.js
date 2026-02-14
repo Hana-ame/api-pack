@@ -702,7 +702,7 @@
   // 6. 右下角悬浮窗
   // =========================================================================
   function initFloatingNotice() {
-    const mark = "0205";
+    const mark = "0214";
     if (localStorage.getItem("iframeClosed") === mark) {
       return;
     }
@@ -712,8 +712,8 @@
     div.innerHTML = `
             <button id="moonchan-close-button">×</button>
             <div style="padding: 10px; font-size: 14px; ">
-              <p>每月1T: <a href="https://c.810114.xyz/sub/a7r03an0fbqsmmbn">https://c.810114.xyz/sub/a7r03an0fbqsmmbn</a></p>
-                <p>暂时不考虑wpa开发，但如果有意开发可使用本站后端，详情参见<a href="https://810114.xyz/?bid=114514" id="details-link">链接</a>。</p>
+                <p>ex.810114.xyz被墙，请使用e.810114.xyz</p>
+                <p>暂时不考虑pwa开发，但如果有意开发可使用本站后端，详情参见<a href="https://810114.xyz/?bid=114514" id="details-link">链接</a>。</p>
             </div>
         `;
     document.body.appendChild(div);
