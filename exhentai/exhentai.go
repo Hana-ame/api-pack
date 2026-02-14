@@ -460,7 +460,8 @@ func (p *ProxyHandler) transformContent(c *gin.Context, data []byte, targetURL s
 	}
 	data = bytes.Replace(data, []byte("https://exhentai.org"), []byte{}, -1)
 	// data = bytes.Replace(data, []byte("https://s.exhentai.org"), []byte("https://ehgt.org"), -1)
-	data = reCover.ReplaceAll(data, coverReplacement) // 26.02.14
+	// data = reCover.ReplaceAll(data, coverReplacement) // 26.02.14
+	data = ReplaceManual(data) // 26.02.14
 	data = bytes.Replace(data, []byte("https://ehgt.org/api.php"), []byte("/api.php"), 1)
 	data = stripCloudflareBeacon(data)
 
