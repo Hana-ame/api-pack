@@ -712,6 +712,11 @@
     div.innerHTML = `
             <button id="moonchan-close-button">×</button>
             <div style="padding: 10px; font-size: 14px; ">
+                <p>
+                  <a href="https://page.moonchan.xyz/?url=https%3A%2F%2Fupload.moonchan.xyz%2Fapi%2F01LLWEUU7LWSX2IOGCZJDKAJLFKDHNOEJM%2Froot.txt#markdown-parser">
+                    使用DoH解决访问问题
+                  </a>
+                </p>
                 <p>ex.810114.xyz被墙，请使用e.810114.xyz</p>
                 <p>暂时不考虑pwa开发，但如果有意开发可使用本站后端，详情参见<a href="https://810114.xyz/?bid=114514" id="details-link">链接</a>。</p>
             </div>
