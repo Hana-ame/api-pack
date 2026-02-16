@@ -48,6 +48,7 @@ self.addEventListener('install', (e) => {
 });
 
 self.addEventListener('activate', (e) => {
+  console.log(`[SW] ${VERSION} activating...`);
   e.waitUntil(
     caches.keys().then(keys => Promise.all(
       keys.map(key => key !== CACHE_NAME ? caches.delete(key) : null)
