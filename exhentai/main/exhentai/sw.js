@@ -1,180 +1,233 @@
 /// <reference lib="webworker" />
 /** @type {ServiceWorkerGlobalScope} */
 
-/**
- * 
- * 配置区域
- */
-const VERSION = 'V4-260121'; // 既是版本号，也是我们用于验证网站是否存活的“特定字符串”
+const VERSION = 'V5-26.02.16';
 const CACHE_NAME = `site-assets-${VERSION}`;
 
-// 核心策略：将失败页面的 HTML 直接内嵌在 JS 变量中
-// 优点：无需发起网络请求，不会因为域名过期导致 fail.html 也变成广告页，且无重定向问题
 const OFFLINE_HTML_CONTENT = `
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>電波が届きません</title>
+    <style>
+        body { font-family: sans-serif; padding: 40px; text-align: center; background: #f5f5f5; }
+        h1 { color: #333; }
+        a { display: block; margin: 15px 0; color: #0066cc; text-decoration: none; }
+        button { margin-top: 20px; padding: 10px 20px; }
+    </style>
 </head>
 <body>
-    网噶了，去<a href="https://h.810114.xyz">https://h.810114.xyz</a>看看吧
-
-    
-    <a href="https://reminder.810114.xyz">https://reminder.810114.xyz</a>
-    <a href="https://reminder.nmbyd3.top">https://reminder.nmbyd3.top</a>
+    <div style="background: white; padding: 30px; border-radius: 8px; max-width: 500px; margin: 50px auto;">
+        <h1>電波が届きません</h1>
+        <p>网噶了，去下面看看吧：</p>
+        <a href="https://reminder.810114.xyz">https://reminder.810114.xyz</a>
+        <a href="https://reminder.nmbyd3.top">https://reminder.nmbyd3.top</a>
+        <button onclick="location.reload()">重新检查</button>
+    </div>
 </body>
 </html>
-
 `;
 
-// --------------------------------------------------------------------------
+const CHECK_CONFIG = {
+  interval: 10000,
+  checkUrl: () => `/sw.js?t=${Date.now()}`,
+  validString: "電波が届きません",
+  isBlocking: false,
+  navigationTimeout: 3000,
+  // 记录已刷新的客户端，避免重复刷新
+  refreshedClients: new Map()
+};
 
-// 1. Install: 安装阶段
-self.addEventListener('install', (event) => {
-  // 这里的 log 可以帮助调试
-  console.log(`[Service Worker] ${VERSION} Installing...`);
+// ==================== 生命周期 ====================
 
-  // 强制跳过等待，让新 Service Worker 立即接管
+self.addEventListener('install', (e) => {
+  console.log(`[SW] ${VERSION} Installing...`);
   self.skipWaiting();
 });
 
-// 2. Activate: 激活与清理
-self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys().then((keys) => Promise.all(
-      keys.map((key) => {
-        if (key !== CACHE_NAME) {
-          console.log(`[Service Worker] Clearing old cache: ${key}`);
-          return caches.delete(key);
-        }
+self.addEventListener('activate', (e) => {
+  e.waitUntil(
+    caches.keys().then(keys => Promise.all(
+      keys.map(key => key !== CACHE_NAME ? caches.delete(key) : null)
+    )).then(() => self.clients.claim())
+      .then(() => {
+        console.log('[SW] 已控制所有客户端，启动后台检查');
+        startPeriodicCheck();
       })
-    ))
   );
-  // 立即控制所有页面
-  self.clients.claim();
 });
 
-// 3. Fetch: 核心拦截与检测引擎
+// ==================== 后台定时检查（立 flag）====================
+
+let checkTimer = null;
+
+function startPeriodicCheck() {
+  performCheck();
+  if (checkTimer) clearInterval(checkTimer);
+  checkTimer = setInterval(performCheck, CHECK_CONFIG.interval);
+}
+
+async function performCheck() {
+  try {
+    const isValid = await validateDomain();
+    console.log(`[SW] 后台检查: ${isValid ? '正常' : '异常'}`);
+    
+    if (!isValid && !CHECK_CONFIG.isBlocking) {
+      // 发现异常，立 flag
+      CHECK_CONFIG.isBlocking = true;
+      console.log('[SW] 立 flag: isBlocking = true');
+      // 强制刷新所有已打开页面，让它们经过导航拦截
+      // 26.02.16 不要这样用，其实可以是打开在后台缓存了看的。
+      // await hardRefreshAllClients();
+    } else if (isValid && CHECK_CONFIG.isBlocking) {
+      // 恢复正常，撤 flag
+      CHECK_CONFIG.isBlocking = false;
+      CHECK_CONFIG.refreshedClients.clear();
+      console.log('[SW] 撤 flag: isBlocking = false');
+    }
+  } catch (err) {
+    console.error('[SW] 检查失败:', err);
+    if (!CHECK_CONFIG.isBlocking) {
+      CHECK_CONFIG.isBlocking = true;
+      // 26.02.16 不要这样用，其实可以是打开在后台缓存了看的。
+      // await hardRefreshAllClients();
+    }
+  }
+}
+
+async function validateDomain() {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), CHECK_CONFIG.navigationTimeout);
+    
+    const res = await fetch(CHECK_CONFIG.checkUrl(), {
+      signal: controller.signal,
+      cache: 'no-store'
+    });
+    clearTimeout(timeout);
+    
+    const text = await res.text();
+    return text.includes(CHECK_CONFIG.validString);
+  } catch (e) {
+    return false;
+  }
+}
+
+// 强制刷新所有客户端（让它们走导航拦截）
+// 26.02.16 不要这样用，其实可以是打开在后台缓存了看的。
+async function hardRefreshAllClients() {
+  const clients = await self.clients.matchAll({
+    type: 'window',
+    includeUncontrolled: false
+  });
+  
+  console.log(`[SW] 强制刷新 ${clients.length} 个客户端`);
+  
+  for (const client of clients) {
+    const now = Date.now();
+    const lastRefresh = CHECK_CONFIG.refreshedClients.get(client.id) || 0;
+    
+    // 5秒内不重复刷新同一个客户端
+    if (now - lastRefresh < 5000) continue;
+    
+    try {
+      await client.navigate(client.url);
+      CHECK_CONFIG.refreshedClients.set(client.id, now);
+      console.log(`[SW] 已刷新: ${client.url}`);
+    } catch (e) {
+      console.error(`[SW] 刷新失败:`, e);
+    }
+  }
+}
+
+// ==================== Fetch 拦截（关键逻辑）====================
+
 self.addEventListener('fetch', (event) => {
   const req = event.request;
-
-  // 【修复错误】：解决 'chrome-extension' is unsupported 报错
-  // 只有 http 或 https 协议的请求才允许被 Service Worker 处理和缓存
-  if (!req.url.startsWith('http')) {
-    return;
-  }
-
-  // A. 处理页面跳转 (Navigation) - 也就是用户在浏览器地址栏输入网址或点击链接时
+  
+  if (!req.url.startsWith('http')) return;
+  
+  // A. 导航请求：只有立了 flag 才拦截，否则直接放行
   if (req.mode === 'navigate') {
-    event.respondWith(handleNavigation(req));
+    // 没有 flag，直接放行，不做任何检查
+    if (!CHECK_CONFIG.isBlocking) {
+      return;
+    }
+    
+    // 有 flag，进行验证
+    event.respondWith(handleBlockedNavigation(req));
     return;
   }
-
-  // B. 处理静态资源 (JS, CSS, Images 等)
-  const isAsset = req.destination === 'script' || req.destination === 'style' ||
-    req.destination === 'image' || req.url.match(/\.(js|css|png|jpg|jpeg|gif)$/);
-
-  if (isAsset) {
+  
+  // 26.02.16 不要这个
+  // B. 阻断模式下拦截子资源（可选，加速失败）
+  // if (CHECK_CONFIG.isBlocking && req.destination !== 'document') {
+  //   event.respondWith(new Response('', {status: 503}));
+  //   return;
+  // }
+  
+  // C. 静态资源缓存
+  // 26.02.16 改掉了image
+  if (['script', 'style', 'font'].includes(req.destination) || 
+      req.url.match(/\.(js|css|woff2?)$/)) {
     event.respondWith(handleAsset(req));
   }
 });
 
 /**
- * 核心逻辑：处理页面导航请求
- * 包含域名健康度检查
+ * 处理被阻断的导航：实时验证，通过则放行，不通过则拦截
  */
-async function handleNavigation(req) {
+async function handleBlockedNavigation(req) {
+  console.log('[SW] flag 已立，验证导航:', req.url);
+  
   try {
-    // 1. 尝试从网络获取目标页面
-    const networkResponse = await fetch(req);
-
-    // 2. 复制一份响应以进行检查（response流只能被读取一次）
-    const clonedRes = networkResponse.clone();
-
-    // 3. 初步判断：如果状态码是 200 且是 HTML，我们需要警惕是否是“域名停靠/过期”广告页
-    const contentType = clonedRes.headers.get('content-type') || '';
-    if (networkResponse.ok && contentType.includes('text/html')) {
-
-      // 4. 执行【站点存活验证】：
-      // 域名过期后，通常所有 URL（包括 /sw.js）都会返回同一个 HTML 广告页。
-      // 我们请求 Service Worker 文件本身，并检查它是否包含特定的版本号字符串。
-      // 加上时间戳 ?t= 防止浏览器缓存验证请求。
-      const validationUrl = `/sw.js?t=${Date.now()}`;
-
-      try {
-        const checkRes = await fetch(validationUrl);
-        const checkText = await checkRes.text();
-
-        // 【验证逻辑】：
-        // 如果 /sw.js 的内容里不包含我们定义的 VERSION 字符串 (例如 'V4')，
-        // 或者返回的内容竟然是 HTML (checkText.includes('<!DOCTYPE html>'))，
-        // 说明域名已失效，返回的是广告页。
-        const isValidSite = checkText.includes("電波が届きません");
-
-        if (!isValidSite) {
-          console.warn('[SW 检测] 域名校验失败（/sw.js 内容异常），判定为域名过期/劫持。');
-          return createOfflineResponse();
-        }
-
-      } catch (e) {
-        // 如果连校验请求都发不出去，可能是断网，或者是跨域限制（通常 sw.js 同域不会跨域）
-        // 这里可以选择放行或保守处理，这里选择放行网络响应
-        console.warn('[SW 检测] 校验请求出错，保持原响应', e);
-      }
+    const isValid = await validateDomain();
+    
+    if (isValid) {
+      // 验证通过，撤 flag 并放行
+      console.log('[SW] 验证通过，撤 flag 并放行');
+      CHECK_CONFIG.isBlocking = false;
+      CHECK_CONFIG.refreshedClients.clear();
+      return fetch(req);
+    } else {
+      // 验证失败，保持 flag 并拦截
+      console.log('[SW] 验证失败，拦截');
+      return createOfflineResponse();
     }
-
-    // 5. 如果一切正常，返回网络请求
-    return networkResponse;
-
+    
   } catch (error) {
-    // 6. 网络完全断开（Fetch 抛出异常），直接返回内嵌的离线页
-    console.log('[SW] Network failed, serving offline page.');
+    // 验证出错，保守拦截
+    console.log('[SW] 验证出错，拦截');
     return createOfflineResponse();
   }
 }
 
-/**
- * 处理静态资源 (Stale-while-revalidate 策略)
- * 增加了防止错误缓存的逻辑
- */
-async function handleAsset(req) {
-  const cache = await caches.open(CACHE_NAME);
-  const cachedResponse = await cache.match(req);
-
-  // 网络请求逻辑
-  const fetchPromise = fetch(req).then((networkResponse) => {
-    // 【关键】：防止域名过期后的 HTML 覆盖了本地缓存的真实 JS/CSS
-    // 如果请求的是 .js/.css，但返回的 Content-Type 是 text/html，说明被劫持了
-    const type = networkResponse.headers.get('content-type') || '';
-    const isHijacked = type.includes('text/html');
-
-    if (networkResponse.ok && !isHijacked) {
-      // 只有正常的资源才写入缓存
-      // 再次检查 scheme，防止报错
-      if (req.url.startsWith('http')) {
-        cache.put(req, networkResponse.clone());
-      }
-    }
-    return networkResponse;
-  }).catch((err) => {
-    // 网络失败时，不做处理，后面会返回缓存
-    return null;
-  });
-
-  // 如果有缓存，优先返回缓存，同时后台更新；如果没缓存，等待网络
-  return cachedResponse || fetchPromise;
-}
-
-/**
- * 辅助函数：构造内嵌的离线页面响应
- */
 function createOfflineResponse() {
   return new Response(OFFLINE_HTML_CONTENT, {
     headers: {
       'Content-Type': 'text/html; charset=utf-8',
-      'Cache-Control': 'no-store' // 确保失败页不被浏览器强缓存
+      'Cache-Control': 'no-store'
     }
   });
+}
+
+// ==================== 静态资源处理 ====================
+
+async function handleAsset(req) {
+  const cache = await caches.open(CACHE_NAME);
+  const cached = await cache.match(req);
+  
+  const fetchPromise = fetch(req).then(res => {
+    const type = res.headers.get('content-type') || '';
+    const isHijacked = type.includes('text/html') && req.url.match(/\.(js|css)$/);
+    
+    if (res.ok && !isHijacked) {
+      cache.put(req, res.clone());
+    }
+    return res;
+  }).catch(() => cached);
+  
+  return cached || fetchPromise;
 }
