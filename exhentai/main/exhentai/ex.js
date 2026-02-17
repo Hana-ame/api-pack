@@ -717,6 +717,7 @@
                     使用DoH解决访问问题
                   </a>
                 </p>
+                <p>（镜像站会继续开到因不可抗力爆炸。）</p>
                 <p>ex.810114.xyz被墙，请使用e.810114.xyz</p>
                 <p>暂时不考虑pwa开发，但如果有意开发可使用本站后端，详情参见<a href="https://810114.xyz/?bid=114514" id="details-link">链接</a>。</p>
             </div>
@@ -742,7 +743,7 @@
   }
 
   async function main() {
-    console.log(2331);
+    console.log("26.02.18");
     // fixBaseUrls(); // 1. URL 替换
     injectStyles(); // 2. 样式注入
     initReloadCover(); // 3. 封面重载 (列表页)
