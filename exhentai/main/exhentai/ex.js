@@ -702,7 +702,7 @@
   // 6. 右下角悬浮窗
   // =========================================================================
   function initFloatingNotice() {
-    const mark = "0214";
+    const mark = "0219";
     if (localStorage.getItem("iframeClosed") === mark) {
       return;
     }
@@ -717,7 +717,7 @@
                     使用DoH解决访问问题
                   </a>
                 </p>
-                <p>ex.810114.xyz被墙，请使用e.810114.xyz</p>
+                <p>（试运行）在<a href="https://810114.xyz/?bid=893">这里</a>发送包含/g/的画廊链接，获得原图下载</p>
                 <p>暂时不考虑pwa开发，但如果有意开发可使用本站后端，详情参见<a href="https://810114.xyz/?bid=114514" id="details-link">链接</a>。</p>
             </div>
         `;
