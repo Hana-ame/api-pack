@@ -702,7 +702,7 @@
   // 6. 右下角悬浮窗
   // =========================================================================
   function initFloatingNotice() {
-    const mark = "0219";
+    const mark = "0228";
     if (localStorage.getItem("iframeClosed") === mark) {
       return;
     }
@@ -720,8 +720,7 @@
                 <p>（镜像站会继续开到因不可抗力爆炸）</p>
                 <p>（试运行）在<a href="https://810114.xyz/?bid=893">这里</a>发送包含/g/的画廊链接，获得原图下载</p>
                 <p>如果遇到上不去的情况,也在上面链接留言处理</p>
-                <p>ex.810114.xyz被墙，请使用e.810114.xyz</p>
-                <p>暂时不考虑pwa开发，但如果有意开发可使用本站后端，详情参见<a href="https://810114.xyz/?bid=114514" id="details-link">链接</a>。</p>
+                <p>本次爆破原因: realIP被举报后修改dns时造成的错误.</p>
             </div>
         `;
     document.body.appendChild(div);
