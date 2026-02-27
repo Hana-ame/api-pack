@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
 /** @type {ServiceWorkerGlobalScope} */
 
-const VERSION = 'V5-26.02.16';
+const VERSION = 'V5-26.02.28';
 const CACHE_NAME = `site-assets-${VERSION}`;
 
 const OFFLINE_HTML_CONTENT = `
@@ -36,7 +36,7 @@ const CHECK_CONFIG = {
   validString: "電波が届きません",
   isBlocking: false,
   navigationTimeout: 3000,
-  // 记录已刷新的客户端，避免重复刷新
+  // 记录已刷新的客户端，避免重复刷新（目前未使用）
   refreshedClients: new Map()
 };
 
@@ -76,14 +76,11 @@ async function performCheck() {
     console.log(`[SW] 后台检查: ${isValid ? '正常' : '异常'}`);
     
     if (!isValid && !CHECK_CONFIG.isBlocking) {
-      // 发现异常，立 flag
       CHECK_CONFIG.isBlocking = true;
       console.log('[SW] 立 flag: isBlocking = true');
-      // 强制刷新所有已打开页面，让它们经过导航拦截
-      // 26.02.16 不要这样用，其实可以是打开在后台缓存了看的。
+      // 如需强制刷新所有页面，可取消注释下一行
       // await hardRefreshAllClients();
     } else if (isValid && CHECK_CONFIG.isBlocking) {
-      // 恢复正常，撤 flag
       CHECK_CONFIG.isBlocking = false;
       CHECK_CONFIG.refreshedClients.clear();
       console.log('[SW] 撤 flag: isBlocking = false');
@@ -92,7 +89,6 @@ async function performCheck() {
     console.error('[SW] 检查失败:', err);
     if (!CHECK_CONFIG.isBlocking) {
       CHECK_CONFIG.isBlocking = true;
-      // 26.02.16 不要这样用，其实可以是打开在后台缓存了看的。
       // await hardRefreshAllClients();
     }
   }
@@ -109,15 +105,18 @@ async function validateDomain() {
     });
     clearTimeout(timeout);
     
+    // 检查状态码是否为 200，以及内容是否包含指定字符串
+    if (!res.ok) return false; // 包括 403 等任何非 2xx 状态
+    
     const text = await res.text();
     return text.includes(CHECK_CONFIG.validString);
   } catch (e) {
+    // 网络错误、超时等
     return false;
   }
 }
 
-// 强制刷新所有客户端（让它们走导航拦截）
-// 26.02.16 不要这样用，其实可以是打开在后台缓存了看的。
+// 强制刷新所有客户端（目前未使用，保留以备将来）
 async function hardRefreshAllClients() {
   const clients = await self.clients.matchAll({
     type: 'window',
@@ -130,7 +129,6 @@ async function hardRefreshAllClients() {
     const now = Date.now();
     const lastRefresh = CHECK_CONFIG.refreshedClients.get(client.id) || 0;
     
-    // 5秒内不重复刷新同一个客户端
     if (now - lastRefresh < 5000) continue;
     
     try {
@@ -152,9 +150,8 @@ self.addEventListener('fetch', (event) => {
   
   // A. 导航请求：只有立了 flag 才拦截，否则直接放行
   if (req.mode === 'navigate') {
-    // 没有 flag，直接放行，不做任何检查
     if (!CHECK_CONFIG.isBlocking) {
-      return;
+      return; // 不拦截，正常处理
     }
     
     // 有 flag，进行验证
@@ -162,19 +159,12 @@ self.addEventListener('fetch', (event) => {
     return;
   }
   
-  // 26.02.16 不要这个
-  // B. 阻断模式下拦截子资源（可选，加速失败）
-  // if (CHECK_CONFIG.isBlocking && req.destination !== 'document') {
-  //   event.respondWith(new Response('', {status: 503}));
-  //   return;
-  // }
-  
-  // C. 静态资源缓存
-  // 26.02.16 改掉了image
+  // B. 静态资源缓存（仅处理脚本、样式、字体）
   if (['script', 'style', 'font'].includes(req.destination) || 
       req.url.match(/\.(js|css|woff2?)$/)) {
     event.respondWith(handleAsset(req));
   }
+  // 其他请求（如图片、XHR）不处理，由浏览器直接发出
 });
 
 /**
@@ -187,19 +177,16 @@ async function handleBlockedNavigation(req) {
     const isValid = await validateDomain();
     
     if (isValid) {
-      // 验证通过，撤 flag 并放行
       console.log('[SW] 验证通过，撤 flag 并放行');
       CHECK_CONFIG.isBlocking = false;
       CHECK_CONFIG.refreshedClients.clear();
       return fetch(req);
     } else {
-      // 验证失败，保持 flag 并拦截
       console.log('[SW] 验证失败，拦截');
       return createOfflineResponse();
     }
     
   } catch (error) {
-    // 验证出错，保守拦截
     console.log('[SW] 验证出错，拦截');
     return createOfflineResponse();
   }
@@ -220,15 +207,50 @@ async function handleAsset(req) {
   const cache = await caches.open(CACHE_NAME);
   const cached = await cache.match(req);
   
-  const fetchPromise = fetch(req).then(res => {
-    const type = res.headers.get('content-type') || '';
-    const isHijacked = type.includes('text/html') && req.url.match(/\.(js|css)$/);
-    
-    if (res.ok && !isHijacked) {
-      cache.put(req, res.clone());
+  // 如果缓存存在，直接返回缓存（同时后台发起网络请求更新缓存）
+  if (cached) {
+    // 异步更新缓存（不阻塞响应）
+    fetchAndCache(req, cache);
+    return cached;
+  }
+  
+  // 缓存不存在，发起网络请求
+  try {
+    const res = await fetch(req);
+    if (res.ok) {
+      // 只缓存成功的响应，且避免缓存被劫持的 HTML（针对 JS/CSS 请求返回 HTML 的情况）
+      const type = res.headers.get('content-type') || '';
+      const isHijacked = type.includes('text/html') && req.url.match(/\.(js|css)$/);
+      if (!isHijacked) {
+        cache.put(req, res.clone());
+      }
     }
     return res;
-  }).catch(() => cached);
-  
-  return cached || fetchPromise;
+  } catch (err) {
+    // 网络错误，返回一个简单的 503 响应，避免未捕获的 promise rejection
+    console.warn('[SW] 静态资源请求失败，返回 fallback:', req.url, err);
+    return new Response('', {
+      status: 503,
+      statusText: 'Service Unavailable',
+      headers: { 'Content-Type': 'text/plain' }
+    });
+  }
+}
+
+/**
+ * 后台获取资源并更新缓存（不等待）
+ */
+async function fetchAndCache(req, cache) {
+  try {
+    const res = await fetch(req);
+    if (res.ok) {
+      const type = res.headers.get('content-type') || '';
+      const isHijacked = type.includes('text/html') && req.url.match(/\.(js|css)$/);
+      if (!isHijacked) {
+        await cache.put(req, res.clone());
+      }
+    }
+  } catch (e) {
+    // 静默失败
+  }
 }
