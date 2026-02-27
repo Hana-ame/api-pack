@@ -721,6 +721,7 @@
                 <p>（试运行）在<a href="https://810114.xyz/?bid=893">这里</a>发送包含/g/的画廊链接，获得原图下载</p>
                 <p>如果遇到上不去的情况,也在上面链接留言处理</p>
                 <p>本次爆破原因: realIP被举报后修改dns时造成的错误.</p>
+                <p>nmbyd2.top域名即将过期.请注意更换域名</p>
             </div>
         `;
     document.body.appendChild(div);
