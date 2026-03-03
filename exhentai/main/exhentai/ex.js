@@ -1,32 +1,33 @@
 (function () {
   "use strict";
 
-  if (location.pathname.startsWith("/g/")) {
+  if (location.pathname.startsWith("/g/") || location.pathname.startsWith("/s/")) {
     base_url = "/";
     api_url = "/api.php";
   }
 
-  (function () {
-    const originalOpen = XMLHttpRequest.prototype.open;
+  // 不知道去调回怎么样 26.02.28
+  // (function () {
+  //   const originalOpen = XMLHttpRequest.prototype.open;
 
-    XMLHttpRequest.prototype.open = function (method, url) {
-      // 1. Convert url to string (it could be a URL object)
-      const urlString = url.toString();
+  //   XMLHttpRequest.prototype.open = function (method, url) {
+  //     // 1. Convert url to string (it could be a URL object)
+  //     const urlString = url.toString();
 
-      // 2. Check if the path is /api.php
-      // This regex looks for /api.php at the end of the string OR followed by a ? (query params)
-      if (/\/api\.php($|\?)/.test(urlString)) {
-        console.error('Blocked request to: ' + urlString);
+  //     // 2. Check if the path is /api.php
+  //     // This regex looks for /api.php at the end of the string OR followed by a ? (query params)
+  //     if (/\/api\.php($|\?)/.test(urlString)) {
+  //       console.error('Blocked request to: ' + urlString);
 
-        // Throwing an error is the safest way to ensure the request
-        // is completely halted and 'send()' cannot be called.
-        throw new Error("403 Forbidden: Requests to /api.php are disallowed.");
-      }
+  //       // Throwing an error is the safest way to ensure the request
+  //       // is completely halted and 'send()' cannot be called.
+  //       throw new Error("403 Forbidden: Requests to /api.php are disallowed.");
+  //     }
 
-      // 3. If it's not /api.php, proceed normally
-      return originalOpen.apply(this, arguments);
-    };
-  })();
+  //     // 3. If it's not /api.php, proceed normally
+  //     return originalOpen.apply(this, arguments);
+  //   };
+  // })();
 
   (function() {
     // 1. THE KILL SWITCH (Images/CSS)
