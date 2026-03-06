@@ -16,6 +16,7 @@ import (
 	"github.com/Hana-ame/api-pack/exhentai"
 	"github.com/Hana-ame/api-pack/qwen"
 	shijima "github.com/Hana-ame/api-pack/shijima"
+	"github.com/Hana-ame/api-pack/siliconflow"
 	"github.com/Hana-ame/api-pack/tools/debug"
 	middleware "github.com/Hana-ame/api-pack/tools/my_gin_middleware"
 	tools "github.com/Hana-ame/api-pack/tools/utils"
@@ -62,8 +63,10 @@ func main() {
 	}
 
 	if tools.HasEnv("GROQ_PROXY") {
-		go OpenaiProxy(os.Getenv("GROQ_PROXY"))        //127.25.2.9:8080
-		go OpenaiProxyAlt(os.Getenv("GROQ_PROXY_ALT")) //127.25.2.9:8080
+		go Groq(os.Getenv("GROQ_PROXY")) //127.25.2.9:8080
+	}
+	if tools.HasEnv("SILICONFLOW_PROXY") {
+		go siliconflow.Run(os.Getenv("SILICONFLOW_PROXY")) //127.26.3.5:8080
 	}
 
 	if tools.HasEnv("SHIJIMA") {
