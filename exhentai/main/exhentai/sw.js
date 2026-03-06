@@ -148,10 +148,21 @@ self.addEventListener('fetch', (event) => {
   
   if (!req.url.startsWith('http')) return;
   
-  // A. 导航请求：只有立了 flag 才拦截，否则直接放行
+  // A. 导航请求：核心修改点
   if (req.mode === 'navigate') {
     if (!CHECK_CONFIG.isBlocking) {
-      return; // 不拦截，正常处理
+      // 【修改点1】：不直接 return 放行，而是直接请求网络。
+      // 这保证了开屏极速直连。如果遭遇彻底断网/DNS失败，fetch会直接报错，
+      // 我们瞬间捕获它，立刻返回自定义离线页并立flag。
+      // 如果是502/劫持等情况，fetch会成功拿到错误网页（显示一次），随后交由后台轮询检测并拦截。
+      event.respondWith(
+        fetch(req).catch((err) => {
+          console.warn('[SW] 开屏直连失败(断网)，立刻拦截并立flag:', err);
+          CHECK_CONFIG.isBlocking = true;
+          return createOfflineResponse();
+        })
+      );
+      return;
     }
     
     // 有 flag，进行验证
@@ -180,7 +191,13 @@ async function handleBlockedNavigation(req) {
       console.log('[SW] 验证通过，撤 flag 并放行');
       CHECK_CONFIG.isBlocking = false;
       CHECK_CONFIG.refreshedClients.clear();
-      return fetch(req);
+      
+      // 【修改点2】：放行的时候也加上 catch，
+      // 防止在验证通过的瞬间刚好断网，导致抛出未捕获异常从而显示浏览器原生错误页。
+      return await fetch(req).catch(() => {
+        CHECK_CONFIG.isBlocking = true;
+        return createOfflineResponse();
+      });
     } else {
       console.log('[SW] 验证失败，拦截');
       return createOfflineResponse();
