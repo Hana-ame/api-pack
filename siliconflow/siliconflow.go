@@ -130,13 +130,13 @@ func Run(addr string) {
 
 	// 转发路由
 	r.POST("/*any", siliconflowProxyHandler)
-	r.POST("/v1/chat/completions", siliconflowProxyHandler)
-	r.POST("/chat/completions", siliconflowProxyHandler)
+	// r.POST("/v1/chat/completions", siliconflowProxyHandler)
+	// r.POST("/chat/completions", siliconflowProxyHandler)
 
 	// 健康检查（可选）
-	r.GET("/health", func(c *gin.Context) {
-		c.JSON(200, gin.H{"status": "ok"})
-	})
+	// r.GET("/health", func(c *gin.Context) {
+	// 	c.JSON(200, gin.H{"status": "ok"})
+	// })
 
 	r.Run(addr)
 }

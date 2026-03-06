@@ -73,9 +73,9 @@ func Groq(addr string) {
 	// r.POST("/chat/completions", groqProxyHandler)
 
 	// 健康检查
-	r.GET("/health", func(c *gin.Context) {
-		c.JSON(200, gin.H{"status": "ok"})
-	})
+	// r.GET("/health", func(c *gin.Context) {
+	// 	c.JSON(200, gin.H{"status": "ok"})
+	// })
 
 	r.Run(addr)
 }
