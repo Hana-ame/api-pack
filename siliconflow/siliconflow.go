@@ -21,6 +21,7 @@ var (
 		"THUDM/glm-4-9b-chat":                   true,
 		"deepseek-ai/DeepSeek-R1-0528-Qwen3-8B": true,
 		"Qwen/Qwen3-8B":                         true,
+		"Qwen/Qwen3.5-4B":                       true,
 	}
 
 	client = &http.Client{}
@@ -43,14 +44,9 @@ func siliconflowProxyHandler(c *gin.Context) {
 		return
 	}
 
-	modelVal := reqMap.GetOrDefault("model", nil)
-	if modelVal == nil {
+	model := reqMap.GetOrDefault("model", "").(string)
+	if model == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "model field is required"})
-		return
-	}
-	model, ok := modelVal.(string)
-	if !ok {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "model must be a string"})
 		return
 	}
 
