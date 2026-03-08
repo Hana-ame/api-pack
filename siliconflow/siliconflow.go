@@ -15,13 +15,22 @@ var (
 	siliconflowAPIKey   = os.Getenv("SILICONFLOW_API_KEY")
 	siliconflowEndpoint = "https://api.siliconflow.cn/v1/chat/completions"
 	freeModels          = map[string]bool{
-		"deepseek-ai/DeepSeek-OCR":              true,
-		"THUDM/GLM-4-9B-0414":                   true,
-		"THUDM/GLM-Z1-9B-0414":                  true,
-		"THUDM/glm-4-9b-chat":                   true,
-		"deepseek-ai/DeepSeek-R1-0528-Qwen3-8B": true,
-		"Qwen/Qwen3-8B":                         true,
-		"Qwen/Qwen3.5-4B":                       true,
+		"Qwen/Qwen3.5-4B":                         true,
+		"PaddlePaddle/PaddleOCR-VL-1.5":           true,
+		"deepseek-ai/DeepSeek-R1-Distill-Qwen-7B": true,
+		"THUDM/GLM-4.1V-9B-Thinking":              true,
+		"PaddlePaddle/PaddleOCR-VL":               true,
+		"deepseek-ai/DeepSeek-OCR":                true,
+		"Qwen/Qwen3-8B":                           true,
+		"tencent/Hunyuan-MT-7B":                   true,
+		"deepseek-ai/DeepSeek-R1-0528-Qwen3-8B":   true,
+		"THUDM/GLM-Z1-9B-0414":                    true,
+		"Qwen/Qwen2.5-7B-Instruct":                true,
+		"Qwen/Qwen2.5-Coder-7B-Instruct":          true,
+		"THUDM/GLM-4-9B-0414":                     true,
+		"internlm/internlm2_5-7b-chat":            true,
+		"THUDM/glm-4-9b-chat":                     true,
+		"Qwen/Qwen2-7B-Instruct":                  true,
 	}
 
 	client = &http.Client{}

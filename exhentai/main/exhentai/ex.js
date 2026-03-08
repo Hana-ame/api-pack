@@ -7,27 +7,28 @@
   }
 
   // 不知道去调回怎么样 26.02.28
-  // (function () {
-  //   const originalOpen = XMLHttpRequest.prototype.open;
+  // 26.03.07
+  (function () {
+    const originalOpen = XMLHttpRequest.prototype.open;
 
-  //   XMLHttpRequest.prototype.open = function (method, url) {
-  //     // 1. Convert url to string (it could be a URL object)
-  //     const urlString = url.toString();
+    XMLHttpRequest.prototype.open = function (method, url) {
+      // 1. Convert url to string (it could be a URL object)
+      const urlString = url.toString();
 
-  //     // 2. Check if the path is /api.php
-  //     // This regex looks for /api.php at the end of the string OR followed by a ? (query params)
-  //     if (/\/api\.php($|\?)/.test(urlString)) {
-  //       console.error('Blocked request to: ' + urlString);
+      // 2. Check if the path is /api.php
+      // This regex looks for /api.php at the end of the string OR followed by a ? (query params)
+      if (/\/api\.php($|\?)/.test(urlString)) {
+        console.error('Blocked request to: ' + urlString);
 
-  //       // Throwing an error is the safest way to ensure the request
-  //       // is completely halted and 'send()' cannot be called.
-  //       throw new Error("403 Forbidden: Requests to /api.php are disallowed.");
-  //     }
+        // Throwing an error is the safest way to ensure the request
+        // is completely halted and 'send()' cannot be called.
+        throw new Error("403 Forbidden: Requests to /api.php are disallowed.");
+      }
 
-  //     // 3. If it's not /api.php, proceed normally
-  //     return originalOpen.apply(this, arguments);
-  //   };
-  // })();
+      // 3. If it's not /api.php, proceed normally
+      return originalOpen.apply(this, arguments);
+    };
+  })();
 
   (function() {
     // 1. THE KILL SWITCH (Images/CSS)
@@ -265,7 +266,7 @@
             }
 
             /* === 移动端触屏适配 (屏幕宽度 < 768px) === */
-            @media screen and (max-width: 768px) {
+            @media screen and (max-width: 7680px) {
                 /* 调整悬浮窗位置和大小 */
                 #moonchan-floating-iframe {
                     width: 90%;
@@ -703,7 +704,7 @@
   // 6. 右下角悬浮窗
   // =========================================================================
   function initFloatingNotice() {
-    const mark = "0228";
+    const mark = "0307";
     if (localStorage.getItem("iframeClosed") === mark) {
       return;
     }
@@ -721,8 +722,8 @@
                 <p>（镜像站会继续开到因不可抗力爆炸）</p>
                 <p>（试运行）在<a href="https://810114.xyz/?bid=893">这里</a>发送包含/g/的画廊链接，获得原图下载</p>
                 <p>如果遇到上不去的情况,也在上面链接留言处理</p>
-                <p>本次爆破原因: realIP被举报后修改dns时造成的错误.</p>
                 <p>nmbyd2.top域名即将过期.请注意更换域名</p>
+                <p><span style="color: red;">既然手里有很多ip，可以直接爬源站，不用盯着镜像爬。</span>正常用户请无视</p>
             </div>
         `;
     document.body.appendChild(div);
@@ -746,7 +747,7 @@
   }
 
   async function main() {
-    console.log("26.02.18");
+    console.log("26.03.07");
     // fixBaseUrls(); // 1. URL 替换
     injectStyles(); // 2. 样式注入
     initReloadCover(); // 3. 封面重载 (列表页)
