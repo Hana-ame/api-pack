@@ -202,7 +202,7 @@ func (p *ProxyHandler) accessControlMiddleware() gin.HandlerFunc {
 		}
 
 		// --- C. 基础防护 (即使在白名单，也要防止路径遍历) ---
-		if strings.Contains(path, "..") {
+		if strings.Contains(path, "/../") {
 			c.AbortWithStatus(http.StatusForbidden)
 			return
 		}
