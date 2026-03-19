@@ -28,7 +28,7 @@ var defaultClient = &http.Client{
 				Port: 0,
 			},
 			Timeout:   3 * time.Second,
-			KeepAlive: 3 * time.Second,
+			KeepAlive: 30 * time.Second,
 		}).DialContext,
 		MaxIdleConns:        100,
 		IdleConnTimeout:     10 * time.Second,
@@ -49,7 +49,7 @@ const (
 	// DefaultRotationThreshold 单个槽位的轮换阈值
 	DefaultRotationThreshold = 1000
 	// DefaultCleanupDelay 删除旧 IP 的延迟时间
-	DefaultCleanupDelay = 6 * time.Second
+	DefaultCleanupDelay = 90 * time.Second
 	// DefaultPoolSize 默认并发 IP 数量
 	DefaultPoolSize = 3
 )
