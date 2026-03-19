@@ -723,7 +723,7 @@
                 <p>（试运行）在<a href="https://810114.xyz/?bid=893">这里</a>发送包含/g/的画廊链接，获得原图下载</p>
                 <p>如果遇到上不去的情况,也在上面链接留言处理</p>
                 <p>nmbyd2.top域名即将过期.请注意更换域名</p>
-                <p><span style="color: red;">真的不要滥用，滥用了我会想改代码，改完容易炸，就像这次一样，虽然这次是vmess节点的问题</span></p>
+                <p><span style="color: red;">真的不要滥用，滥用了我只好改代码，改完容易炸，就像这次一样，虽然这次是vmess节点的问题</span></p>
             </div>
         `;
     document.body.appendChild(div);
