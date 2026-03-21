@@ -43,7 +43,7 @@ const EXPIRE_CONFIG = {
 
 // 2. 图片超时代理配置 (新增)
 const IMAGE_PROXY_CONFIG = {
-  timeout: 5000, // 超时时间 5000 毫秒 (5秒)
+  timeout: 10000, // 超时时间 5000 毫秒 (5秒)
   proxyBaseUrl: 'https://proxy.moonchan.xyz', // 代理源基础 URL
   targetDomains: ['ehgt.org', 'www.ehgt.org'] // 需要应用此规则的域名
 };
@@ -165,7 +165,7 @@ async function handleNavigation(req) {
   // 2. ==================== 正常的请求逻辑 ====================
   // 设置 5 秒超时，防止网络黑洞导致无限转圈白屏
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 5000);
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
 
   try {
     const response = await fetch(req, {
