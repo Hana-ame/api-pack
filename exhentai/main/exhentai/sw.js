@@ -109,7 +109,7 @@ async function handleImageWithProxy(req) {
     clearTimeout(timeoutId);
 
     // 如果原图报 404, 403, 502 等非 2xx 状态码，主动抛出错误以触发备用源
-    if (!response.ok) {
+    if (!response.ok && response.status !== 0) {
       throw new Error(`Original image failed with status: ${response.status}`);
     }
 
