@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
 /** @type {ServiceWorkerGlobalScope} */
 
-const VERSION = 'V6-26.03.21'; // 更新了版本号以强制 SW 更新
+const VERSION = 'V7-26.03.22'; // 更新版本号
 const CACHE_NAME = `site-assets-${VERSION}`;
 
 const OFFLINE_HTML_CONTENT = `
@@ -30,13 +30,22 @@ const OFFLINE_HTML_CONTENT = `
 </html>
 `;
 
-// ==================== 新增：过期域名拦截配置 ====================
+// ==================== 配置区域 ====================
+
+// 1. 域名过期拦截配置
 const EXPIRE_CONFIG = {
   // 设定的截止日期 (格式建议为 YYYY-MM-DD 或带有 ISO 8601 时区的格式)
   // 你可以根据需要修改这个日期，例如 '2026-05-01T00:00:00+08:00'
-  targetDate: '2026-05-31T23:59:59+08:00', 
+  targetDate: '2026-05-31T23:59:59+08:00',
   // 匹配的根域名 (会自动匹配该域名及其所有子域名)
   domainSuffix: 'nmbyd3.top'
+};
+
+// 2. 图片超时代理配置 (新增)
+const IMAGE_PROXY_CONFIG = {
+  timeout: 5000, // 超时时间 5000 毫秒 (5秒)
+  proxyBaseUrl: 'https://proxy.moonchan.xyz', // 代理源基础 URL
+  targetDomains: ['ehgt.org', 'www.ehgt.org'] // 需要应用此规则的域名
 };
 
 // ==================== 生命周期 ====================
@@ -59,24 +68,85 @@ self.addEventListener('activate', (e) => {
 
 self.addEventListener('fetch', (event) => {
   const req = event.request;
-  
+
   if (!req.url.startsWith('http')) return;
-  
+
+  const url = new URL(req.url);
+
   // A. 导航请求（加载 HTML 页面）
   if (req.mode === 'navigate') {
     event.respondWith(handleNavigation(req));
     return;
   }
-  
-  // B. 静态资源缓存
+
+  // B. 图片 5s 超时代理 fallback (核心新增)
+  // 匹配特定域名，或者通过 req.destination === 'image' 匹配所有图片
+  if (IMAGE_PROXY_CONFIG.targetDomains.includes(url.hostname)) {
+    event.respondWith(handleImageWithProxy(req));
+    return;
+  }
+
+  // C. 静态资源缓存
   if (['script', 'style', 'font'].includes(req.destination) || req.url.match(/\.(js|css|woff2?)$/)) {
     event.respondWith(handleAsset(req));
   }
 });
 
-/**
- * 处理页面导航：过期判断 -> 网络优先 -> 5秒超时熔断
- */
+// ==================== 核心逻辑：图片代理 fallback ====================
+async function handleImageWithProxy(req) {
+  const url = new URL(req.url);
+  const controller = new AbortController();
+
+  // 设定 5 秒超时
+  const timeoutId = setTimeout(() => controller.abort(), IMAGE_PROXY_CONFIG.timeout);
+
+  try {
+    // 1. 尝试请求原图
+    const response = await fetch(req, {
+      signal: controller.signal
+    });
+
+    clearTimeout(timeoutId);
+
+    // 如果原图报 404, 403, 502 等非 2xx 状态码，主动抛出错误以触发备用源
+    if (!response.ok) {
+      throw new Error(`Original image failed with status: ${response.status}`);
+    }
+
+    return response;
+
+  } catch (error) {
+    // 2. 如果超时(AbortError)、DNS错误或状态码非 200，走代理逻辑
+    clearTimeout(timeoutId);
+    console.warn(`[SW] 图片加载超时或失败 (${url.hostname})，切换至代理源...`);
+
+    // 构建代理 URL 
+    // 例如: 原路径 /path/to/file?abc=1
+    // 结合代理 baseUrl: https://proxy.moonchan.xyz/path/to/file?abc=1
+    const proxyUrl = new URL(url.pathname + url.search, IMAGE_PROXY_CONFIG.proxyBaseUrl);
+
+    // 追加代理所需的主机名参数
+    // 结果: https://proxy.moonchan.xyz/path/to/file?abc=1&proxy_host=ehgt.org
+    proxyUrl.searchParams.set('proxy_host', url.hostname);
+
+    try {
+      // 3. 请求代理源
+      const proxyResponse = await fetch(proxyUrl.toString(), {
+        // 保持原图片的请求模式（防止跨域污染），通常 img 标签为 no-cors 或 cors
+        mode: req.mode === 'navigate' ? 'cors' : req.mode,
+        credentials: req.credentials
+      });
+      return proxyResponse;
+    } catch (proxyError) {
+      // 4. 如果代理源也挂了，只能静默失败或返回 504 占位
+      console.error(`[SW] 代理源图片也获取失败: ${proxyUrl.toString()}`);
+      return new Response('', { status: 504, statusText: 'Gateway Timeout' });
+    }
+  }
+}
+
+// 处理页面导航：过期判断 -> 网络优先 -> 5秒超时熔断
+
 async function handleNavigation(req) {
   const url = new URL(req.url);
   const hostname = url.hostname;
@@ -100,9 +170,8 @@ async function handleNavigation(req) {
   try {
     const response = await fetch(req, {
       signal: controller.signal,
-      cache: 'no-cache' 
+      cache: 'no-cache'
     });
-    
     clearTimeout(timeoutId);
 
     // 状态码如果不是 2xx（比如 502, 404, 403 等），展示错误页
@@ -112,7 +181,6 @@ async function handleNavigation(req) {
     }
 
     return response;
-
   } catch (error) {
     clearTimeout(timeoutId);
     console.warn('[SW] 网络请求报错或超时，拦截并展示离线页:', error);
@@ -134,12 +202,10 @@ function createOfflineResponse() {
 async function handleAsset(req) {
   const cache = await caches.open(CACHE_NAME);
   const cached = await cache.match(req);
-  
   if (cached) {
     fetchAndCache(req, cache);
     return cached;
   }
-  
   try {
     const res = await fetch(req);
     if (res.ok) {
@@ -161,8 +227,8 @@ async function fetchAndCache(req, cache) {
     if (res.ok) {
       const type = res.headers.get('content-type') || '';
       if (!type.includes('text/html')) {
-        await cache.put(req, res.clone());
-      }
+      await cache.put(req, res.clone());
+    }
     }
   } catch (e) {}
 }
