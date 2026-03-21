@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
 /** @type {ServiceWorkerGlobalScope} */
 
-const VERSION = 'V5-26.02.28';
+const VERSION = 'V6-26.03.21'; // 更新了版本号以强制 SW 更新
 const CACHE_NAME = `site-assets-${VERSION}`;
 
 const OFFLINE_HTML_CONTENT = `
@@ -30,14 +30,13 @@ const OFFLINE_HTML_CONTENT = `
 </html>
 `;
 
-const CHECK_CONFIG = {
-  interval: 10000,
-  checkUrl: () => `/sw.js?t=${Date.now()}`,
-  validString: "電波が届きません",
-  isBlocking: false,
-  navigationTimeout: 3000,
-  // 记录已刷新的客户端，避免重复刷新（目前未使用）
-  refreshedClients: new Map()
+// ==================== 新增：过期域名拦截配置 ====================
+const EXPIRE_CONFIG = {
+  // 设定的截止日期 (格式建议为 YYYY-MM-DD 或带有 ISO 8601 时区的格式)
+  // 你可以根据需要修改这个日期，例如 '2026-05-01T00:00:00+08:00'
+  targetDate: '2026-05-31T23:59:59+08:00', 
+  // 匹配的根域名 (会自动匹配该域名及其所有子域名)
+  domainSuffix: 'nmbyd3.top'
 };
 
 // ==================== 生命周期 ====================
@@ -53,158 +52,70 @@ self.addEventListener('activate', (e) => {
     caches.keys().then(keys => Promise.all(
       keys.map(key => key !== CACHE_NAME ? caches.delete(key) : null)
     )).then(() => self.clients.claim())
-      .then(() => {
-        console.log('[SW] 已控制所有客户端，启动后台检查');
-        startPeriodicCheck();
-      })
   );
 });
 
-// ==================== 后台定时检查（立 flag）====================
-
-let checkTimer = null;
-
-function startPeriodicCheck() {
-  performCheck();
-  if (checkTimer) clearInterval(checkTimer);
-  checkTimer = setInterval(performCheck, CHECK_CONFIG.interval);
-}
-
-async function performCheck() {
-  try {
-    const isValid = await validateDomain();
-    console.log(`[SW] 后台检查: ${isValid ? '正常' : '异常'}`);
-    
-    if (!isValid && !CHECK_CONFIG.isBlocking) {
-      CHECK_CONFIG.isBlocking = true;
-      console.log('[SW] 立 flag: isBlocking = true');
-      // 如需强制刷新所有页面，可取消注释下一行
-      // await hardRefreshAllClients();
-    } else if (isValid && CHECK_CONFIG.isBlocking) {
-      CHECK_CONFIG.isBlocking = false;
-      CHECK_CONFIG.refreshedClients.clear();
-      console.log('[SW] 撤 flag: isBlocking = false');
-    }
-  } catch (err) {
-    console.error('[SW] 检查失败:', err);
-    if (!CHECK_CONFIG.isBlocking) {
-      CHECK_CONFIG.isBlocking = true;
-      // await hardRefreshAllClients();
-    }
-  }
-}
-
-async function validateDomain() {
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), CHECK_CONFIG.navigationTimeout);
-    
-    const res = await fetch(CHECK_CONFIG.checkUrl(), {
-      signal: controller.signal,
-      cache: 'no-store'
-    });
-    clearTimeout(timeout);
-    
-    // 检查状态码是否为 200，以及内容是否包含指定字符串
-    if (!res.ok) return false; // 包括 403 等任何非 2xx 状态
-    
-    const text = await res.text();
-    return text.includes(CHECK_CONFIG.validString);
-  } catch (e) {
-    // 网络错误、超时等
-    return false;
-  }
-}
-
-// 强制刷新所有客户端（目前未使用，保留以备将来）
-async function hardRefreshAllClients() {
-  const clients = await self.clients.matchAll({
-    type: 'window',
-    includeUncontrolled: false
-  });
-  
-  console.log(`[SW] 强制刷新 ${clients.length} 个客户端`);
-  
-  for (const client of clients) {
-    const now = Date.now();
-    const lastRefresh = CHECK_CONFIG.refreshedClients.get(client.id) || 0;
-    
-    if (now - lastRefresh < 5000) continue;
-    
-    try {
-      await client.navigate(client.url);
-      CHECK_CONFIG.refreshedClients.set(client.id, now);
-      console.log(`[SW] 已刷新: ${client.url}`);
-    } catch (e) {
-      console.error(`[SW] 刷新失败:`, e);
-    }
-  }
-}
-
-// ==================== Fetch 拦截（关键逻辑）====================
+// ==================== Fetch 拦截 ====================
 
 self.addEventListener('fetch', (event) => {
   const req = event.request;
   
   if (!req.url.startsWith('http')) return;
   
-  // A. 导航请求：核心修改点
+  // A. 导航请求（加载 HTML 页面）
   if (req.mode === 'navigate') {
-    if (!CHECK_CONFIG.isBlocking) {
-      // 【修改点1】：不直接 return 放行，而是直接请求网络。
-      // 这保证了开屏极速直连。如果遭遇彻底断网/DNS失败，fetch会直接报错，
-      // 我们瞬间捕获它，立刻返回自定义离线页并立flag。
-      // 如果是502/劫持等情况，fetch会成功拿到错误网页（显示一次），随后交由后台轮询检测并拦截。
-      event.respondWith(
-        fetch(req).catch((err) => {
-          console.warn('[SW] 开屏直连失败(断网)，立刻拦截并立flag:', err);
-          CHECK_CONFIG.isBlocking = true;
-          return createOfflineResponse();
-        })
-      );
-      return;
-    }
-    
-    // 有 flag，进行验证
-    event.respondWith(handleBlockedNavigation(req));
+    event.respondWith(handleNavigation(req));
     return;
   }
   
-  // B. 静态资源缓存（仅处理脚本、样式、字体）
-  if (['script', 'style', 'font'].includes(req.destination) || 
-      req.url.match(/\.(js|css|woff2?)$/)) {
+  // B. 静态资源缓存
+  if (['script', 'style', 'font'].includes(req.destination) || req.url.match(/\.(js|css|woff2?)$/)) {
     event.respondWith(handleAsset(req));
   }
-  // 其他请求（如图片、XHR）不处理，由浏览器直接发出
 });
 
 /**
- * 处理被阻断的导航：实时验证，通过则放行，不通过则拦截
+ * 处理页面导航：过期判断 -> 网络优先 -> 5秒超时熔断
  */
-async function handleBlockedNavigation(req) {
-  console.log('[SW] flag 已立，验证导航:', req.url);
-  
+async function handleNavigation(req) {
+  const url = new URL(req.url);
+  const hostname = url.hostname;
+
+  // 1. ==================== 日期与域名拦截逻辑 ====================
+  // 检查域名：是 nmbyd3.top 本身，或是以 .nmbyd3.top 结尾的子域名
+  const isTargetDomain = hostname === EXPIRE_CONFIG.domainSuffix || hostname.endsWith(`.${EXPIRE_CONFIG.domainSuffix}`);
+  // 检查时间：当前时间是否大于设定的过期时间
+  const isExpired = Date.now() > new Date(EXPIRE_CONFIG.targetDate).getTime();
+
+  if (isTargetDomain && isExpired) {
+    console.warn(`[SW] 域名 ${hostname} 已超过设定日期 ${EXPIRE_CONFIG.targetDate}，直接展示错误页`);
+    return createOfflineResponse(); // 直接返回错误页，不走任何网络请求
+  }
+
+  // 2. ==================== 正常的请求逻辑 ====================
+  // 设置 5 秒超时，防止网络黑洞导致无限转圈白屏
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 5000);
+
   try {
-    const isValid = await validateDomain();
+    const response = await fetch(req, {
+      signal: controller.signal,
+      cache: 'no-cache' 
+    });
     
-    if (isValid) {
-      console.log('[SW] 验证通过，撤 flag 并放行');
-      CHECK_CONFIG.isBlocking = false;
-      CHECK_CONFIG.refreshedClients.clear();
-      
-      // 【修改点2】：放行的时候也加上 catch，
-      // 防止在验证通过的瞬间刚好断网，导致抛出未捕获异常从而显示浏览器原生错误页。
-      return await fetch(req).catch(() => {
-        CHECK_CONFIG.isBlocking = true;
-        return createOfflineResponse();
-      });
-    } else {
-      console.log('[SW] 验证失败，拦截');
+    clearTimeout(timeoutId);
+
+    // 状态码如果不是 2xx（比如 502, 404, 403 等），展示错误页
+    if (!response.ok) {
+      console.warn(`[SW] 导航请求失败，状态码: ${response.status}，展示离线页`);
       return createOfflineResponse();
     }
-    
+
+    return response;
+
   } catch (error) {
-    console.log('[SW] 验证出错，拦截');
+    clearTimeout(timeoutId);
+    console.warn('[SW] 网络请求报错或超时，拦截并展示离线页:', error);
     return createOfflineResponse();
   }
 }
@@ -224,50 +135,34 @@ async function handleAsset(req) {
   const cache = await caches.open(CACHE_NAME);
   const cached = await cache.match(req);
   
-  // 如果缓存存在，直接返回缓存（同时后台发起网络请求更新缓存）
   if (cached) {
-    // 异步更新缓存（不阻塞响应）
     fetchAndCache(req, cache);
     return cached;
   }
   
-  // 缓存不存在，发起网络请求
   try {
     const res = await fetch(req);
     if (res.ok) {
-      // 只缓存成功的响应，且避免缓存被劫持的 HTML（针对 JS/CSS 请求返回 HTML 的情况）
       const type = res.headers.get('content-type') || '';
-      const isHijacked = type.includes('text/html') && req.url.match(/\.(js|css)$/);
-      if (!isHijacked) {
+      if (!type.includes('text/html')) {
         cache.put(req, res.clone());
       }
     }
     return res;
   } catch (err) {
-    // 网络错误，返回一个简单的 503 响应，避免未捕获的 promise rejection
-    console.warn('[SW] 静态资源请求失败，返回 fallback:', req.url, err);
-    return new Response('', {
-      status: 503,
-      statusText: 'Service Unavailable',
-      headers: { 'Content-Type': 'text/plain' }
-    });
+    console.warn('[SW] 静态资源获取失败:', req.url);
+    return new Response('', { status: 503, statusText: 'Service Unavailable' });
   }
 }
 
-/**
- * 后台获取资源并更新缓存（不等待）
- */
 async function fetchAndCache(req, cache) {
   try {
     const res = await fetch(req);
     if (res.ok) {
       const type = res.headers.get('content-type') || '';
-      const isHijacked = type.includes('text/html') && req.url.match(/\.(js|css)$/);
-      if (!isHijacked) {
+      if (!type.includes('text/html')) {
         await cache.put(req, res.clone());
       }
     }
-  } catch (e) {
-    // 静默失败
-  }
+  } catch (e) {}
 }
