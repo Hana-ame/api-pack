@@ -118,7 +118,7 @@ async function handleImageWithProxy(req) {
   } catch (error) {
     // 2. 如果超时(AbortError)、DNS错误或状态码非 200，走代理逻辑
     clearTimeout(timeoutId);
-    console.warn(`[SW] 图片加载超时或失败 (${url.hostname})，切换至代理源...`);
+    console.warn(`[SW] 图片加载超时或失败 (${error})，切换至代理源...`);
 
     // 构建代理 URL 
     // 例如: 原路径 /path/to/file?abc=1
