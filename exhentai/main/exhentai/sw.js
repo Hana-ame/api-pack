@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
 /** @type {ServiceWorkerGlobalScope} */
 
-const VERSION = 'V10-26.03.22-Ultimate'; 
+const VERSION = 'V11-26.03.22'; 
 const CACHE_NAME = `site-assets-${VERSION}`;
 
 // ==================== 自定义错误页面 ====================
@@ -168,7 +168,7 @@ async function handleImageWithProxy(req) {
   try {
     const response = await fetch(req, { signal: controller.signal });
     clearTimeout(timeoutId);
-    if (!response.ok) throw new Error(`Status: ${response.status}`);
+    if (!response.ok && response.status !== 0) throw new Error(`Status: ${response.status}`);
     return response;
 
   } catch (error) {
@@ -179,7 +179,7 @@ async function handleImageWithProxy(req) {
       return new Response('', { status: 499, statusText: 'Client Closed Request' });
     }
 
-    console.warn(`[SW] 图片加载超时或失败 (${url.hostname})，切换至代理源...`);
+    console.warn(`[SW] 图片加载超时或失败 (${error})，切换至代理源...`);
     const proxyUrl = new URL(url.pathname + url.search, IMAGE_PROXY_CONFIG.proxyBaseUrl);
     proxyUrl.searchParams.set('proxy_host', url.hostname);
 
