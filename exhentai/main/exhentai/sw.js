@@ -74,6 +74,12 @@ self.addEventListener('fetch', (event) => {
 
   // A. 导航请求（加载 HTML 页面）
   if (req.mode === 'navigate') {
+
+    const isNewWindow = event.clientId === "";
+    if (isNewWindow) {
+      return;
+    }
+    
     // 1. 页面跳转前：果断中止上一页所有尚未完成的图片/脚本请求，释放网络通道
     if (activeControllers.size > 0) {
       console.log(`[SW] 侦测到页面跳转，释放 ${activeControllers.size} 个遗留后台连接...`);
