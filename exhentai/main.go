@@ -432,7 +432,7 @@ func Run(addr string) {
 	}
 	godotenv.Load(".env")
 
-	manager, err := myfetch.NewManager("sit1", os.Getenv("IPV6_PREFIX"))
+	manager, err := myfetch.NewManager(os.Getenv("IPV6_IFACE"), os.Getenv("IPV6_PREFIX"))
 	if err != nil {
 		log.Fatalf("Failed to create manager: %v", err)
 	}
