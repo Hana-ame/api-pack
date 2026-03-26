@@ -71,6 +71,7 @@ self.addEventListener('fetch', (event) => {
   if (!req.url.startsWith('http')) return;
 
   const url = new URL(req.url);
+  const hostname = url.hostname;
 
   // A. 导航请求（加载 HTML 页面）
   if (req.mode === 'navigate') {
@@ -89,9 +90,16 @@ self.addEventListener('fetch', (event) => {
       }
       activeControllers.clear();
     }
+      // 1. 判断日期与域名拦截
+      const isTargetDomain = hostname === EXPIRE_CONFIG.domainSuffix || hostname.endsWith(`.${EXPIRE_CONFIG.domainSuffix}`);
+      const isExpired = Date.now() > new Date(EXPIRE_CONFIG.targetDate).getTime();
     
+      if (isTargetDomain && isExpired) {
+        // console.warn(`[SW] 域名 ${hostname} 已过期，直接展示备用导航页`);
+        event.respondWith(handleNavigation(req));
+      }
     // 2. 拦截并接管当前主页面的加载（支持超时、错误和过期判断）
-    event.respondWith(handleNavigation(req));
+    
     return;
   }
 
