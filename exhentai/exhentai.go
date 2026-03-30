@@ -98,13 +98,25 @@ func ExhProxy(rotator *IPRotator, addr string) {
 	{
 		special.GET("/api/*any", func(c *gin.Context) { c.AbortWithStatus(http.StatusGone) })
 		special.GET("/archiver.php", func(c *gin.Context) {
-			c.Redirect(301, "https://exhentai.org"+c.Request.URL.String())
+			if c.GetHeader("X-Cookie") != "" {
+				p.mainProxyHandler(c)
+			} else {
+				c.Redirect(301, "https://exhentai.org"+c.Request.URL.String())
+			}
+			return
 		})
 		special.GET("/uconfig.php", p.handleUConfig)
 		special.POST("/api.php", p.handleAPI)
 		special.GET("/image/*any", p.handleImageLegacy)
 
-		special.GET("/fullimg/*any", p.handleOrigin)
+		special.GET("/fullimg/*any", func(c *gin.Context) {
+			if c.GetHeader("X-Cookie") != "" {
+				p.mainProxyHandler(c)
+			} else {
+				c.Redirect(302, "https://exhentai.org"+c.Request.URL.String())
+			}
+			return
+		})
 	}
 
 	r.GET("/sw.js", func(c *gin.Context) {
@@ -196,14 +208,16 @@ func (p *ProxyHandler) accessControlMiddleware() gin.HandlerFunc {
 		if !isWhite {
 			// 如果有 redirect_to 参数，说明是点击了某些跳转，可以考虑放行
 			if c.Query("redirect_to") == "" {
-				c.AbortWithStatus(http.StatusForbidden) // 没在白名单里的一律 404
+				c.Redirect(302, "https://810114.xyz")
+				// c.AbortWithStatus(http.StatusForbidden) // 没在白名单里的一律 404
 				return
 			}
 		}
 
 		// --- C. 基础防护 (即使在白名单，也要防止路径遍历) ---
 		if strings.Contains(path, "/../") {
-			c.AbortWithStatus(http.StatusForbidden)
+			c.Redirect(302, "https://810114.xyz")
+			// c.AbortWithStatus(http.StatusForbidden)
 			return
 		}
 
@@ -214,7 +228,8 @@ func (p *ProxyHandler) accessControlMiddleware() gin.HandlerFunc {
 				"/gallerypopups.php", "/api.php", "/uconfig.php", "/archiver.php",
 			}
 			if !slices.Contains(allowPHP, path) {
-				c.AbortWithStatus(http.StatusForbidden)
+				c.Redirect(302, "https://810114.xyz")
+				// c.AbortWithStatus(http.StatusForbidden)
 				return
 			}
 		}
@@ -224,7 +239,8 @@ func (p *ProxyHandler) accessControlMiddleware() gin.HandlerFunc {
 		acceptLang := strings.ToLower(c.GetHeader("accept-language"))
 		if c.Query("redirect_to") != "image" && // 允许重定向啊，傻逼ai。26.02.15
 			!strings.Contains(acceptLang, "zh") && !slices.Contains([]string{"CN"}, country) {
-			c.String(http.StatusForbidden, "Restricted Region: "+country)
+			c.Redirect(302, "https://810114.xyz")
+			// c.String(http.StatusForbidden, "Restricted Region: "+country)
 			c.Abort()
 			return
 		}
@@ -232,7 +248,8 @@ func (p *ProxyHandler) accessControlMiddleware() gin.HandlerFunc {
 		// --- F. 方法限制 ---
 		// 只有 .php 允许 POST，其他一律 GET
 		if !strings.HasSuffix(path, ".php") && c.Request.Method != http.MethodGet {
-			c.AbortWithStatus(http.StatusForbidden)
+			c.Redirect(302, "https://810114.xyz")
+			// c.AbortWithStatus(http.StatusForbidden)
 			return
 		}
 
@@ -501,7 +518,11 @@ func (p *ProxyHandler) handleSpecialRedirects(c *gin.Context, data []byte) bool 
 }
 
 func (p *ProxyHandler) handleOrigin(c *gin.Context) {
-	c.Redirect(302, "https://exhentai.org"+c.Request.URL.String())
+	if c.GetHeader("X-Cookie") != "" {
+		p.mainProxyHandler(c)
+	} else {
+		c.Redirect(302, "https://exhentai.org"+c.Request.URL.String())
+	}
 	return
 }
 
