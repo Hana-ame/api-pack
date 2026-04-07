@@ -49,7 +49,7 @@ const (
 	// DefaultRotationThreshold 单个槽位的轮换阈值
 	DefaultRotationThreshold = 1000
 	// DefaultCleanupDelay 删除旧 IP 的延迟时间
-	DefaultCleanupDelay = 90 * time.Second
+	DefaultCleanupDelay = 90 * time.Second * 2 // 我不理解。反正改大一点试试。
 	// DefaultPoolSize 默认并发 IP 数量
 	DefaultPoolSize = 3
 )
@@ -127,6 +127,7 @@ func (s *clientSlot) prepareNewClient() (*client, error) {
 		Addr: &ip,
 		Client: &myfetch.Client{
 			Client: &http.Client{
+				Timeout: 30 * time.Second, // 关键：整个请求的总时间（连接+发送请求+读取响应）
 				Transport: &http.Transport{
 					// Use the IP address for the TCP connection
 					DialContext: (dialer{targetIP, &net.Dialer{
