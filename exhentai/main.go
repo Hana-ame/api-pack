@@ -245,7 +245,7 @@ func (s *clientSlot) executeWithRetry(method, url string, header http.Header, bo
 		}
 
 		// If we get a 502 or a Reset, wait a moment and try again
-		// time.Sleep(time.Duration(i+1) * time.Second / 5)
+		time.Sleep(time.Duration(i+1) * time.Second / 5)
 		// log.Printf("Request failed (attempt %d), retrying...", i+1)
 	}
 
