@@ -10,3 +10,5 @@ __debug_bin*
 *.bin
 
 *.db
+
+!NOTES.md
