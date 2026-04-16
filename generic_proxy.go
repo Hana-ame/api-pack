@@ -105,16 +105,24 @@ func GenericProxyHandler(config ProxyConfig) gin.HandlerFunc {
 		if resp.StatusCode != http.StatusOK {
 			respBody, err := io.ReadAll(resp.Body)
 			if err == nil {
-				// Sort response headers and format as "key: value"
-				var headerLines []string
-				for k, v := range resp.Header {
-					headerLines = append(headerLines, fmt.Sprintf("%s: %s", k, strings.Join(v, ", ")))
+				// Sort and format request headers
+				var reqHeaderLines []string
+				for k, v := range c.Request.Header {
+					reqHeaderLines = append(reqHeaderLines, fmt.Sprintf("%s: %s", k, strings.Join(v, ", ")))
 				}
-				sort.Strings(headerLines)
-				formattedHeaders := strings.Join(headerLines, "\n")
+				sort.Strings(reqHeaderLines)
+				reqHeaders := strings.Join(reqHeaderLines, "\n")
+
+				// Sort and format response headers
+				var respHeaderLines []string
+				for k, v := range resp.Header {
+					respHeaderLines = append(respHeaderLines, fmt.Sprintf("%s: %s", k, strings.Join(v, ", ")))
+				}
+				sort.Strings(respHeaderLines)
+				respHeaders := strings.Join(respHeaderLines, "\n")
 
 				c.Header("Content-Type", "text/plain; charset=utf-8")
-				c.String(resp.StatusCode, fmt.Sprintf("%s\n\n%s", formattedHeaders, string(respBody)))
+				c.String(resp.StatusCode, fmt.Sprintf("[Request Headers]\n%s\n\n[Response Headers]\n%s\n\n[Body]\n%s", reqHeaders, respHeaders, string(respBody)))
 				return
 			}
 		}
