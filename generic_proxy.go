@@ -2,9 +2,10 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
+	"sort"
 	"strings"
 
 	myfetch "github.com/Hana-ame/api-pack/tools/my_fetch/v2"
@@ -104,23 +105,16 @@ func GenericProxyHandler(config ProxyConfig) gin.HandlerFunc {
 		if resp.StatusCode != http.StatusOK {
 			respBody, err := io.ReadAll(resp.Body)
 			if err == nil {
-				var jsonBody interface{}
-				if err := json.Unmarshal(respBody, &jsonBody); err == nil {
-					c.JSON(resp.StatusCode, gin.H{
-						"body":    jsonBody,
-						"headers": c.Request.Header,
-					})
-					return
+				// Sort response headers and format as "key: value"
+				var headerLines []string
+				for k, v := range resp.Header {
+					headerLines = append(headerLines, fmt.Sprintf("%s: %s", k, strings.Join(v, ", ")))
 				}
-				// If not JSON, return as is
-				tools.PatchHeader(c, resp.Header)
-				c.DataFromReader(
-					resp.StatusCode,
-					int64(len(respBody)),
-					resp.Header.Get("Content-Type"),
-					bytes.NewReader(respBody),
-					map[string]string{"X-Service": config.Name},
-				)
+				sort.Strings(headerLines)
+				formattedHeaders := strings.Join(headerLines, "\n")
+
+				c.Header("Content-Type", "text/plain; charset=utf-8")
+				c.String(resp.StatusCode, fmt.Sprintf("%s\n\n%s", formattedHeaders, string(respBody)))
 				return
 			}
 		}
