@@ -31,7 +31,10 @@ func GenericProxyHandler(config ProxyConfig) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		bodyBytes, err := io.ReadAll(c.Request.Body)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "failed to read request body"})
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error":   "failed to read request body",
+				"headers": c.Request.Header,
+			})
 			return
 		}
 		c.Request.Body.Close()
@@ -40,13 +43,19 @@ func GenericProxyHandler(config ProxyConfig) gin.HandlerFunc {
 		if len(config.AllowedModels) > 0 {
 			reqMap, err := tools.ReaderToJSON(bytes.NewReader(bodyBytes))
 			if err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON"})
+				c.JSON(http.StatusBadRequest, gin.H{
+					"error":   "invalid JSON",
+					"headers": c.Request.Header,
+				})
 				return
 			}
 
 			model, ok := reqMap.GetOrDefault("model", "").(string)
 			if !ok || model == "" {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "model field is required"})
+				c.JSON(http.StatusBadRequest, gin.H{
+					"error":   "model field is required",
+					"headers": c.Request.Header,
+				})
 				return
 			}
 
