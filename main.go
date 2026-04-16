@@ -16,7 +16,6 @@ import (
 	"github.com/Hana-ame/api-pack/exhentai"
 	"github.com/Hana-ame/api-pack/qwen"
 	shijima "github.com/Hana-ame/api-pack/shijima"
-	"github.com/Hana-ame/api-pack/siliconflow"
 	"github.com/Hana-ame/api-pack/tools/debug"
 	middleware "github.com/Hana-ame/api-pack/tools/my_gin_middleware"
 	tools "github.com/Hana-ame/api-pack/tools/utils"
@@ -63,10 +62,24 @@ func main() {
 	}
 
 	if tools.HasEnv("GROQ_PROXY") {
-		go Groq(os.Getenv("GROQ_PROXY")) //127.25.2.9:8080
+		go RunProxyRouter(os.Getenv("GROQ_PROXY"), ProxyConfig{
+			Name:     "groq",
+			Endpoint: "https://api.groq.com",
+			APIKey:   os.Getenv("GROQ_API_KEY"),
+		})
 	}
 	if tools.HasEnv("SILICONFLOW_PROXY") {
-		go siliconflow.Run(os.Getenv("SILICONFLOW_PROXY")) //127.26.3.5:8080
+		go RunProxyRouter(os.Getenv("SILICONFLOW_PROXY"), ProxyConfig{
+			Name:     "siliconflow",
+			Endpoint: "https://api.siliconflow.cn",
+			APIKey:   os.Getenv("SILICONFLOW_API_KEY"),
+		})
+	}
+	if tools.HasEnv("GEMINI_PROXY") {
+		go RunProxyRouter(os.Getenv("GEMINI_PROXY"), ProxyConfig{
+			Name:     "gemini",
+			Endpoint: "https://generativelanguage.googleapis.com",
+		})
 	}
 
 	if tools.HasEnv("SHIJIMA") {
