@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"io"
 	"net/http"
 	"strings"
@@ -100,12 +101,29 @@ func GenericProxyHandler(config ProxyConfig) gin.HandlerFunc {
 		defer resp.Body.Close()
 
 		// Return response
+		respBody, err := io.ReadAll(resp.Body)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to read upstream response body"})
+			return
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			var jsonBody interface{}
+			if err := json.Unmarshal(respBody, &jsonBody); err == nil {
+				c.JSON(resp.StatusCode, gin.H{
+					"body":    jsonBody,
+					"headers": resp.Header,
+				})
+				return
+			}
+		}
+
 		tools.PatchHeader(c, resp.Header)
 		c.DataFromReader(
 			resp.StatusCode,
-			resp.ContentLength,
+			int64(len(respBody)),
 			resp.Header.Get("Content-Type"),
-			resp.Body,
+			bytes.NewReader(respBody),
 			map[string]string{"X-Service": config.Name},
 		)
 	}
