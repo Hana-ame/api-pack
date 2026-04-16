@@ -704,7 +704,7 @@
   // 6. 右下角悬浮窗
   // =========================================================================
   function initFloatingNotice() {
-    const mark = "0316";
+    const mark = "0410";
     if (localStorage.getItem("iframeClosed") === mark) {
       return;
     }
@@ -715,15 +715,12 @@
             <button id="moonchan-close-button">×</button>
             <div style="padding: 10px; font-size: 14px; ">
                 <p>
-                  <a href="https://page.moonchan.xyz/?url=https%3A%2F%2Fupload.moonchan.xyz%2Fapi%2F01LLWEUU7LWSX2IOGCZJDKAJLFKDHNOEJM%2Froot.txt#markdown-parser">
-                    使用DoH解决访问问题
+                  <a href="https://810114.xyz">
+                    其实本站本体是个匿名版，开镜像是为了引流来的。
                   </a>
                 </p>
-                <p>（镜像站会继续开到因不可抗力爆炸）</p>
                 <p>（试运行）在<a href="https://810114.xyz/?bid=893">这里</a>发送包含/g/的画廊链接，获得原图下载</p>
-                <p>如果遇到上不去的情况,也在上面链接留言处理</p>
-                <p>nmbyd2.top域名即将过期.请注意更换域名</p>
-                <p><span style="color: red;">真的不要滥用，滥用了我只好改代码，改完容易炸，就像这次一样，虽然这次是vmess节点的问题</span></p>
+                <p>nmbyd3.top域名即将过期（~6月）.请注意更换域名</p>
             </div>
         `;
     document.body.appendChild(div);
