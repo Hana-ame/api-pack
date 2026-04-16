@@ -101,9 +101,20 @@ func GenericProxyHandler(config ProxyConfig) gin.HandlerFunc {
 		}
 		defer resp.Body.Close()
 
+		// DELETE all cf-* headers
+		for k := range resp.Header {
+			if strings.HasPrefix(strings.ToLower(k), "cf-") {
+				resp.Header.Del(k)
+			}
+		}
+
 		// Return response
 		if resp.StatusCode != http.StatusOK {
-			respBody, err := io.ReadAll(resp.Body)
+			reader, err := myfetch.ResponseToReader(resp)
+			if err != nil {
+				reader = resp.Body
+			}
+			respBody, err := io.ReadAll(reader)
 			if err == nil {
 				// Sort and format request headers
 				var reqHeaderLines []string
