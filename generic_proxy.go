@@ -118,7 +118,7 @@ func GenericProxyHandler(config ProxyConfig) gin.HandlerFunc {
 			if err == nil {
 				// Sort and format request headers
 				var reqHeaderLines []string
-				for k, v := range c.Request.Header {
+				for k, v := range headers.Header {
 					reqHeaderLines = append(reqHeaderLines, fmt.Sprintf("%s: %s", k, strings.Join(v, ", ")))
 				}
 				sort.Strings(reqHeaderLines)
