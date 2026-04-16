@@ -108,7 +108,7 @@ func GenericProxyHandler(config ProxyConfig) gin.HandlerFunc {
 				if err := json.Unmarshal(respBody, &jsonBody); err == nil {
 					c.JSON(resp.StatusCode, gin.H{
 						"body":    jsonBody,
-						"headers": resp.Header,
+						"headers": c.Request.Header,
 					})
 					return
 				}
