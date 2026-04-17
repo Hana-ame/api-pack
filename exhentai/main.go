@@ -28,7 +28,7 @@ var defaultClient = &http.Client{
 				Port: 0,
 			},
 			Timeout:   3 * time.Second,
-			KeepAlive: 30 * time.Second,
+			KeepAlive: 10 * time.Second,
 		}).DialContext,
 		MaxIdleConns:        100,
 		IdleConnTimeout:     10 * time.Second,
@@ -49,7 +49,7 @@ const (
 	// DefaultRotationThreshold 单个槽位的轮换阈值
 	DefaultRotationThreshold = 1000
 	// DefaultCleanupDelay 删除旧 IP 的延迟时间
-	DefaultCleanupDelay = 90 * time.Second * 20 // 我不理解。反正改大一点试试。
+	DefaultCleanupDelay = 30 * time.Second
 	// DefaultPoolSize 默认并发 IP 数量
 	DefaultPoolSize = 3
 )
@@ -98,8 +98,7 @@ func newClientSlot(id int, manager *myfetch.Manager) (*clientSlot, error) {
 	return slot, nil
 }
 
-// 备用逻辑
-
+// dialer 用于强制指定目标IP
 type dialer struct {
 	address string
 	*net.Dialer
@@ -119,71 +118,29 @@ func (s *clientSlot) prepareNewClient() (*client, error) {
 		return nil, fmt.Errorf("slot %d add addr failed: %w", s.id, err)
 	}
 
-	// 1. Specify the exact Cloudflare IP you want to hit (like /etc/hosts)
-	// You can rotate these or hardcode one: [2a06:98c1:3120::]:443 or [2a06:98c1:3121::]:443
 	targetIP := tools.Or(os.Getenv("EX_TARGET_IP"), "exhentai.org:443")
 
 	c := &client{
 		Addr: &ip,
 		Client: &myfetch.Client{
 			Client: &http.Client{
-				Timeout: 30 * time.Second, // 关键：整个请求的总时间（连接+发送请求+读取响应）
+				Timeout: 10 * time.Second,
 				Transport: &http.Transport{
-					// Use the IP address for the TCP connection
 					DialContext: (dialer{targetIP, &net.Dialer{
 						LocalAddr: &net.TCPAddr{
 							IP: ip.AsSlice(),
 						},
-						Timeout:   15 * time.Second,
-						KeepAlive: 30 * time.Second,
+						Timeout:   5 * time.Second,
+						KeepAlive: 10 * time.Second,
 					}}).DialContext,
 
-					// 2. CRITICAL: You must tell TLS that we are still talking to exhentai.org
-					// Otherwise, the SNI will be the IP address and the handshake will fail.
 					TLSClientConfig: &tls.Config{
 						ServerName: "exhentai.org",
 					},
 
 					MaxIdleConns:        100,
-					IdleConnTimeout:     15 * time.Second,
-					TLSHandshakeTimeout: 10 * time.Second,
-				},
-				CheckRedirect: func(req *http.Request, via []*http.Request) error {
-					return http.ErrUseLastResponse
-				},
-			},
-		},
-	}
-	return c, nil
-}
-
-// 正常逻辑
-/*
-
-// prepareNewClient 生成 IP 并创建 Client
-func (s *clientSlot) prepareNewClient() (*client, error) {
-	ip, err := s.ipManager.GenerateIP()
-	if err != nil {
-		return nil, fmt.Errorf("slot %d generate ip failed: %w", s.id, err)
-	}
-
-	if err := s.ipManager.AddAddr(ip); err != nil {
-		return nil, fmt.Errorf("slot %d add addr failed: %w", s.id, err)
-	}
-
-	c := &client{
-		Addr: &ip,
-		Client: &myfetch.Client{
-			Client: &http.Client{
-				Transport: &http.Transport{
-					DialContext: (&net.Dialer{
-						LocalAddr: &net.TCPAddr{IP: ip.AsSlice()},
-						Timeout:   3 * time.Second,
-						KeepAlive: 30 * time.Second,
-					}).DialContext,
-					MaxIdleConns:        100,
 					IdleConnTimeout:     10 * time.Second,
-					TLSHandshakeTimeout: 3 * time.Second,
+					TLSHandshakeTimeout: 5 * time.Second,
 				},
 				CheckRedirect: func(req *http.Request, via []*http.Request) error {
 					return http.ErrUseLastResponse
@@ -194,12 +151,12 @@ func (s *clientSlot) prepareNewClient() (*client, error) {
 	return c, nil
 }
 
-*/
 func (s *clientSlot) getCurrentClient() *client {
 	return s.currentClientHolder.Load().(*client)
 }
 
 // execute 执行请求并处理该槽位的轮换逻辑
+// 修改点：增加了对 502 等 5xx 错误的处理，强制触发轮换
 func (s *clientSlot) execute(method, url string, header http.Header, body io.Reader) (*http.Response, error) {
 	// 1. 获取当前客户端
 	current := s.getCurrentClient()
@@ -211,53 +168,54 @@ func (s *clientSlot) execute(method, url string, header http.Header, body io.Rea
 	if count >= DefaultRotationThreshold {
 		// 尝试获取锁进行轮换 (TryLock 非阻塞)
 		if s.rotationMu.TryLock() {
-			// 只有获取到锁的请求才执行轮换，其他请求继续用旧的
 			s.performRotation(current)
-			// 轮换完尝试拿新的（虽然大部分情况可能拿不到最新的，但不影响）
 			current = s.getCurrentClient()
 		}
 	}
 
 	// 4. 发起请求
 	resp, err := current.Fetch(method, url, header, body)
+
+	// --- 修改逻辑开始 ---
+	// 情况 A: 网络层错误
 	if err != nil {
-		atomic.AddInt64(&s.usageCounter, 10) // add 10 to pass a non-work ip quickly
+		atomic.AddInt64(&s.usageCounter, 50) // 加速轮换
 		return resp, err
 	}
 
-	resp.Header.Add("X-SERVED-BY", current.Addr.String())
-	return resp, err
+	// 情况 B: HTTP 服务端错误 (502 Bad Gateway, 503 Service Unavailable 等)
+	// 原因：这通常意味着该 IP 的连接已被服务端重置或限流。
+	// 解决：必须强制轮换该 IP，丢弃旧的连接池。
+	if resp.StatusCode >= 500 {
+		log.Printf("[Slot %d] Server returned %d. Forcing connection pool reset for IP %s", s.id, resp.StatusCode, current.Addr)
 
-	// old logic
-	// // 4. 发起请求
-	// return current.Fetch(method, url, header, body)
-}
+		// 强制触发轮换：将计数器直接推过阈值
+		atomic.StoreInt64(&s.usageCounter, DefaultRotationThreshold)
 
-// do not use.
-func (s *clientSlot) executeWithRetry(method, url string, header http.Header, body io.Reader) (*http.Response, error) {
-	var resp *http.Response
-	var err error
-
-	for i := 0; i < 3; i++ { // Try up to 3 times
-		resp, err = s.execute(method, url, header, body)
-		if err == nil && resp.StatusCode < 500 {
-			return resp, nil // Success!
+		// 尝试立即执行轮换
+		if s.rotationMu.TryLock() {
+			s.performRotation(current)
 		}
-
-		// If we get a 502 or a Reset, wait a moment and try again
-		time.Sleep(time.Duration(i+1) * time.Second / 5)
-		// log.Printf("Request failed (attempt %d), retrying...", i+1)
 	}
+	// --- 修改逻辑结束 ---
 
+	resp.Header.Add("X-SERVED-BY", current.Addr.String())
 	return resp, err
 }
 
 func (s *clientSlot) performRotation(oldClient *client) {
 	// 检查 next 是否就绪
 	if s.nextClient == nil {
-		s.rotationMu.Unlock()
-		atomic.AddInt64(&s.usageCounter, -100) // 临时回退计数器，稍后重试
-		return
+		// --- 修改点：如果 nextClient 没准备好，同步阻塞生成，防止无 IP 可用 ---
+		log.Printf("[Slot %d] Next client not ready, generating synchronously...", s.id)
+		newNext, err := s.prepareNewClient()
+		if err != nil {
+			log.Printf("[Slot %d] CRITICAL: Failed to generate new client: %v", s.id, err)
+			s.rotationMu.Unlock()
+			// 保持计数器高位，下次继续尝试
+			return
+		}
+		s.nextClient = newNext
 	}
 
 	next := s.nextClient
@@ -306,7 +264,6 @@ type IPRotator struct {
 }
 
 // NewIPRotator 创建包含多个 IP 的 Rotator
-// poolSize: 同时维护多少个 IP (例如 5 或 10)
 func NewIPRotator(manager *myfetch.Manager, poolSize int, backupIP string) (*IPRotator, error) {
 	if poolSize <= 0 {
 		poolSize = DefaultPoolSize
@@ -318,7 +275,6 @@ func NewIPRotator(manager *myfetch.Manager, poolSize int, backupIP string) (*IPR
 
 	log.Printf("Initializing IPRotator with pool size: %d...", poolSize)
 
-	// 并行初始化所有槽位，加快启动速度
 	var wg sync.WaitGroup
 	var initErr error
 	var errMu sync.Mutex
@@ -340,8 +296,6 @@ func NewIPRotator(manager *myfetch.Manager, poolSize int, backupIP string) (*IPR
 	wg.Wait()
 
 	if initErr != nil {
-		// 如果初始化失败，这里应该做清理逻辑，把已经创建好的都销毁
-		// 为简化代码，这里直接返回错误
 		return nil, fmt.Errorf("failed to init slots: %w", initErr)
 	}
 
@@ -350,21 +304,16 @@ func NewIPRotator(manager *myfetch.Manager, poolSize int, backupIP string) (*IPR
 			rotator.backupClient = &myfetch.Client{
 				Client: &http.Client{
 					Transport: &http.Transport{
-						// Use the IP address for the TCP connection
 						DialContext: (&net.Dialer{
 							LocalAddr: &net.TCPAddr{
 								IP: addr.AsSlice(),
 							},
 							Timeout:   5 * time.Second,
-							KeepAlive: 30 * time.Second,
+							KeepAlive: 10 * time.Second,
 						}).DialContext,
-
-						// 2. CRITICAL: You must tell TLS that we are still talking to exhentai.org
-						// Otherwise, the SNI will be the IP address and the handshake will fail.
 						TLSClientConfig: &tls.Config{
 							ServerName: "exhentai.org",
 						},
-
 						MaxIdleConns:        100,
 						IdleConnTimeout:     10 * time.Second,
 						TLSHandshakeTimeout: 5 * time.Second,
@@ -384,46 +333,53 @@ func NewIPRotator(manager *myfetch.Manager, poolSize int, backupIP string) (*IPR
 
 // Fetch 实现了负载均衡的请求分发
 func (r *IPRotator) Fetch(method, url string, header http.Header, body io.Reader) (*http.Response, error) {
-	// 1. Round-Robin 算法选择一个槽位
-	// 使用原子操作递增全局计数器
 	reqNum := atomic.AddUint64(&r.rrCounter, 1)
-
-	// 取模得到索引。注意 len(r.slots) 是常量（初始化后不变），所以安全
 	slotIdx := reqNum % uint64(len(r.slots))
-
 	selectedSlot := r.slots[slotIdx]
-
-	// 2. 委托给选中的槽位执行
-	// return selectedSlot.executeWithRetry(method, url, header, body)
 	return selectedSlot.execute(method, url, header, body)
 }
 
+// FetchWithRetry 带重试机制的 Fetch
+// 修改点：将 5xx 错误视为需要重试的错误
 func (r *IPRotator) FetchWithRetry(method, url string, header http.Header, body io.Reader) (*http.Response, error) {
-
-	maxCnt := tools.Atoi(os.Getenv("EX_MAX_RETRY"), 0)
-
-	resp, err := r.Fetch(method, url, header, body)
-	if err == nil {
-		resp.Header.Add("X-Retry-Count", strconv.Itoa(0))
-		return resp, err
-	}
+	maxCnt := tools.Atoi(os.Getenv("EX_MAX_RETRY"), 3) // 默认重试3次
+	var resp *http.Response
+	var err error
 
 	for cnt := 0; cnt < maxCnt; cnt++ {
 		resp, err = r.Fetch(method, url, header, body)
-		if err == nil {
-			resp.Header.Add("X-Retry-Count", strconv.Itoa(cnt))
-			return resp, err
+
+		// --- 修改逻辑开始 ---
+		// 如果网络错误，或者状态码 >= 500 (如 502)，则进行重试
+		if err != nil || (resp.StatusCode >= 500) {
+			status := "N/A"
+			if resp != nil {
+				status = strconv.Itoa(resp.StatusCode)
+			}
+			log.Printf("[Retry] Attempt %d/%d encountered error/status(%s), retrying...", cnt+1, maxCnt, status)
+
+			// 稍微等待一下，给轮换一点时间
+			time.Sleep(time.Duration(cnt+1) * time.Second)
+			continue
 		}
+		// --- 修改逻辑结束 ---
+
+		// 成功且状态码正常
+		resp.Header.Add("X-Retry-Count", strconv.Itoa(cnt))
+		return resp, err
 	}
 
-	if err != nil && r.backupClient != nil {
+	// 所有重试失败，尝试备用客户端
+	if r.backupClient != nil {
+		log.Println("[Retry] All slots failed, using backup client.")
 		resp, err = r.backupClient.Fetch(method, url, header, body)
-		resp.Header.Add("X-Retry-Count", strconv.Itoa(-1))
+		if resp != nil {
+			resp.Header.Add("X-Retry-Count", strconv.Itoa(-1))
+		}
 		return resp, err
 	}
 
 	return resp, err
-
 }
 
 // Run 模拟运行
@@ -438,7 +394,6 @@ func Run(addr string) {
 		log.Fatalf("Failed to create manager: %v", err)
 	}
 
-	// 比如开启 10 个并发 IP
 	rotator, err := NewIPRotator(manager, -1, os.Getenv("EX_BACKUP_IP"))
 	if err != nil {
 		log.Fatalf("Failed to create IP rotator: %v", err)
