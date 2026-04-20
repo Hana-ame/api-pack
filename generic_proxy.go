@@ -19,7 +19,8 @@ type ProxyConfig struct {
 	Name          string
 	Endpoint      string
 	APIKey        string
-	AllowedModels map[string]bool
+	FreeModels    map[string]bool
+	FreeModelsAll bool
 	Models        map[string]ModelInfo
 	CustomHeaders map[string]string
 }
@@ -41,8 +42,8 @@ func GenericProxyHandler(config ProxyConfig) gin.HandlerFunc {
 		}
 		c.Request.Body.Close()
 
-		// Model validation if AllowedModels is specified
-		if len(config.AllowedModels) > 0 {
+		var model string
+		if len(config.FreeModels) > 0 {
 			reqMap, err := tools.ReaderToJSON(bytes.NewReader(bodyBytes))
 			if err != nil {
 				c.JSON(http.StatusBadRequest, gin.H{
@@ -60,18 +61,13 @@ func GenericProxyHandler(config ProxyConfig) gin.HandlerFunc {
 				})
 				return
 			}
-
-			if !config.AllowedModels[model] {
-				c.JSON(http.StatusForbidden, gin.H{"error": "model not allowed"})
-				return
-			}
 		}
 
 		// Setup headers
 		headers := tools.NewHeader(c.Request.Header)
 		auth := headers.Get("Authorization")
 		if auth == "" || !strings.HasPrefix(auth, "Bearer ") {
-			if config.APIKey != "" {
+			if config.APIKey != "" && (config.FreeModelsAll || config.FreeModels[model]) {
 				headers.Set("Authorization", "Bearer "+config.APIKey)
 			}
 		}

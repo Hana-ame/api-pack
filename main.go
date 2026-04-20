@@ -63,9 +63,10 @@ func main() {
 
 	if tools.HasEnv("GROQ_PROXY") {
 		go RunProxyRouter(os.Getenv("GROQ_PROXY"), ProxyConfig{
-			Name:     "groq",
-			Endpoint: "https://api.groq.com",
-			APIKey:   os.Getenv("GROQ_API_KEY"),
+			Name:            "groq",
+			Endpoint:        "https://api.groq.com",
+			APIKey:          os.Getenv("GROQ_API_KEY"),
+			FreeModelsAll:   true,
 		})
 	}
 	if tools.HasEnv("SILICONFLOW_PROXY") {
@@ -73,12 +74,28 @@ func main() {
 			Name:     "siliconflow",
 			Endpoint: "https://api.siliconflow.cn",
 			APIKey:   os.Getenv("SILICONFLOW_API_KEY"),
+			FreeModels: map[string]bool{
+				"Qwen/Qwen3.5-4B":                     true,
+				"PaddlePaddle/PaddleOCR-VL-1.5":        true,
+				"deepseek-ai/DeepSeek-R1-Distill-Qwen-7B": true,
+				"THUDM/GLM-4.1V-9B-Thinking":          true,
+				"PaddlePaddle/PaddleOCR-VL":            true,
+				"deepseek-ai/DeepSeek-OCR":             true,
+				"Qwen/Qwen3-8B":                        true,
+				"tencent/Hunyuan-MT-7B":                true,
+				"deepseek-ai/DeepSeek-R1-0528-Qwen3-8B": true,
+				"THUDM/GLM-Z1-9B-0414":                 true,
+				"Qwen/Qwen2.5-7B-Instruct":             true,
+				"THUDM/GLM-4-9B-0414":                  true,
+				"internlm/internlm2_5-7b-chat":         true,
+			},
 		})
 	}
 	if tools.HasEnv("GEMINI_PROXY") {
 		go RunProxyRouter(os.Getenv("GEMINI_PROXY"), ProxyConfig{
-			Name:     "gemini",
-			Endpoint: "https://generativelanguage.googleapis.com",
+			Name:            "gemini",
+			Endpoint:        "https://generativelanguage.googleapis.com",
+			FreeModelsAll:   true,
 		})
 	}
 
