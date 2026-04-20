@@ -355,6 +355,10 @@ func (r *IPRotator) FetchWithRetry(method, url string, header http.Header, body 
 			status := "N/A"
 			if resp != nil {
 				status = strconv.Itoa(resp.StatusCode)
+				// ⚠️ 补充这行：如果不 Close，底层的 TCP 连接无法被释放或重用，会导致内存泄漏！
+				if resp.Body != nil {
+					resp.Body.Close()
+				}
 			}
 			log.Printf("[Retry] Attempt %d/%d encountered error/status(%s), retrying...", cnt+1, maxCnt, status)
 
