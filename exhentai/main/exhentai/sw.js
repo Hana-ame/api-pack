@@ -32,21 +32,124 @@ const OFFLINE_HTML_CONTENT = `
 
 // ==================== 配置区域 ====================
 
-// 1. 域名过期拦截配置
+// 1. 域名过期拦截配置（过期后直接拦截，不再提示）
 const EXPIRE_CONFIG = {
-  targetDate: '2026-05-31T23:59:59+08:00', // 设定日期
+  targetDate: '2026-05-31T23:59:59+08:00', // 过期时间点
   domainSuffix: 'nmbyd3.top'               // 匹配此域名及所有子域名
 };
 
-// 2. 图片超时代理配置
+// 2. 迁移提示配置（在过期前的一段时间内，注入 alert 提醒）
+const PROMPT_CONFIG = {
+  startDate: '2026-05-01T00:00:00+08:00', // 开始提示的日期
+  endDate: EXPIRE_CONFIG.targetDate,      // 提示截止日期（过期当天结束前都提示）
+  targetDomain: '810114.xyz'              // 目标迁移域名
+};
+
+// 3. 图片超时代理配置
 const IMAGE_PROXY_CONFIG = {
-  timeout: 10000, // 5秒
+  timeout: 10000,
   proxyBaseUrl: 'https://proxy.moonchan.xyz',
   targetDomains: ['ehgt.org', 'www.ehgt.org']
 };
 
 // 用于统筹遗留请求的控制器集合
 const activeControllers = new Set();
+
+// ==================== 辅助函数：迁移提示 ====================
+
+/**
+ * 判断是否处于迁移提示时段（startDate <= 当前时间 < endDate）
+ */
+function isPromptPeriod() {
+  const now = Date.now();
+  const start = new Date(PROMPT_CONFIG.startDate).getTime();
+  const end = new Date(PROMPT_CONFIG.endDate).getTime();
+  return now >= start && now < end;
+}
+
+/**
+ * 获取迁移目标域名
+ * @param {string} hostname 
+ * @returns {string|null} 目标域名，若不匹配则返回 null
+ */
+function getMigrationTarget(hostname) {
+    if (hostname === "ex.nmbyd3.top") return "e.810114.xyz";
+  if (hostname === EXPIRE_CONFIG.domainSuffix) {
+    return PROMPT_CONFIG.targetDomain;
+  }
+  if (hostname.endsWith(`.${EXPIRE_CONFIG.domainSuffix}`)) {
+    return hostname.replace(`.${EXPIRE_CONFIG.domainSuffix}`, `.${PROMPT_CONFIG.targetDomain}`);
+  }
+  return null;
+}
+
+/**
+ * 在 HTML 响应中注入迁移提示脚本（每天仅弹一次）
+ * @param {Response} res 
+ * @param {string} targetHost 
+ * @returns {Promise<Response>}
+ */
+async function injectPromptToResponse(res, targetHost) {
+  // 仅处理成功的、未重定向的 HTML 响应
+  if (res.ok && !res.redirected && res.headers.get('content-type')?.includes('text/html')) {
+    const clonedRes = res.clone();
+    try {
+      const text = await clonedRes.text();
+      const newHeaders = new Headers(res.headers);
+      newHeaders.delete('content-length');
+      newHeaders.delete('content-encoding');
+
+      const PROMPT_SCRIPT = `
+        <script>
+          (function() {
+            try {
+              var today = new Date().toDateString();
+              if (localStorage.getItem('nmbyd3_migration_prompt') !== today) {
+                localStorage.setItem('nmbyd3_migration_prompt', today);
+                alert('请迁移至 ✨ ${targetHost}\n上不去请在匿名版反馈。');
+              }
+            } catch(e) {}
+          })();
+        </script>
+      `;
+
+      let injectedHtml = text;
+      if (/(<head[^>]*>)/i.test(text)) {
+        injectedHtml = text.replace(/(<head[^>]*>)/i, match => match + PROMPT_SCRIPT);
+      } else if (/(<html[^>]*>)/i.test(text)) {
+        injectedHtml = text.replace(/(<html[^>]*>)/i, match => match + PROMPT_SCRIPT);
+      } else {
+        injectedHtml = PROMPT_SCRIPT + text;
+      }
+
+      return new Response(injectedHtml, {
+        status: res.status,
+        statusText: res.statusText,
+        headers: newHeaders
+      });
+    } catch (e) {
+      // 注入失败，返回原始响应
+      return res;
+    }
+  }
+  return res;
+}
+
+/**
+ * 获取响应并注入迁移提示（若需要）
+ * @param {Request} req 
+ * @param {string} targetHost 
+ * @returns {Promise<Response>}
+ */
+async function fetchWithPrompt(req, targetHost) {
+  try {
+    const res = await fetch(req);
+    return await injectPromptToResponse(res, targetHost);
+  } catch (e) {
+    // 网络错误，抛出由上层处理
+    throw e;
+  }
+}
 
 // ==================== 生命周期 ====================
 
@@ -73,43 +176,51 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(req.url);
   const hostname = url.hostname;
 
-  // A. 导航请求（加载 HTML 页面）
+  // ------------------- 导航请求（HTML 页面）-------------------
   if (req.mode === 'navigate') {
-
-    const isNewWindow = event.clientId === "";
-    if (isNewWindow) {
-      return;
-    }
-    
-    // 1. 页面跳转前：果断中止上一页所有尚未完成的图片/脚本请求，释放网络通道
+    // 释放之前页面残留的后台请求（优化体验）
     if (activeControllers.size > 0) {
       console.log(`[SW] 侦测到页面跳转，释放 ${activeControllers.size} 个遗留后台连接...`);
       for (const controller of activeControllers) {
-        controller.isNavigateAbort = true; 
+        controller.isNavigateAbort = true;
         controller.abort();
       }
       activeControllers.clear();
     }
-      // 1. 判断日期与域名拦截
-      const isTargetDomain = hostname === EXPIRE_CONFIG.domainSuffix || hostname.endsWith(`.${EXPIRE_CONFIG.domainSuffix}`);
-      const isExpired = Date.now() > new Date(EXPIRE_CONFIG.targetDate).getTime();
-    
-      if (isTargetDomain && isExpired) {
-        // console.warn(`[SW] 域名 ${hostname} 已过期，直接展示备用导航页`);
-        event.respondWith(handleNavigation(req));
+
+    // 1. 优先判断：域名是否已过期（直接拦截，不再提示）
+    const isTargetDomain = hostname === EXPIRE_CONFIG.domainSuffix || hostname.endsWith(`.${EXPIRE_CONFIG.domainSuffix}`);
+    const isExpired = Date.now() > new Date(EXPIRE_CONFIG.targetDate).getTime();
+
+    if (isTargetDomain && isExpired) {
+      console.warn(`[SW] 域名 ${hostname} 已过期，直接展示备用导航页`);
+      event.respondWith(createOfflineResponse());
+      return;
+    }
+
+    // 2. 未过期但处于提示时段 → 注入迁移提醒（正常加载页面 + alert）
+    if (isTargetDomain && isPromptPeriod()) {
+      const targetHost = getMigrationTarget(hostname);
+      if (targetHost) {
+        console.log(`[SW] 迁移提示时段，为 ${hostname} 注入提醒 → ${targetHost}`);
+        // 使用带注入的专用处理函数（保留超时/错误降级）
+        event.respondWith(handleNavigationWithPrompt(req, targetHost));
+        return;
       }
-    // 2. 拦截并接管当前主页面的加载（支持超时、错误和过期判断）
-    
+    }
+
+    // 3. 普通导航请求（无拦截，无提示）
+    event.respondWith(handleNavigation(req));
     return;
   }
 
-  // B. 图片 5s 超时代理 fallback
+  // ------------------- 图片超时代理 -------------------
   if (IMAGE_PROXY_CONFIG.targetDomains.includes(url.hostname)) {
     event.respondWith(handleImageWithProxy(req));
     return;
   }
-  
-  // C. 静态资源缓存
+
+  // ------------------- 静态资源缓存 -------------------
   if (['script', 'style', 'font'].includes(req.destination) || req.url.match(/\.(js|css|woff2?)$/)) {
     event.respondWith(handleAsset(req));
   }
@@ -118,44 +229,54 @@ self.addEventListener('fetch', (event) => {
 // ==================== 核心逻辑处理 ====================
 
 /**
- * 导航请求处理：日期拦截 -> 网络优先 -> 5s超时 -> 返回离线页
+ * 普通导航请求：网络优先 -> 5s超时 -> 离线页
  */
 async function handleNavigation(req) {
-  const url = new URL(req.url);
-  const hostname = url.hostname;
-
-  // 1. 判断日期与域名拦截
-  const isTargetDomain = hostname === EXPIRE_CONFIG.domainSuffix || hostname.endsWith(`.${EXPIRE_CONFIG.domainSuffix}`);
-  const isExpired = Date.now() > new Date(EXPIRE_CONFIG.targetDate).getTime();
-
-  if (isTargetDomain && isExpired) {
-    console.warn(`[SW] 域名 ${hostname} 已过期，直接展示备用导航页`);
-    return createOfflineResponse();
-  }
-
-  // 2. 正常的请求逻辑 (设定 5s 超时防止无限白屏)
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 15000);
 
   try {
     const response = await fetch(req, {
       signal: controller.signal,
-      cache: 'no-cache' 
+      cache: 'no-cache'
     });
-    
     clearTimeout(timeoutId);
-
-    // 状态码不是 2xx，服务器挂了，直接返回离线页
     if (!response.ok) {
       console.warn(`[SW] 主页面响应异常 (${response.status})，展示备用导航页`);
       return createOfflineResponse();
     }
-
     return response;
-
   } catch (error) {
     clearTimeout(timeoutId);
     console.warn('[SW] 主页面网络请求失败或超时，拦截并展示备用导航页:', error);
+    return createOfflineResponse();
+  }
+}
+
+/**
+ * 带迁移提示的导航请求：网络优先 -> 注入提示 -> 超时/错误降级到离线页
+ * @param {Request} req 
+ * @param {string} targetHost 
+ */
+async function handleNavigationWithPrompt(req, targetHost) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+  try {
+    const response = await fetch(req, {
+      signal: controller.signal,
+      cache: 'no-cache'
+    });
+    clearTimeout(timeoutId);
+    if (!response.ok) {
+      console.warn(`[SW] 主页面响应异常 (${response.status})，展示备用导航页`);
+      return createOfflineResponse();
+    }
+    // 注入提示脚本
+    return await injectPromptToResponse(response, targetHost);
+  } catch (error) {
+    clearTimeout(timeoutId);
+    console.warn('[SW] 带提示的主页面请求失败，降级到离线页:', error);
     return createOfflineResponse();
   }
 }
@@ -176,7 +297,7 @@ async function handleImageWithProxy(req) {
   const url = new URL(req.url);
   const controller = new AbortController();
   activeControllers.add(controller);
-  
+
   const timeoutId = setTimeout(() => controller.abort(), IMAGE_PROXY_CONFIG.timeout);
 
   try {
@@ -184,15 +305,11 @@ async function handleImageWithProxy(req) {
     clearTimeout(timeoutId);
     if (!response.ok && response.status !== 0) throw new Error(`Status: ${response.status}`);
     return response;
-
   } catch (error) {
     clearTimeout(timeoutId);
-    
-    // 如果是因为用户刷新页面/跳转而中止的请求，直接静默退出
     if (controller.isNavigateAbort) {
       return new Response('', { status: 499, statusText: 'Client Closed Request' });
     }
-
     console.warn(`[SW] 图片加载超时或失败 (${error})，切换至代理源...`);
     const proxyUrl = new URL(url.pathname + url.search, IMAGE_PROXY_CONFIG.proxyBaseUrl);
     proxyUrl.searchParams.set('proxy_host', url.hostname);
@@ -213,24 +330,23 @@ async function handleImageWithProxy(req) {
     } finally {
       activeControllers.delete(proxyController);
     }
-
   } finally {
     activeControllers.delete(controller);
   }
 }
 
 /**
- * 静态资源处理
+ * 静态资源处理（缓存优先）
  */
 async function handleAsset(req) {
   const cache = await caches.open(CACHE_NAME);
   const cached = await cache.match(req);
-  
+
   if (cached) {
     fetchAndCache(req, cache);
     return cached;
   }
-  
+
   const controller = new AbortController();
   activeControllers.add(controller);
 
@@ -263,6 +379,7 @@ async function fetchAndCache(req, cache) {
       }
     }
   } catch (e) {
+    // 静默失败
   } finally {
     activeControllers.delete(controller);
   }
