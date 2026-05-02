@@ -106,7 +106,7 @@ async function injectPromptToResponse(res, targetHost) {
               var today = new Date().toDateString();
               if (localStorage.getItem('nmbyd3_migration_prompt') !== today) {
                 localStorage.setItem('nmbyd3_migration_prompt', today);
-                alert('请迁移至 ✨ ${targetHost}\n上不去请在匿名版反馈。');
+                alert('请迁移至 ✨ ${targetHost}.上不去请在匿名版反馈。');
               }
             } catch(e) {}
           })();
