@@ -720,7 +720,7 @@
                   </a>
                 </p>
                 <p>（试运行）在<a href="https://810114.xyz/?bid=893">这里</a>发送包含/g/的画廊链接，获得原图下载</p>
-                <p>nmbyd3.top域名即将过期（~6月）.请注意更换域名</p>
+                <p>nmbyd3.top域名即将过期（~6月）.请注意更换新域名：<a href="https://e.810114.xyz/">https://e.810114.xyz/</a></p>
             </div>
         `;
     document.body.appendChild(div);
