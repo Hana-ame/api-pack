@@ -34,6 +34,7 @@ var defaultClient = &http.Client{
 		IdleConnTimeout:     10 * time.Second,
 		TLSHandshakeTimeout: 3 * time.Second,
 	},
+	Timeout: 5 * time.Second,
 	CheckRedirect: func(req *http.Request, via []*http.Request) error {
 		return http.ErrUseLastResponse
 	},
@@ -124,13 +125,13 @@ func (s *clientSlot) prepareNewClient() (*client, error) {
 		Addr: &ip,
 		Client: &myfetch.Client{
 			Client: &http.Client{
-				Timeout: 10 * time.Second,
+				Timeout: 5 * time.Second,
 				Transport: &http.Transport{
 					DialContext: (dialer{targetIP, &net.Dialer{
 						LocalAddr: &net.TCPAddr{
 							IP: ip.AsSlice(),
 						},
-						Timeout:   5 * time.Second,
+						Timeout:   3 * time.Second,
 						KeepAlive: 10 * time.Second,
 					}}).DialContext,
 
@@ -140,7 +141,7 @@ func (s *clientSlot) prepareNewClient() (*client, error) {
 
 					MaxIdleConns:        100,
 					IdleConnTimeout:     10 * time.Second,
-					TLSHandshakeTimeout: 5 * time.Second,
+					TLSHandshakeTimeout: 3 * time.Second,
 				},
 				CheckRedirect: func(req *http.Request, via []*http.Request) error {
 					return http.ErrUseLastResponse
@@ -303,12 +304,13 @@ func NewIPRotator(manager *myfetch.Manager, poolSize int, backupIP string) (*IPR
 		if addr, err := netip.ParseAddr(backupIP); err == nil {
 			rotator.backupClient = &myfetch.Client{
 				Client: &http.Client{
+					Timeout: 5 * time.Second,
 					Transport: &http.Transport{
 						DialContext: (&net.Dialer{
 							LocalAddr: &net.TCPAddr{
 								IP: addr.AsSlice(),
 							},
-							Timeout:   5 * time.Second,
+							Timeout:   3 * time.Second,
 							KeepAlive: 10 * time.Second,
 						}).DialContext,
 						TLSClientConfig: &tls.Config{
@@ -316,7 +318,7 @@ func NewIPRotator(manager *myfetch.Manager, poolSize int, backupIP string) (*IPR
 						},
 						MaxIdleConns:        100,
 						IdleConnTimeout:     10 * time.Second,
-						TLSHandshakeTimeout: 5 * time.Second,
+						TLSHandshakeTimeout: 3 * time.Second,
 					},
 					CheckRedirect: func(req *http.Request, via []*http.Request) error {
 						return http.ErrUseLastResponse
@@ -363,7 +365,7 @@ func (r *IPRotator) FetchWithRetry(method, url string, header http.Header, body 
 			log.Printf("[Retry] Attempt %d/%d encountered error/status(%s), retrying...", cnt+1, maxCnt, status)
 
 			// 稍微等待一下，给轮换一点时间
-			time.Sleep(time.Duration(cnt+1) * time.Second)
+			time.Sleep(time.Duration(cnt+1) * 200 * time.Millisecond)
 			continue
 		}
 		// --- 修改逻辑结束 ---

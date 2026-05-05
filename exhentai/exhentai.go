@@ -41,7 +41,7 @@ var proxyClient = &http.Client{
 		IdleConnTimeout:     10 * time.Second,
 		TLSHandshakeTimeout: 3 * time.Second,
 	},
-	Timeout: 10 * time.Second,
+	Timeout: 5 * time.Second,
 }
 
 // 预编译正则，提高性能

@@ -14,6 +14,7 @@ import (
 	_ "github.com/joho/godotenv/autoload"
 
 	"github.com/Hana-ame/api-pack/exhentai"
+	"github.com/Hana-ame/api-pack/proxies"
 	"github.com/Hana-ame/api-pack/qwen"
 	shijima "github.com/Hana-ame/api-pack/shijima"
 	"github.com/Hana-ame/api-pack/tools/debug"
@@ -55,14 +56,14 @@ func main() {
 	debug.LogLevel = debug.Trace
 
 	if os.Getenv("NYAA_PROXY") != "" {
-		go NyaaProxy() //127.25.23.4:8080
+		go proxies.NyaaProxy() //127.25.23.4:8080
 	}
 	if os.Getenv("SUKEBEI_PROXY") != "" {
-		go SukebeiProxy() //127.25.23.5:8080
+		go proxies.SukebeiProxy() //127.25.23.5:8080
 	}
 
 	if tools.HasEnv("GROQ_PROXY") {
-		go RunProxyRouter(os.Getenv("GROQ_PROXY"), ProxyConfig{
+		go proxies.RunProxyRouter(os.Getenv("GROQ_PROXY"), proxies.ProxyConfig{
 			Name:            "groq",
 			Endpoint:        "https://api.groq.com",
 			APIKey:          os.Getenv("GROQ_API_KEY"),
@@ -70,7 +71,7 @@ func main() {
 		})
 	}
 	if tools.HasEnv("SILICONFLOW_PROXY") {
-		go RunProxyRouter(os.Getenv("SILICONFLOW_PROXY"), ProxyConfig{
+		go proxies.RunProxyRouter(os.Getenv("SILICONFLOW_PROXY"), proxies.ProxyConfig{
 			Name:     "siliconflow",
 			Endpoint: "https://api.siliconflow.cn",
 			APIKey:   os.Getenv("SILICONFLOW_API_KEY"),
@@ -92,7 +93,7 @@ func main() {
 		})
 	}
 	if tools.HasEnv("GEMINI_PROXY") {
-		go RunProxyRouter(os.Getenv("GEMINI_PROXY"), ProxyConfig{
+		go proxies.RunProxyRouter(os.Getenv("GEMINI_PROXY"), proxies.ProxyConfig{
 			Name:            "gemini",
 			Endpoint:        "https://generativelanguage.googleapis.com",
 			FreeModelsAll:   true,
@@ -106,10 +107,10 @@ func main() {
 	// go EhProxy() //127.25.23.6:8080
 	// go pastejson.Run(os.Getenv("PASTEJSON"), os.Getenv("PASTEJSON_CONN_STR")) // 127.25.9.10:8080
 
-	go TwimgProxy(os.Getenv("TWIMG")) // 127.25.9.15:8080
-	go PximgProxy(os.Getenv("PXIMG")) // 127.25.9.16:8080
+	go proxies.TwimgProxy(os.Getenv("TWIMG")) // 127.25.9.15:8080
+	go proxies.PximgProxy(os.Getenv("PXIMG")) // 127.25.9.16:8080
 
-	go EchoJSON() // 127.25.23.101:8080
+	go proxies.EchoJSON() // 127.25.23.101:8080
 
 	go qwen.Run(os.Getenv("QWEN_PROXY")) // 127.25.12.16:8080
 

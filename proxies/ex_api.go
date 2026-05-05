@@ -2,7 +2,7 @@
 // 并不使用这里的代码
 
 // gimini, 不想弄了
-package main
+package proxies
 
 import (
 	"errors"

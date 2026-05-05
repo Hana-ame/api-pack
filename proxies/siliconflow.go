@@ -1,4 +1,4 @@
-package siliconflow
+package proxies
 
 import (
 	"bytes"

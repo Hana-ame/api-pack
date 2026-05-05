@@ -3,7 +3,7 @@
 
 // 在 .env 中设置 EXHENTAI_PROXY_COOKIE 项目以更新Cookie
 
-package main
+package proxies
 
 import (
 	"bytes"
