@@ -704,7 +704,7 @@
   // 6. 右下角悬浮窗
   // =========================================================================
   function initFloatingNotice() {
-    const mark = "0410";
+    const mark = "0513";
     if (localStorage.getItem("iframeClosed") === mark) {
       return;
     }
@@ -721,6 +721,8 @@
                 </p>
                 <p>（试运行）在<a href="https://810114.xyz/?bid=893">这里</a>发送包含/g/的画廊链接，获得原图下载</p>
                 <p>nmbyd3.top域名即将过期（~6月）.请注意更换新域名：<a href="https://e.810114.xyz/">https://e.810114.xyz/</a></p>
+                <p>（测试中）<a href="https://810114.xyz/?bid=893&tid=188060&pn=0">下载Android应用</a>适配镜像站</p>
+                
             </div>
         `;
     document.body.appendChild(div);
