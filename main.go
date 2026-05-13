@@ -14,6 +14,7 @@ import (
 	_ "github.com/joho/godotenv/autoload"
 
 	"github.com/Hana-ame/api-pack/exhentai"
+	"github.com/Hana-ame/api-pack/hostproxy"
 	"github.com/Hana-ame/api-pack/qwen"
 	shijima "github.com/Hana-ame/api-pack/shijima"
 	"github.com/Hana-ame/api-pack/tools/debug"
@@ -114,6 +115,18 @@ func main() {
 	go qwen.Run(os.Getenv("QWEN_PROXY")) // 127.25.12.16:8080
 
 	go exhentai.Run(os.Getenv("EX_PROXY"))
+
+	if tools.HasEnv("EHGT_PROXY") {
+		ehReferer := "https://e-hentai.org/"
+		ehOrigin := "https://e-hentai.org/"
+		go hostproxy.Run(hostproxy.Config{
+			ListenAddr:   os.Getenv("EHGT_PROXY"),
+			TargetHost:   "ehgt.org",
+			TargetScheme: "https",
+			Referer:      &ehReferer,
+			Origin:       &ehOrigin,
+		})
+	}
 
 	//127.24.11.16:8080
 	// 创建 Gin 引擎
