@@ -177,7 +177,22 @@ self.addEventListener('fetch', (event) => {
   const hostname = url.hostname;
 
   // ------------------- 导航请求（HTML 页面）-------------------
+
+    
   if (req.mode === 'navigate') {
+
+  // ========== 新增白名单 ==========
+  const isImageRedirect = url.searchParams.get('redirect_to') === 'image';
+  const isFullImg = /^\/fullimg(\/|$)/.test(url.pathname);
+  const isArchiver = /^\/archiver\.php(\/|$)/.test(url.pathname);
+
+  if (isImageRedirect || isFullImg || isArchiver) {
+    return; // 直接放行，浏览器处理所有响应（包括 301/302）
+  }
+  // ================================
+
+
+      
     // 释放之前页面残留的后台请求（优化体验）
     if (activeControllers.size > 0) {
       console.log(`[SW] 侦测到页面跳转，释放 ${activeControllers.size} 个遗留后台连接...`);
