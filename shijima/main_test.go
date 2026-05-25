@@ -15,9 +15,9 @@ import (
 	"testing"
 	"time"
 
-	myfetch "github.com/Hana-ame/api-pack/tools/my_fetch"
-	"github.com/Hana-ame/api-pack/tools/orderedmap"
-	tools "github.com/Hana-ame/api-pack/tools/utils"
+	myfetch "github.com/Hana-ame/api-pack/utils/my_fetch"
+	"github.com/Hana-ame/api-pack/utils/orderedmap"
+	tools "github.com/Hana-ame/api-pack/utils/utils"
 	"github.com/nfnt/resize"
 )
 

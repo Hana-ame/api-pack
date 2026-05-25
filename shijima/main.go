@@ -18,13 +18,13 @@ import (
 	"time"
 
 	"github.com/Hana-ame/api-pack/shijima/bot"
-	myfetch "github.com/Hana-ame/api-pack/tools/my_fetch"
-	handler "github.com/Hana-ame/api-pack/tools/my_gin_handler"
-	middleware "github.com/Hana-ame/api-pack/tools/my_gin_middleware"
-	"github.com/Hana-ame/api-pack/tools/randomreader"
-	"github.com/Hana-ame/api-pack/tools/sqlite"
-	_ "github.com/Hana-ame/api-pack/tools/utils"
-	tools "github.com/Hana-ame/api-pack/tools/utils"
+	myfetch "github.com/Hana-ame/api-pack/utils/my_fetch"
+	handler "github.com/Hana-ame/api-pack/utils/my_gin_handler"
+	middleware "github.com/Hana-ame/api-pack/utils/my_gin_middleware"
+	"github.com/Hana-ame/api-pack/utils/randomreader"
+	"github.com/Hana-ame/api-pack/utils/sqlite"
+	_ "github.com/Hana-ame/api-pack/utils/utils"
+	tools "github.com/Hana-ame/api-pack/utils/utils"
 	"github.com/gin-gonic/gin"
 	_ "modernc.org/sqlite"
 	"github.com/hashicorp/go-multierror"
@@ -571,7 +571,7 @@ func checkID(c *gin.Context) {
 		c.AbortWithStatus(http.StatusUnauthorized)
 		return
 	}
-	arr := strings.Split(auth, "|")
+	arr := strings.SplitN(auth, ".", 2)
 	id, hash := arr[0], arr[1]
 	if tools.Hash(id, os.Getenv("SALT")) != hash {
 		c.AbortWithStatus(http.StatusUnauthorized)
@@ -593,7 +593,7 @@ func cookie(c *gin.Context) {
 	}
 	c.SetSameSite(http.SameSiteNoneMode)
 	hash := tools.Hash(string(id), os.Getenv("SALT"))
-	auth := string(id) + "|" + hash
+	auth := string(id) + "." + hash
 	c.SetCookie("auth", auth, 3600*24*365*10, "/", "", true, false)
 }
 

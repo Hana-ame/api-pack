@@ -11,8 +11,8 @@ import (
 	"os"
 	"time"
 
-	myfetch "github.com/Hana-ame/api-pack/tools/my_fetch/v2"
-	tools "github.com/Hana-ame/api-pack/tools/utils"
+	myfetch "github.com/Hana-ame/api-pack/utils/my_fetch/v2"
+	tools "github.com/Hana-ame/api-pack/utils/utils"
 )
 
 func main() {

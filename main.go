@@ -12,7 +12,7 @@ import (
 	_ "github.com/joho/godotenv/autoload"
 
 	shijima "github.com/Hana-ame/api-pack/shijima"
-	"github.com/Hana-ame/api-pack/tools/debug"
+	"github.com/Hana-ame/api-pack/utils/debug"
 )
 
 func localTCPAddrFromEnv() *net.TCPAddr {

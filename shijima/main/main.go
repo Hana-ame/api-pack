@@ -2,7 +2,7 @@ package main
 
 import (
 	"github.com/Hana-ame/api-pack/shijima"
-	_ "github.com/Hana-ame/api-pack/tools/utils"
+	_ "github.com/Hana-ame/api-pack/utils/utils"
 )
 
 func main() {

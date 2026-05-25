@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/Hana-ame/api-pack/tools/orderedmap"
-	tools "github.com/Hana-ame/api-pack/tools/utils"
+	"github.com/Hana-ame/api-pack/utils/orderedmap"
+	tools "github.com/Hana-ame/api-pack/utils/utils"
 	"github.com/gin-gonic/gin"
 )
 
