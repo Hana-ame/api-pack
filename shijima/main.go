@@ -26,7 +26,7 @@ import (
 	_ "github.com/Hana-ame/api-pack/tools/utils"
 	tools "github.com/Hana-ame/api-pack/tools/utils"
 	"github.com/gin-gonic/gin"
-	_ "github.com/go-sql-driver/mysql"
+	_ "modernc.org/sqlite"
 	"github.com/hashicorp/go-multierror"
 	"github.com/nfnt/resize"
 )
@@ -63,20 +63,66 @@ func uploadAndCache(image image.Image, path string) error {
 }
 
 var db, _ = func() (*sql.DB, error) {
-	dsn := os.Getenv("MARIADB")
-	db, err := sql.Open("mysql", dsn)
+	dbPath := tools.Or(os.Getenv("SHIJIMA_DB"), "shijima.db")
+	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		return nil, err
 	}
-
-	// 连接池参数
-	db.SetMaxOpenConns(100)                 // 最大活跃连接数
-	db.SetMaxIdleConns(30)                  // 最大空闲连接数
-	db.SetConnMaxLifetime(5 * time.Minute)  // 连接最长存活时间
-	db.SetConnMaxIdleTime(30 * time.Minute) // 空闲连接最长保留时间
-
+	db.SetMaxOpenConns(1) // SQLite 单写入者性能最佳
 	return db, nil
 }()
+
+func initDB() error {
+	tables := []string{
+		`CREATE TABLE IF NOT EXISTS thread (
+			no INTEGER PRIMARY KEY AUTOINCREMENT,
+			t TEXT DEFAULT '',
+			n TEXT DEFAULT '',
+			ts TEXT DEFAULT (datetime('now')),
+			id TEXT DEFAULT '',
+			p TEXT DEFAULT '',
+			txt TEXT DEFAULT '',
+			r INTEGER DEFAULT 0,
+			del INTEGER DEFAULT 0,
+			c TEXT DEFAULT '',
+			ip TEXT DEFAULT ''
+		)`,
+		`CREATE TABLE IF NOT EXISTS board (
+			bid INTEGER NOT NULL,
+			tid INTEGER NOT NULL,
+			replynum INTEGER DEFAULT 0,
+			last TEXT DEFAULT (datetime('now')),
+			PRIMARY KEY (bid, tid)
+		)`,
+		`CREATE TABLE IF NOT EXISTS reactions (
+			tid INTEGER NOT NULL,
+			ip TEXT NOT NULL,
+			reaction TEXT NOT NULL,
+			PRIMARY KEY (tid, ip)
+		)`,
+		`CREATE TABLE IF NOT EXISTS reactions_alt (
+			tid INTEGER NOT NULL,
+			reaction TEXT NOT NULL,
+			count INTEGER NOT NULL DEFAULT 0,
+			timestamp TEXT DEFAULT (datetime('now')),
+			PRIMARY KEY (tid, reaction)
+		)`,
+		`CREATE TABLE IF NOT EXISTS bot (
+			tid INTEGER NOT NULL,
+			bot TEXT NOT NULL,
+			query TEXT NOT NULL,
+			status TEXT DEFAULT 'pending',
+			response TEXT DEFAULT '',
+			PRIMARY KEY (tid, bot, query)
+		)`,
+	}
+	for _, ddl := range tables {
+		if _, err := db.Exec(ddl); err != nil {
+			return fmt.Errorf("initDB: %w", err)
+		}
+	}
+	return nil
+}
 
 const pageSize = 30
 
@@ -385,7 +431,7 @@ func getMaxNo() (int, error) {
 func postThreadToBoard(bid, tid int) (int, error) {
 	// 插入到板中
 	result, err := db.Exec(
-		"INSERT IGNORE  INTO board (bid, tid) VALUES (?, ?)",
+		"INSERT OR IGNORE INTO board (bid, tid) VALUES (?, ?)",
 		bid, tid,
 	)
 	if err != nil {
@@ -408,7 +454,7 @@ func updateReplyNum(tid int) error {
 			FROM thread
 			WHERE r = ? AND del >= 0
 		),
-		last = CURRENT_TIMESTAMP()
+		last = datetime('now')
 		WHERE tid = ?`,
 		tid, tid,
 	)
@@ -457,9 +503,10 @@ func post(c *gin.Context) {
 	// pn := tools.Atoi(c.Query("pn"), 0)
 
 	var thread Thread
-	if err := c.BindJSON(&thread); err != nil {
-		c.JSON(http.StatusBadRequest, err.Error())
-	}
+		if err := c.BindJSON(&thread); err != nil {
+			c.JSON(http.StatusBadRequest, err.Error())
+			return
+		}
 
 	thread.R = tools.Or(thread.R, uint(tid))
 
@@ -481,23 +528,9 @@ func post(c *gin.Context) {
 
 	thread.No = uint(LastInsertId)
 
-	// 送给bot处理
-	go func() {
-		body, err := json.Marshal(thread)
-		if err != nil {
-			return
-		}
-		for _, line := range strings.Split(thread.Txt, "\n") {
-			if strings.HasPrefix(strings.TrimSpace(line), "@") {
-				botName, query, err := tools.SeprateString(" ", strings.TrimSpace(line))
-				if err == nil {
-					go bot.Request(LastInsertId, botName, query, body)
-				} else {
-					go bot.Request(LastInsertId, strings.TrimSpace(line), "", body)
-				}
-			}
-		}
-	}()
+	// bot 异步触发——bot 回复到父帖（若为回复）或本主题（若为新主题）
+	parentNo := tools.Or(thread.R, uint(LastInsertId))
+	go triggerBots(LastInsertId, int64(parentNo), thread.Txt, thread.ID, thread.IP)
 
 	c.AbortWithStatus(http.StatusOK)
 }
@@ -654,6 +687,13 @@ func Run(addr string) error {
 
 	bot.SetDB(tools.Match(bot.NewDB(db)).Result())
 
+	if err := initDB(); err != nil {
+		panic("initDB: " + err.Error())
+	}
+	if err := initBotTable(); err != nil {
+		panic("initBotTable: " + err.Error())
+	}
+
 	r := gin.Default()
 
 	r.Use(middleware.CORSMiddleware())
@@ -691,7 +731,10 @@ func Run(addr string) error {
 		c.Set("thread", string(threadJSON))
 	}, bot.Handler)
 
-	r.NoRoute(handler.NoRoute("/var/www/moonchan", "index.html"))
+	wwwRoot := tools.Or(os.Getenv("WWW_ROOT"), "/var/www/moonchan")
+	r.NoRoute(handler.NoRoute(wwwRoot, "index.html"))
+
+	registerV3Routes(r)
 
 	return r.Run(addr)
 }

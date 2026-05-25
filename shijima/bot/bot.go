@@ -30,16 +30,7 @@ func Handler(c *gin.Context) {
 	}
 
 	switch c.Request.Method {
-	// 处理POST. 其实是预留接口处理来自别的岛实例的. 暂时不用了 250530
 	case http.MethodPost:
-		// body, err := io.ReadAll(c.Request.Body)
-		// defer c.Request.Body.Close()
-		// if err != nil {
-		// 	c.JSON(http.StatusBadRequest, gin.H{
-		// 		"error": err.Error(),
-		// 	})
-		// 	return
-		// }
 		body := []byte(c.GetString("thread"))
 		err := Request(int64(tid), bot, query, body)
 		if err != nil {
@@ -104,17 +95,13 @@ func Response(tid int64, bot string, query string) ([]byte, string, error) {
 			return []byte{}, "failed", err
 		}
 		if record == nil {
-			return []byte{}, "failed", nil // 没有记录，返回 pending 状态
+			return []byte{}, "failed", nil
 		}
 		return []byte(record.Response), record.Status, nil
 	}
 }
 
-// ===================================
-
 func deepseekRequest(tid int64, bot string, query string, body []byte) error {
-	// InsertOrUpdate(tid, bot, query, "pending", "{}")
-	// InsertOrUpdate(tid, bot, query, "done", respJSON)
 	return nil
 }
 
@@ -133,10 +120,12 @@ func reactionRequest(tid int64, bot string, query string, body []byte) error {
 	}
 
 	sqlquery := `
-		INSERT INTO reactions_alt (tid, reaction, count)
-		VALUES (?, ?, 1)
-		ON DUPLICATE KEY UPDATE count = count + 1, timestamp = CURRENT_TIMESTAMP;
-	`
+			INSERT INTO reactions_alt (tid, reaction, count, timestamp)
+			VALUES (?, ?, 1, datetime('now'))
+			ON CONFLICT(tid, reaction) DO UPDATE SET
+				count = count + 1,
+				timestamp = datetime('now');
+		`
 	_, err := DB().Exec(sqlquery, r, []byte(query))
 
 	return err
@@ -202,17 +191,11 @@ func randomResponse(tid int64, query string) ([]byte, string, error) {
 	}
 
 	sum := 0
-	result := ""
 	for i := 0; i < t; i++ {
 		r := rs.Intn(d) + 1
 		sum += r
-		// result += " + " + strconv.Itoa(r)
 	}
-	// if t > 1 {
-	// 	result += " = " + strconv.Itoa(sum)
-	// } else {
-	result = query + " = " + strconv.Itoa(sum)
-	// }
+	result := query + " = " + strconv.Itoa(sum)
 	bodyJSON, err := json.Marshal(gin.H{
 		"@type": "text",
 		"text":  result,

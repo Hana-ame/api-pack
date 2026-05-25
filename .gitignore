@@ -1,14 +1,7 @@
 api-pack
+api-pack-termux
 *.pem
-*.md
-*.json
 *.env
-
-api-pack-new
 __debug_bin*
-
 *.bin
-
 *.db
-
-!NOTES.md
