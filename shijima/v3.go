@@ -137,6 +137,9 @@ func v3PostThread(c *gin.Context) {
 	}
 
 	thread.No = uint(lastInsertID)
+
+		parentNo := tools.Or(thread.R, uint(lastInsertID))
+		go triggerBots(lastInsertID, int64(parentNo), thread.Txt, thread.ID, thread.IP)
 	c.JSON(http.StatusCreated, thread)
 }
 
