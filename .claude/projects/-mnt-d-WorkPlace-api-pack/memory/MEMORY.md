@@ -1,0 +1,2 @@
+- [deploy-db-immutable](feedback-deploy-db.md) — 部署时禁止修改数据库记录
+- [v2-v3-migration](project-v2-v3-migration.md) — v2→v3 迁移策略，shijima=dev，v3 独立于 v2
