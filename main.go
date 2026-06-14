@@ -14,6 +14,8 @@ import (
 	_ "github.com/joho/godotenv/autoload"
 
 	"github.com/Hana-ame/api-pack/exhentai"
+	"github.com/Hana-ame/api-pack/exhentai_modify"
+	"github.com/Hana-ame/api-pack/exhentai_stream"
 	"github.com/Hana-ame/api-pack/proxies"
 	"github.com/Hana-ame/api-pack/qwen"
 	shijima "github.com/Hana-ame/api-pack/shijima"
@@ -115,6 +117,8 @@ func main() {
 	go qwen.Run(os.Getenv("QWEN_PROXY")) // 127.25.12.16:8080
 
 	go exhentai.Run(os.Getenv("EX_PROXY"))
+	go exhentai_stream.Run(os.Getenv("EX_STREAM"))
+	go exhentai_modify.Run(os.Getenv("EX_MODIFY")) // env: EXHENTAI_ENDPOINT
 
 	//127.24.11.16:8080
 	// 创建 Gin 引擎
