@@ -367,10 +367,12 @@ func (p *ProxyHandler) doProxy(c *gin.Context, targetURL string) {
 	}
 	defer resp.Body.Close()
 
-	copyHeaders(c, resp.Header)
-	c.DataFromReader(resp.StatusCode, resp.ContentLength, resp.Header.Get("Content-Type"), resp.Body, map[string]string{
-		"X-Proxy": "proxy-stream",
-	})
+	for k, vs := range resp.Header {
+		for _, v := range vs {
+			c.Writer.Header().Add(k, v)
+		}
+	}
+	c.DataFromReader(resp.StatusCode, resp.ContentLength, resp.Header.Get("Content-Type"), resp.Body, nil)
 }
 
 // --- 辅助工具函数 ---
