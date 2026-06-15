@@ -715,8 +715,8 @@
             <button id="moonchan-close-button">×</button>
             <div style="padding: 10px; font-size: 14px; ">
                 <p>
-                  <a href="https://810114.xyz">
-                    其实本站本体是个匿名版，开镜像是为了引流来的。
+                  <a href="https://810114.xyz/?bid=893&tid=193807&pn=0">
+                    ip被扬了,暂时切换到备用线路,可能不稳定
                   </a>                  
                   本镜像服务于受限于账户权限问题无法访问exhentai的用户，所有内容皆为无偿提供
                 </p>
