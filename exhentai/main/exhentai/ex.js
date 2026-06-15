@@ -704,7 +704,7 @@
   // 6. 右下角悬浮窗
   // =========================================================================
   function initFloatingNotice() {
-    const mark = "0612";
+    const mark = "0616";
     if (localStorage.getItem("iframeClosed") === mark) {
       return;
     }
