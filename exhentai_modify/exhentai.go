@@ -443,6 +443,10 @@ func (p *ProxyHandler) prepareHeaders(c *gin.Context) http.Header {
 
 	h.Set("Origin", "https://exhentai.org")
 
+	if psk := os.Getenv("EXHENTAI_PSK"); psk != "" {
+		h.Set("X-PSK", psk)
+	}
+
 	return h
 }
 

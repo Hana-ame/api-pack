@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"slices"
 	"strings"
 	"time"
 
@@ -145,112 +144,16 @@ func ExhProxy(rotator *IPRotator, addr string) {
 
 // --- 中间件部分 ---
 
-// 访问控制中间件
-// 访问控制中间件
 func (p *ProxyHandler) accessControlMiddleware() gin.HandlerFunc {
-	// 1. 定义分类白名单
-	categories := []string{
-		"/doujinshi", "/manga", "/artistcg", "/gamecg", "/non-h",
-		"/imageset", "/cosplay", "/asianporn", "/misc", "/western",
-	}
-
-	// 2. 定义系统必要路径白名单 (js, css, logo 等)
-	systemPaths := []string{
-		"/", "/sw.js", "/favicon.ico", "/manifest.json", "/logo192.png", "/failed.html",
-		"/popular", "/watched",
-	}
+	expectedPSK := os.Getenv("EXHENTAI_PSK")
 
 	return func(c *gin.Context) {
-		// 获取不带参数的路径并转小写
-		path := strings.ToLower(c.Request.URL.Path)
-
-		// --- A. 白名单放行逻辑 ---
-		isWhite := false
-
-		// 1. 首页及系统文件
-		if slices.Contains(systemPaths, path) {
-			isWhite = true
-		}
-
-		// 2. 十大分类
-		if !isWhite && slices.Contains(categories, path) {
-			isWhite = true
-		}
-
-		// 3. PHP 文件 (通配 *.php)
-		if !isWhite && strings.HasSuffix(path, ".php") {
-			isWhite = true
-		}
-
-		// 4. 正则匹配: uploader, tag, gallery, image
-		if !isWhite {
-			if reUploader.MatchString(path) ||
-				reTag.MatchString(path) ||
-				reZ.MatchString(path) ||
-				reImg.MatchString(path) ||
-				reTorrent.MatchString(path) ||
-				reImage.MatchString(path) ||
-				reGallery.MatchString(path) {
-				isWhite = true
-			}
-		}
-
-		// 5. 内部代理资源路径 (exhentai 资源和 static 资源)
-		if !isWhite && (strings.HasPrefix(path, "/exhentai/") || strings.HasPrefix(path, "/static/")) {
-			isWhite = true
-		}
-
-		// --- B. 拦截逻辑 ---
-		// 如果不在白名单内，直接拦截
-		if !isWhite {
-			// 如果有 redirect_to 参数，说明是点击了某些跳转，可以考虑放行
-			if c.Query("redirect_to") == "" {
-				c.Redirect(302, "https://810114.xyz")
-				// c.AbortWithStatus(http.StatusForbidden) // 没在白名单里的一律 404
-				return
-			}
-		}
-
-		// --- C. 基础防护 (即使在白名单，也要防止路径遍历) ---
-		if strings.Contains(path, "/../") {
-			c.Redirect(302, "https://810114.xyz")
-			// c.AbortWithStatus(http.StatusForbidden)
+		if expectedPSK == "" || c.GetHeader("X-PSK") == expectedPSK {
+			c.Next()
 			return
 		}
-
-		// --- D. PHP 细化过滤 (可选：如果你只想放行特定的 PHP) ---
-		if strings.HasSuffix(path, ".php") {
-			allowPHP := []string{
-				"/gallerytorrents.php", "/favorites.php", "/torrents.php",
-				"/gallerypopups.php", "/api.php", "/uconfig.php", "/archiver.php",
-			}
-			if !slices.Contains(allowPHP, path) {
-				c.Redirect(302, "https://810114.xyz")
-				// c.AbortWithStatus(http.StatusForbidden)
-				return
-			}
-		}
-
-		// --- E. GeoIP 屏蔽 (保留你的原逻辑) ---
-		country := c.GetHeader("Cf-Ipcountry")
-		acceptLang := strings.ToLower(c.GetHeader("accept-language"))
-		if c.Query("redirect_to") != "image" && // 允许重定向啊，傻逼ai。26.02.15
-			!strings.Contains(acceptLang, "zh") && !slices.Contains([]string{"CN"}, country) {
-			c.Redirect(302, "https://810114.xyz")
-			// c.String(http.StatusForbidden, "Restricted Region: "+country)
-			c.Abort()
-			return
-		}
-
-		// --- F. 方法限制 ---
-		// 只有 .php 允许 POST，其他一律 GET
-		if !strings.HasSuffix(path, ".php") && c.Request.Method != http.MethodGet {
-			c.Redirect(302, "https://810114.xyz")
-			// c.AbortWithStatus(http.StatusForbidden)
-			return
-		}
-
-		c.Next()
+		c.Redirect(302, "https://810114.xyz")
+		c.Abort()
 	}
 }
 
