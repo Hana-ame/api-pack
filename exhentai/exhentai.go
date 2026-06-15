@@ -373,6 +373,9 @@ func (p *ProxyHandler) doProxy(c *gin.Context, targetURL string) {
 	// 2. 特殊文件直接流式返回 (Torrent/JS)
 	if strings.HasPrefix(targetURL, "/torrent") || strings.HasPrefix(targetURL, "/z/") || strings.HasPrefix(targetURL, "/api.php") {
 		copyHeaders(c, resp.Header)
+		if enc := resp.Header.Get("Content-Encoding"); enc != "" {
+			c.Header("Content-Encoding", enc)
+		}
 		c.DataFromReader(resp.StatusCode, resp.ContentLength, resp.Header.Get("Content-Type"), resp.Body, map[string]string{
 			"X-Proxy": "proxy",
 		})
