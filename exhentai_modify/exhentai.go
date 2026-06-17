@@ -224,7 +224,7 @@ func (p *ProxyHandler) accessControlMiddleware() gin.HandlerFunc {
 		// --- D. PHP 细化过滤 (可选：如果你只想放行特定的 PHP) ---
 		if strings.HasSuffix(path, ".php") {
 			allowPHP := []string{
-				"/gallerytorrents.php", "/favorites.php", "/torrents.php",
+				"/gallerytorrents.php", "/favorites.php", "/torrents.php", "/toplist.php",
 				"/gallerypopups.php", "/api.php", "/uconfig.php", "/archiver.php",
 			}
 			if !slices.Contains(allowPHP, path) {
