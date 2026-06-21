@@ -27,8 +27,8 @@ func TwimgProxy(addr string) error {
 
 	r.GET("/*any", func(c *gin.Context) {
 		path := c.Request.URL.Path
-		country := c.GetHeader("Cf-Country")
-		log.Printf("Cf-Country=%s Cf-Connecting-Ip=%s\n", country, c.GetHeader("Cf-Connecting-Ip"))
+		country := c.GetHeader("Cf-Ipcountry")
+		log.Printf("Cf-Ipcountry=%s Cf-Connecting-Ip=%s\n", country, c.GetHeader("Cf-Connecting-Ip"))
 		var host string
 		var isVideo bool
 		if strings.HasPrefix(path, "/tweet_video/") || strings.HasPrefix(path, "/ext_tw_video/") || strings.HasPrefix(path, "/amplify_video/") {
