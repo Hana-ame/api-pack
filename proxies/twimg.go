@@ -14,12 +14,15 @@ func TwimgProxy(addr string) error {
 	if addr == "" {
 		return fmt.Errorf("addr is empty")
 	}
-	r := gin.Default()
-	// r.Use(gin.Recovery())
+	r := gin.New()
+	r.Use(gin.Recovery())
 	r.Use(middleware.CORSMiddleware())
 	r.Use(middleware.ProxyMiddleware())
 
-	headerProcesser := func(h http.Header) http.Header { return h }
+	headerProcesser := func(h http.Header) http.Header {
+		h.Set("Referer", "https://x.com")
+		return h
+	}
 
 	twimgProxy := handler.Proxy("https://pbs.twimg.com", headerProcesser)
 	videoProxy := handler.Proxy("https://video.twimg.com", headerProcesser)
@@ -27,7 +30,7 @@ func TwimgProxy(addr string) error {
 	r.GET("/*any", func(c *gin.Context) {
 		path := c.Request.URL.Path
 		country := c.GetHeader("Cf-Ipcountry")
-		fmt.Printf("Cf-Ipcountry=%s Cf-Connecting-Ip=%s\n", country, c.GetHeader("Cf-Connecting-Ip"))
+		// fmt.Printf("Cf-Ipcountry=%s Cf-Connecting-Ip=%s\n", country, c.GetHeader("Cf-Connecting-Ip"))
 		var host string
 		var isVideo bool
 		if strings.HasPrefix(path, "/tweet_video/") || strings.HasPrefix(path, "/ext_tw_video/") || strings.HasPrefix(path, "/amplify_video/") {
