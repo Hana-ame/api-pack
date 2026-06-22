@@ -145,6 +145,9 @@ func (s *clientSlot) prepareNewClient() (*client, error) {
 					},
 
 					MaxIdleConns:        100,
+					MaxIdleConnsPerHost: 100,
+					MaxConnsPerHost:     200,
+
 					IdleConnTimeout:     15 * time.Second,
 					TLSHandshakeTimeout: 10 * time.Second,
 				},
