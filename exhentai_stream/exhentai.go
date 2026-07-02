@@ -62,7 +62,7 @@ var (
 const (
 	// 	ConfigURL = "https://config.810114.xyz/exhentai/settings"
 
-	TargetHost = "e-hentai.org"
+	TargetHost = "exhentai.org"
 
 	StaticHost = "page.moonchan.xyz"
 
@@ -299,10 +299,10 @@ func (p *ProxyHandler) prepareHeaders(c *gin.Context) http.Header {
 		refURL.Host = TargetHost
 		h.Set("Referer", refURL.String())
 	} else {
-		h.Set("Referer", "https://e-hentai.org/") // 26.07.03
+		h.Set("Referer", "https://exhentai.org/")
 	}
 
-	h.Set("Origin", "https://e-hentai.org") // 26.07.03
+	h.Set("Origin", "https://exhentai.org")
 
 	return h
 }
@@ -373,7 +373,7 @@ func (p *ProxyHandler) handleOrigin(c *gin.Context) {
 	if c.GetHeader("X-Cookie") != "" {
 		p.mainProxyHandler(c)
 	} else {
-		c.Redirect(302, "https://e-hentai.org"+c.Request.URL.String()) // 26.07.03
+		c.Redirect(302, "https://exhentai.org"+c.Request.URL.String())
 	}
 	return
 }

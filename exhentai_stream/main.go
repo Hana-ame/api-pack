@@ -121,7 +121,7 @@ func (s *clientSlot) prepareNewClient() (*client, error) {
 
 	// 1. Specify the exact Cloudflare IP you want to hit (like /etc/hosts)
 	// You can rotate these or hardcode one: [2a06:98c1:3120::]:443 or [2a06:98c1:3121::]:443
-	targetIP := tools.Or(os.Getenv("EX_TARGET_IP"), "e-hentai.org:443") // 26.07.03
+	targetIP := tools.Or(os.Getenv("EX_TARGET_IP"), "exhentai.org:443")
 
 	c := &client{
 		Addr: &ip,
@@ -141,7 +141,7 @@ func (s *clientSlot) prepareNewClient() (*client, error) {
 					// 2. CRITICAL: You must tell TLS that we are still talking to exhentai.org
 					// Otherwise, the SNI will be the IP address and the handshake will fail.
 					TLSClientConfig: &tls.Config{
-						ServerName: "e-hentai.org", // 26.07.03
+						ServerName: "exhentai.org",
 					},
 
 					MaxIdleConns:        100,
@@ -365,7 +365,7 @@ func NewIPRotator(manager *myfetch.Manager, poolSize int, backupIP string) (*IPR
 						// 2. CRITICAL: You must tell TLS that we are still talking to exhentai.org
 						// Otherwise, the SNI will be the IP address and the handshake will fail.
 						TLSClientConfig: &tls.Config{
-							ServerName: "e-hentai.org", // 26.07.03
+							ServerName: "exhentai.org",
 						},
 
 						MaxIdleConns:        100,
