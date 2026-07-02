@@ -102,7 +102,7 @@ func ExhProxy(rotator *IPRotator, addr string) {
 			return
 		})
 		special.GET("/uconfig.php", p.handleUConfig)
-		// special.POST("/api.php", p.handleAPI)
+		special.POST("/api.php", func(c *gin.Context) { c.AbortWithStatus(http.StatusForbidden) })
 		special.GET("/image/*any", p.handleImageLegacy)
 
 		special.GET("/fullimg/*any", func(c *gin.Context) {
