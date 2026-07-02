@@ -106,7 +106,7 @@ func ExhProxy(client *myfetch.Client, addr string) {
 			return
 		})
 		special.GET("/uconfig.php", p.handleUConfig)
-		special.POST("/api.php", p.handleAPI)
+		// special.POST("/api.php", p.handleAPI)
 		special.GET("/image/*any", p.handleImageLegacy)
 
 		special.GET("/fullimg/*any", func(c *gin.Context) {
