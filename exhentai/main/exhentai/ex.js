@@ -704,7 +704,7 @@
   // 6. 右下角悬浮窗
   // =========================================================================
   function initFloatingNotice() {
-    const mark = "0703";
+    const mark = "0704";
     if (localStorage.getItem("iframeClosed") === mark) {
       return;
     }
@@ -715,7 +715,7 @@
             <button id="moonchan-close-button">×</button>
             <div style="padding: 10px; font-size: 14px; ">
                 <p>
-                  <a href="https://810114.xyz/?bid=893&tid=193807&pn=0">
+                  <a href="https://810114.xyz/?bid=893&tid=196859&pn=0">
                     广告机炸号.今后不再开放回复功能.
                   </a>                  
                   本镜像服务于受限于账户权限问题无法访问exhentai的用户，所有内容皆为无偿提供
