@@ -26,7 +26,7 @@
 
     // 解析数量 (例如: "104 pages" -> 104)
     const totalImages = parseInt(lengthNode.textContent);
-    const itemsPerPage = 40;
+    const itemsPerPage = 20;
     // 计算总页数 (从0开始算，所以总页数决定了循环次数)
     const totalPages = Math.ceil(totalImages / itemsPerPage);
 
