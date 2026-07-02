@@ -151,6 +151,7 @@ func ExhProxy(client *myfetch.Client, addr string) {
 // 访问控制中间件
 // 访问控制中间件
 func (p *ProxyHandler) accessControlMiddleware() gin.HandlerFunc {
+
 	// 1. 定义分类白名单
 	categories := []string{
 		"/doujinshi", "/manga", "/artistcg", "/gamecg", "/non-h",
@@ -164,6 +165,12 @@ func (p *ProxyHandler) accessControlMiddleware() gin.HandlerFunc {
 	}
 
 	return func(c *gin.Context) {
+
+		if c.Request.Method == http.MethodPost {
+			c.AbortWithStatus(http.StatusForbidden)
+			return
+		}
+
 		// 获取不带参数的路径并转小写
 		path := strings.ToLower(c.Request.URL.Path)
 
