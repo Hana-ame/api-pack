@@ -8,12 +8,12 @@ package proxies
 import (
 	"bytes"
 	"crypto/tls"
-	"os"
 	"io"
 	"net"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
+	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -78,6 +78,7 @@ func NyaaProxy() {
 		host := "nyaa.si"
 
 		header := tools.NewHeader(c.Request.Header)
+		header.Del("Cookie")
 
 		if !slices.Contains([]string{"CN", ""}, c.Request.Header.Get("Cf-Ipcountry")) {
 			c.Redirect(http.StatusFound, "https://"+host+path)

@@ -166,7 +166,7 @@ func (p *ProxyHandler) accessControlMiddleware() gin.HandlerFunc {
 
 	return func(c *gin.Context) {
 
-		if c.Request.Method == http.MethodPost {
+		if c.Request.Method != http.MethodGet {
 			c.AbortWithStatus(http.StatusForbidden)
 			return
 		}
