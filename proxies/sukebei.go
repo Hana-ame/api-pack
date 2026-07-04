@@ -68,6 +68,7 @@ func SukebeiProxy() {
 		host := "sukebei.nyaa.si"
 
 		header := tools.NewHeader(c.Request.Header)
+		header.Del("Cookie")
 
 		if !slices.Contains([]string{"CN", ""}, c.Request.Header.Get("Cf-Ipcountry")) {
 			c.Redirect(http.StatusFound, "https://"+host+path)
