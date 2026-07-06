@@ -166,14 +166,21 @@ func (p *ProxyHandler) accessControlMiddleware() gin.HandlerFunc {
 
 	return func(c *gin.Context) {
 
-		if c.Request.Method != http.MethodGet {
-			c.AbortWithStatus(http.StatusForbidden)
-			return
-		}
+		// if c.Request.Method != http.MethodGet {
+		// 	c.AbortWithStatus(http.StatusForbidden)
+		// 	return
+		// }
 
 		// 获取不带参数的路径并转小写
 		path := strings.ToLower(c.Request.URL.Path)
 
+		// 26.07.06
+		if strings.HasPrefix(path, "/g/")  &&  c.Request.Method != http.MethodGet  {			
+			c.AbortWithStatus(http.StatusForbidden)
+			return
+		}
+		// 26.07.06
+		
 		// --- A. 白名单放行逻辑 ---
 		isWhite := false
 
