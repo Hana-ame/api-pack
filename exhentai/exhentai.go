@@ -167,6 +167,11 @@ func (p *ProxyHandler) accessControlMiddleware() gin.HandlerFunc {
 		// 获取不带参数的路径并转小写
 		path := strings.ToLower(c.Request.URL.Path)
 
+		if c.Request.Method != http.MethodGet {
+			c.AbortWithStatus(http.StatusForbidden)
+			return
+		}
+
 		// --- A. 白名单放行逻辑 ---
 		isWhite := false
 
