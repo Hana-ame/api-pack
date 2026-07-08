@@ -28,13 +28,12 @@ var defaultClient = &http.Client{
 				Port: 0,
 			},
 			Timeout:   3 * time.Second,
-			KeepAlive: 10 * time.Second,
+			KeepAlive: 30 * time.Second,
 		}).DialContext,
 		MaxIdleConns:        100,
 		IdleConnTimeout:     10 * time.Second,
 		TLSHandshakeTimeout: 3 * time.Second,
 	},
-	Timeout: 5 * time.Second,
 	CheckRedirect: func(req *http.Request, via []*http.Request) error {
 		return http.ErrUseLastResponse
 	},
@@ -50,7 +49,7 @@ const (
 	// DefaultRotationThreshold 单个槽位的轮换阈值
 	DefaultRotationThreshold = 1000
 	// DefaultCleanupDelay 删除旧 IP 的延迟时间
-	DefaultCleanupDelay = 30 * time.Second
+	DefaultCleanupDelay = 90 * time.Second * 20 // 我不理解。反正改大一点试试。
 	// DefaultPoolSize 默认并发 IP 数量
 	DefaultPoolSize = 3
 )
@@ -125,23 +124,29 @@ func (s *clientSlot) prepareNewClient() (*client, error) {
 		Addr: &ip,
 		Client: &myfetch.Client{
 			Client: &http.Client{
-				Timeout: 5 * time.Second,
+				Timeout: 30 * time.Second, // 关键：整个请求的总时间（连接+发送请求+读取响应）
 				Transport: &http.Transport{
+					// Use the IP address for the TCP connection
 					DialContext: (dialer{targetIP, &net.Dialer{
 						LocalAddr: &net.TCPAddr{
 							IP: ip.AsSlice(),
 						},
-						Timeout:   3 * time.Second,
-						KeepAlive: 10 * time.Second,
+						Timeout:   15 * time.Second,
+						KeepAlive: 30 * time.Second,
 					}}).DialContext,
 
+					// 2. CRITICAL: You must tell TLS that we are still talking to exhentai.org
+					// Otherwise, the SNI will be the IP address and the handshake will fail.
 					TLSClientConfig: &tls.Config{
 						ServerName: "exhentai.org",
 					},
 
 					MaxIdleConns:        100,
-					IdleConnTimeout:     10 * time.Second,
-					TLSHandshakeTimeout: 3 * time.Second,
+					MaxIdleConnsPerHost: 100,
+					MaxConnsPerHost:     200,
+
+					IdleConnTimeout:     15 * time.Second,
+					TLSHandshakeTimeout: 10 * time.Second,
 				},
 				CheckRedirect: func(req *http.Request, via []*http.Request) error {
 					return http.ErrUseLastResponse
@@ -157,7 +162,6 @@ func (s *clientSlot) getCurrentClient() *client {
 }
 
 // execute 执行请求并处理该槽位的轮换逻辑
-// 修改点：增加了对 502 等 5xx 错误的处理，强制触发轮换
 func (s *clientSlot) execute(method, url string, header http.Header, body io.Reader) (*http.Response, error) {
 	// 1. 获取当前客户端
 	current := s.getCurrentClient()
@@ -176,29 +180,10 @@ func (s *clientSlot) execute(method, url string, header http.Header, body io.Rea
 
 	// 4. 发起请求
 	resp, err := current.Fetch(method, url, header, body)
-
-	// --- 修改逻辑开始 ---
-	// 情况 A: 网络层错误
 	if err != nil {
-		atomic.AddInt64(&s.usageCounter, 50) // 加速轮换
+		atomic.AddInt64(&s.usageCounter, 10) // add 10 to pass a non-work ip quickly
 		return resp, err
 	}
-
-	// 情况 B: HTTP 服务端错误 (502 Bad Gateway, 503 Service Unavailable 等)
-	// 原因：这通常意味着该 IP 的连接已被服务端重置或限流。
-	// 解决：必须强制轮换该 IP，丢弃旧的连接池。
-	if resp.StatusCode >= 500 {
-		log.Printf("[Slot %d] Server returned %d. Forcing connection pool reset for IP %s", s.id, resp.StatusCode, current.Addr)
-
-		// 强制触发轮换：将计数器直接推过阈值
-		atomic.StoreInt64(&s.usageCounter, DefaultRotationThreshold)
-
-		// 尝试立即执行轮换
-		if s.rotationMu.TryLock() {
-			s.performRotation(current)
-		}
-	}
-	// --- 修改逻辑结束 ---
 
 	resp.Header.Add("X-SERVED-BY", current.Addr.String())
 	return resp, err
@@ -207,16 +192,9 @@ func (s *clientSlot) execute(method, url string, header http.Header, body io.Rea
 func (s *clientSlot) performRotation(oldClient *client) {
 	// 检查 next 是否就绪
 	if s.nextClient == nil {
-		// --- 修改点：如果 nextClient 没准备好，同步阻塞生成，防止无 IP 可用 ---
-		log.Printf("[Slot %d] Next client not ready, generating synchronously...", s.id)
-		newNext, err := s.prepareNewClient()
-		if err != nil {
-			log.Printf("[Slot %d] CRITICAL: Failed to generate new client: %v", s.id, err)
-			s.rotationMu.Unlock()
-			// 保持计数器高位，下次继续尝试
-			return
-		}
-		s.nextClient = newNext
+		s.rotationMu.Unlock()
+		atomic.AddInt64(&s.usageCounter, -100) // 临时回退计数器，稍后重试
+		return
 	}
 
 	next := s.nextClient
@@ -304,21 +282,25 @@ func NewIPRotator(manager *myfetch.Manager, poolSize int, backupIP string) (*IPR
 		if addr, err := netip.ParseAddr(backupIP); err == nil {
 			rotator.backupClient = &myfetch.Client{
 				Client: &http.Client{
-					Timeout: 5 * time.Second,
 					Transport: &http.Transport{
+						// Use the IP address for the TCP connection
 						DialContext: (&net.Dialer{
 							LocalAddr: &net.TCPAddr{
 								IP: addr.AsSlice(),
 							},
-							Timeout:   3 * time.Second,
-							KeepAlive: 10 * time.Second,
+							Timeout:   5 * time.Second,
+							KeepAlive: 30 * time.Second,
 						}).DialContext,
+
+						// 2. CRITICAL: You must tell TLS that we are still talking to exhentai.org
+						// Otherwise, the SNI will be the IP address and the handshake will fail.
 						TLSClientConfig: &tls.Config{
 							ServerName: "exhentai.org",
 						},
+
 						MaxIdleConns:        100,
 						IdleConnTimeout:     10 * time.Second,
-						TLSHandshakeTimeout: 3 * time.Second,
+						TLSHandshakeTimeout: 5 * time.Second,
 					},
 					CheckRedirect: func(req *http.Request, via []*http.Request) error {
 						return http.ErrUseLastResponse
@@ -341,51 +323,32 @@ func (r *IPRotator) Fetch(method, url string, header http.Header, body io.Reader
 	return selectedSlot.execute(method, url, header, body)
 }
 
-// FetchWithRetry 带重试机制的 Fetch
-// 修改点：将 5xx 错误视为需要重试的错误
 func (r *IPRotator) FetchWithRetry(method, url string, header http.Header, body io.Reader) (*http.Response, error) {
-	maxCnt := tools.Atoi(os.Getenv("EX_MAX_RETRY"), 3) // 默认重试3次
-	var resp *http.Response
-	var err error
 
-	for cnt := 0; cnt < maxCnt; cnt++ {
-		resp, err = r.Fetch(method, url, header, body)
+	maxCnt := tools.Atoi(os.Getenv("EX_MAX_RETRY"), 0)
 
-		// --- 修改逻辑开始 ---
-		// 如果网络错误，或者状态码 >= 500 (如 502)，则进行重试
-		if err != nil || (resp.StatusCode >= 500) {
-			status := "N/A"
-			if resp != nil {
-				status = strconv.Itoa(resp.StatusCode)
-				// ⚠️ 补充这行：如果不 Close，底层的 TCP 连接无法被释放或重用，会导致内存泄漏！
-				if resp.Body != nil {
-					resp.Body.Close()
-				}
-			}
-			log.Printf("[Retry] Attempt %d/%d encountered error/status(%s), retrying...", cnt+1, maxCnt, status)
-
-			// 稍微等待一下，给轮换一点时间
-			time.Sleep(time.Duration(cnt+1) * 200 * time.Millisecond)
-			continue
-		}
-		// --- 修改逻辑结束 ---
-
-		// 成功且状态码正常
-		resp.Header.Add("X-Retry-Count", strconv.Itoa(cnt))
+	resp, err := r.Fetch(method, url, header, body)
+	if err == nil {
+		resp.Header.Add("X-Retry-Count", strconv.Itoa(0))
 		return resp, err
 	}
 
-	// 所有重试失败，尝试备用客户端
-	if r.backupClient != nil {
-		log.Println("[Retry] All slots failed, using backup client.")
-		resp, err = r.backupClient.Fetch(method, url, header, body)
-		if resp != nil {
-			resp.Header.Add("X-Retry-Count", strconv.Itoa(-1))
+	for cnt := 0; cnt < maxCnt; cnt++ {
+		resp, err = r.Fetch(method, url, header, body)
+		if err == nil {
+			resp.Header.Add("X-Retry-Count", strconv.Itoa(cnt))
+			return resp, err
 		}
+	}
+
+	if err != nil && r.backupClient != nil {
+		resp, err = r.backupClient.Fetch(method, url, header, body)
+		resp.Header.Add("X-Retry-Count", strconv.Itoa(-1))
 		return resp, err
 	}
 
 	return resp, err
+
 }
 
 // Run 模拟运行
