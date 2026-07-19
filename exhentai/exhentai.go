@@ -55,6 +55,7 @@ var (
 	reGallery        = regexp.MustCompile(`^/g/\d+/[0-9a-f]+(/.*)?`)
 	reCover          = regexp.MustCompile(`https://s\.exhentai\.org/([^"'\s>]+)`)
 	coverReplacement = []byte("https://proxy.moonchan.xyz/$1?proxy_host=ehgt.org")
+	reTorrents       = regexp.MustCompile(`u\.value=\d+`)
 )
 
 // 配置常量
@@ -376,7 +377,7 @@ func (p *ProxyHandler) doProxy(c *gin.Context, targetURL string) {
 	defer resp.Body.Close()
 
 	// 2. 特殊文件直接流式返回 (Torrent/JS)
-	if strings.HasPrefix(targetURL, "/torrent") || strings.HasPrefix(targetURL, "/z/") || strings.HasPrefix(targetURL, "/api.php") {
+	if strings.HasPrefix(targetURL, "/torrent/") || strings.HasPrefix(targetURL, "/z/") || strings.HasPrefix(targetURL, "/api.php") {
 		copyHeaders(c, resp.Header)
 		if enc := resp.Header.Get("Content-Encoding"); enc != "" {
 			c.Header("Content-Encoding", enc)
@@ -485,10 +486,13 @@ func (p *ProxyHandler) transformContent(c *gin.Context, data []byte, targetURL s
 		return data
 	}
 	data = bytes.Replace(data, []byte("https://exhentai.org"), []byte{}, -1)
-	data = bytes.Replace(data, []byte("https://s.exhentai.org"), []byte("https://ehgt.org"), -1) // 我日，cloudcone扣我钱了。
+	data = bytes.Replace(data, []byte("https://s.exhentai.org"), []byte("https://ehgt.org"), -1)
 	// data = reCover.ReplaceAll(data, coverReplacement) // 26.02.14
 	// data = ReplaceManual(data) // 26.02.14
 	data = bytes.Replace(data, []byte("https://ehgt.org/api.php"), []byte("/api.php"), 1)
+	data = bytes.Replace(data, []byte("u.value=7621193"), []byte("u.value=114514"), 1)
+	data = reTorrents.ReplaceAll(data, []byte("u.value=114514")) // 26.07.20
+
 	data = stripCloudflareBeacon(data)
 
 	// 执行替换：将 </head> 替换为 <script ...></script></head>
