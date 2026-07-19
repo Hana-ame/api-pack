@@ -715,13 +715,17 @@
             <button id="moonchan-close-button">×</button>
             <div style="padding: 10px; font-size: 14px; ">
                 <p>
+                  <a href="https://810114.xyz/?bid=1&tid=199598&pn=0">
+                    新版apk修复了torrent和标签翻译功能,请下载这个.另外报修也在这里
+                  </a>
+                </p>
+                <p>
                   <a href="https://810114.xyz/?bid=893&tid=196859&pn=0">
                     广告机炸号.今后不再开放回复功能.
                   </a>                  
                   本镜像服务于受限于账户权限问题无法访问exhentai的用户，所有内容皆为无偿提供
                 </p>
                 <p>（试运行）在<a href="https://810114.xyz/?bid=893">这里</a>发送包含/g/的画廊链接，获得原图下载</p>
-                <p>（测试中）<a href="https://810114.xyz/?bid=893&tid=188060&pn=0">下载Android应用</a>适配镜像站</p>
                 <p>为防止DMCA问题，对一些可能遭到举报的IP进行了限制，如果与亲朋好友分享请记得告诉他们这一注意事项</p>
                 
             </div>

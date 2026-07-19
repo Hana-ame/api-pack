@@ -55,6 +55,7 @@ var (
 	reGallery        = regexp.MustCompile(`^/g/\d+/[0-9a-f]+(/.*)?`)
 	reCover          = regexp.MustCompile(`https://s\.exhentai\.org/([^"'\s>]+)`)
 	coverReplacement = []byte("https://proxy.moonchan.xyz/$1?proxy_host=ehgt.org")
+	reTorrents       = regexp.MustCompile(`u\.value=\d+`)
 )
 
 // 配置常量
@@ -493,7 +494,7 @@ func (p *ProxyHandler) transformContent(c *gin.Context, data []byte, targetURL s
 	// data = reCover.ReplaceAll(data, coverReplacement) // 26.02.14
 	// data = ReplaceManual(data) // 26.02.14
 	data = bytes.Replace(data, []byte("https://ehgt.org/api.php"), []byte("/api.php"), 1)
-	data = bytes.Replace(data, []byte("u.value=7621193"), []byte("u.value=114514"), 1)
+	data = reTorrents.ReplaceAll(data, []byte("u.value=114514")) // 26.07.20
 	data = stripCloudflareBeacon(data)
 
 	// 执行替换：将 </head> 替换为 <script ...></script></head>

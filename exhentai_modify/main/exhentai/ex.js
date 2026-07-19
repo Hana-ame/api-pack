@@ -715,6 +715,11 @@
             <button id="moonchan-close-button">×</button>
             <div style="padding: 10px; font-size: 14px; ">
                 <p>
+                  <a href="https://810114.xyz/?bid=1&tid=199598&pn=0">
+                    新版本修复了torrent和标签翻译功能,请下载这个.另外报修也在这里
+                  </a>
+                </p>
+                <p>
                   <a href="https://810114.xyz">
                     其实本站本体是个匿名版，开镜像是为了引流来的。
                   </a>
