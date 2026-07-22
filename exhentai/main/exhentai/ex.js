@@ -704,7 +704,7 @@
   // 6. 右下角悬浮窗
   // =========================================================================
   function initFloatingNotice() {
-    const mark = "0704";
+    const mark = "0723";
     if (localStorage.getItem("iframeClosed") === mark) {
       return;
     }
@@ -717,12 +717,7 @@
                 <p>
                   <a href="https://810114.xyz/?bid=1&tid=199598&pn=0">
                     新版apk修复了torrent和标签翻译功能,请下载这个.另外报修也在这里
-                  </a>
-                </p>
-                <p>
-                  <a href="https://810114.xyz/?bid=893&tid=196859&pn=0">
-                    广告机炸号.今后不再开放回复功能.
-                  </a>                  
+                  </a>       
                   本镜像服务于受限于账户权限问题无法访问exhentai的用户，所有内容皆为无偿提供
                 </p>
                 <p>（试运行）在<a href="https://810114.xyz/?bid=893">这里</a>发送包含/g/的画廊链接，获得原图下载</p>

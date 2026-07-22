@@ -376,8 +376,14 @@ func (p *ProxyHandler) doProxy(c *gin.Context, targetURL string) {
 	}
 	defer resp.Body.Close()
 
+	u, _ := url.Parse(targetURL)
+	targetPath := targetURL
+	if u != nil {
+		targetPath = u.Path
+	}
+
 	// 2. 特殊文件直接流式返回 (Torrent/JS)
-	if strings.HasPrefix(targetURL, "/torrent/") || strings.HasPrefix(targetURL, "/z/") || strings.HasPrefix(targetURL, "/api.php") {
+	if strings.HasPrefix(targetPath, "/torrent/") || strings.HasPrefix(targetPath, "/z/") || strings.HasPrefix(targetPath, "/api.php") {
 		copyHeaders(c, resp.Header)
 		if enc := resp.Header.Get("Content-Encoding"); enc != "" {
 			c.Header("Content-Encoding", enc)
@@ -566,28 +572,28 @@ func copyHeaders(c *gin.Context, h http.Header) {
 // 修复Content-Disposition头部的编码问题
 func fixContentDisposition(header string) string {
 	// 检查是否包含乱码字符
-	if strings.Contains(header, "ã") || strings.Contains(header, "ã") {
-		// 提取文件名部分
-		if idx := strings.Index(header, "filename="); idx != -1 {
-			filenamePart := header[idx+9:] // "filename=" 长度是9
+	// if strings.Contains(header, "ã") || strings.Contains(header, "ã") {
+	// 提取文件名部分
+	if idx := strings.Index(header, "filename="); idx != -1 {
+		filenamePart := header[idx+9:] // "filename=" 长度是9
 
-			// 如果文件名被引号包围
-			if strings.HasPrefix(filenamePart, "\"") {
-				filenamePart = filenamePart[1:]
-				if endIdx := strings.Index(filenamePart, "\""); endIdx != -1 {
-					filenamePart = filenamePart[:endIdx]
-				}
+		// 如果文件名被引号包围
+		if strings.HasPrefix(filenamePart, "\"") {
+			filenamePart = filenamePart[1:]
+			if endIdx := strings.Index(filenamePart, "\""); endIdx != -1 {
+				filenamePart = filenamePart[:endIdx]
 			}
-
-			// 解码乱码（假设是UTF-8被错误解析为ISO-8859-1）
-			decodedFilename := fixUTF8Mojibake(filenamePart)
-
-			// 使用RFC 5987编码规范
-			return fmt.Sprintf(`attachment; filename="%s"; filename*=UTF-8''%s`,
-				url.PathEscape(decodedFilename),
-				url.PathEscape(decodedFilename))
 		}
+
+		// 解码乱码（假设是UTF-8被错误解析为ISO-8859-1）
+		decodedFilename := fixUTF8Mojibake(filenamePart)
+
+		// 使用RFC 5987编码规范
+		return fmt.Sprintf(`attachment; filename="%s"; filename*=UTF-8''%s`,
+			url.PathEscape(decodedFilename),
+			url.PathEscape(decodedFilename))
 	}
+	// }
 	return header
 }
 
