@@ -571,9 +571,6 @@ func copyHeaders(c *gin.Context, h http.Header) {
 
 // 修复Content-Disposition头部的编码问题
 func fixContentDisposition(header string) string {
-	if strings.Contains(header, "filename*=UTF-8''") {
-		return header
-	}
 	if idx := strings.Index(header, "filename="); idx != -1 {
 		filenamePart := header[idx+9:]
 
@@ -588,13 +585,30 @@ func fixContentDisposition(header string) string {
 			filenamePart = decoded
 		}
 
-		decodedFilename := fixUTF8Mojibake(filenamePart)
+		cleanedFilename := sanitizeFilename(fixUTF8Mojibake(filenamePart))
 
 		return fmt.Sprintf(`attachment; filename="%s"; filename*=UTF-8''%s`,
-			url.PathEscape(decodedFilename),
-			url.PathEscape(decodedFilename))
+			url.PathEscape(cleanedFilename),
+			url.PathEscape(cleanedFilename))
 	}
 	return header
+}
+
+// 清理文件名中的非法字符（null字节、控制字符、文件系统保留字符，及不可打印的高字节）
+func sanitizeFilename(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		switch {
+		case r == '/' || r == '\\' || r == ':' || r == '*' || r == '?' || r == '"' || r == '<' || r == '>' || r == '|':
+			b.WriteByte(' ')
+		case r >= 0x20 && r <= 0x7E:
+			b.WriteRune(r)
+		default:
+			// 丢弃 null, 控制字符, DEL, 非ASCII字节
+		}
+	}
+	return strings.TrimSpace(b.String())
 }
 
 // 修复UTF-8乱码（双重编码问题）
