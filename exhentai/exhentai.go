@@ -581,45 +581,35 @@ func fixContentDisposition(header string) string {
 			}
 		}
 
-		if decoded, err := url.QueryUnescape(filenamePart); err == nil {
-			filenamePart = decoded
+		raw, err := url.QueryUnescape(filenamePart)
+		if err != nil {
+			raw = filenamePart
 		}
 
-		cleanedFilename := sanitizeFilename(fixUTF8Mojibake(filenamePart))
+		cleaned := sanitizeRawFilename([]byte(raw))
 
 		return fmt.Sprintf(`attachment; filename="%s"; filename*=UTF-8''%s`,
-			url.PathEscape(cleanedFilename),
-			url.PathEscape(cleanedFilename))
+			url.PathEscape(string(cleaned)),
+			url.PathEscape(string(cleaned)))
 	}
 	return header
 }
 
-// 清理文件名中的非法字符（null字节、控制字符、文件系统保留字符，及不可打印的高字节）
-func sanitizeFilename(s string) string {
-	var b strings.Builder
-	b.Grow(len(s))
-	for _, r := range s {
+// 清理文件名字节：只保留可打印ASCII和可能为日文编码的高字节(0x80-0xFF)
+func sanitizeRawFilename(raw []byte) []byte {
+	var b bytes.Buffer
+	b.Grow(len(raw))
+	for _, c := range raw {
 		switch {
-		case r == '/' || r == '\\' || r == ':' || r == '*' || r == '?' || r == '"' || r == '<' || r == '>' || r == '|':
+		case c == 0:
+		case c < 0x20:
 			b.WriteByte(' ')
-		case r >= 0x20 && r <= 0x7E:
-			b.WriteRune(r)
+		case c == 0x7F:
+		case c == '/' || c == '\\' || c == ':' || c == '*' || c == '?' || c == '"' || c == '<' || c == '>' || c == '|':
+			b.WriteByte(' ')
 		default:
-			// 丢弃 null, 控制字符, DEL, 非ASCII字节
+			b.WriteByte(c)
 		}
 	}
-	return strings.TrimSpace(b.String())
-}
-
-// 修复UTF-8乱码（双重编码问题）
-func fixUTF8Mojibake(s string) string {
-	// 假设字符串是UTF-8被错误地解释为ISO-8859-1
-	// 首先将字符串转换为字节（作为ISO-8859-1）
-	isoBytes := make([]byte, len(s))
-	for i, r := range s {
-		isoBytes[i] = byte(r)
-	}
-
-	// 然后将这些字节解码为UTF-8
-	return string(isoBytes)
+	return bytes.TrimSpace(b.Bytes())
 }
