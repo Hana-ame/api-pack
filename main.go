@@ -13,6 +13,7 @@ import (
 
 	_ "github.com/joho/godotenv/autoload"
 
+	"github.com/Hana-ame/api-pack/chatto_reg"
 	"github.com/Hana-ame/api-pack/exhentai"
 	"github.com/Hana-ame/api-pack/exhentai_modify"
 	"github.com/Hana-ame/api-pack/exhentai_stream"
@@ -104,6 +105,10 @@ func main() {
 
 	if tools.HasEnv("SHIJIMA") {
 		go shijima.Run(os.Getenv("SHIJIMA"))
+	}
+
+	if tools.HasEnv("CHATTO_REG") {
+		go chatto_reg.Run(os.Getenv("CHATTO_REG")) // 127.26.8.2:8080
 	}
 
 	// go EhProxy() //127.25.23.6:8080
