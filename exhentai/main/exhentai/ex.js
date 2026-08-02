@@ -230,6 +230,23 @@
                 transition: 0.2s;
             }
 
+            /* 聊天群按钮 */
+            #moonchan-floating-iframe a.chatto-btn {
+                display: inline-block;
+                padding: 8px 20px;
+                background: linear-gradient(135deg, #a04ab8, #8041a6);
+                color: #fff;
+                border-radius: 18px;
+                text-decoration: none;
+                font-weight: bold;
+                font-size: 16px;
+                box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+                vertical-align: middle;
+            }
+            #moonchan-floating-iframe a.chatto-btn:hover {
+                background: linear-gradient(135deg, #b968ce, #8f45b4);
+            }
+
             /* 按钮容器默认样式 (PC) */
             .custom-btn-container {
                 height: 60px;
@@ -704,7 +721,7 @@
   // 6. 右下角悬浮窗
   // =========================================================================
   function initFloatingNotice() {
-    const mark = "0723";
+    const mark = "0802";
     if (localStorage.getItem("iframeClosed") === mark) {
       return;
     }
@@ -713,16 +730,12 @@
     div.id = "moonchan-floating-iframe";
     div.innerHTML = `
             <button id="moonchan-close-button">×</button>
-            <div style="padding: 10px; font-size: 14px; ">
-                <p>
-                  <a href="https://810114.xyz/?bid=1&tid=199598&pn=0">
-                    新版apk修复了torrent和标签翻译功能,请下载这个.另外报修也在这里
-                  </a>       
-                  本镜像服务于受限于账户权限问题无法访问exhentai的用户，所有内容皆为无偿提供
+            <div style="padding: 10px; font-size: 14px;">
+                <p style="text-align: center;">
+                    <a href="https://chatto.moonchan.xyz" class="chatto-btn">点击添加聊天群</a>
                 </p>
-                <p>（试运行）在<a href="https://810114.xyz/?bid=893">这里</a>发送包含/g/的画廊链接，获得原图下载</p>
-                <p>为防止DMCA问题，对一些可能遭到举报的IP进行了限制，如果与亲朋好友分享请记得告诉他们这一注意事项</p>
-                
+                <p>日后通知等今后会放到这里. 欢迎闲聊</p>
+                <p>如果注册不了可以在 <a href="https://chatto.810114.xyz" style="color:#0066cc;">https://chatto.810114.xyz</a> 提交申请</p>
             </div>
         `;
     document.body.appendChild(div);
