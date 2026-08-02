@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
 /** @type {ServiceWorkerGlobalScope} */
 
-const VERSION = 'V11-26.03.22'; 
+const VERSION = 'V12-26.08.02'; 
 const CACHE_NAME = `site-assets-${VERSION}`;
 
 // ==================== 自定义错误页面 ====================
