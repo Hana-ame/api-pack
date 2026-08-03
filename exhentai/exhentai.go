@@ -107,7 +107,7 @@ func ExhProxy(rotator *IPRotator, addr string) {
 			return
 		})
 		special.GET("/uconfig.php", p.handleUConfig)
-		special.POST("/api.php", func(c *gin.Context) { c.AbortWithStatus(http.StatusForbidden) })
+		special.POST("/api.php", p.handleAPI)
 		special.GET("/image/*any", p.handleImageLegacy)
 
 		special.GET("/fullimg/*any", func(c *gin.Context) {
@@ -168,8 +168,9 @@ func (p *ProxyHandler) accessControlMiddleware() gin.HandlerFunc {
 		// 获取不带参数的路径并转小写
 		path := strings.ToLower(c.Request.URL.Path)
 
-		if c.Request.Method != http.MethodGet {
-			c.AbortWithStatus(http.StatusForbidden)
+		// 26.07.07: 只禁止 /g/ 开头的非 GET 请求
+		if strings.HasPrefix(path, "/g/") && c.Request.Method != http.MethodGet {
+			c.Redirect(302, "https://810114.xyz")
 			return
 		}
 
@@ -221,7 +222,7 @@ func (p *ProxyHandler) accessControlMiddleware() gin.HandlerFunc {
 		}
 
 		// --- C. 基础防护 (即使在白名单，也要防止路径遍历) ---
-		if strings.Contains(path, "/../") {
+		if strings.Contains(path, "/../") || strings.Contains(strings.ToLower(c.Request.URL.EscapedPath()), "%2e") {
 			c.Redirect(302, "https://810114.xyz")
 			// c.AbortWithStatus(http.StatusForbidden)
 			return
@@ -252,12 +253,8 @@ func (p *ProxyHandler) accessControlMiddleware() gin.HandlerFunc {
 		}
 
 		// --- F. 方法限制 ---
-		// 只有 .php 允许 POST，其他一律 GET
-		if !strings.HasSuffix(path, ".php") && c.Request.Method != http.MethodGet {
-			c.Redirect(302, "https://810114.xyz")
-			// c.AbortWithStatus(http.StatusForbidden)
-			return
-		}
+		// POST 仅对 /g/ 开头路径禁止，已在顶部处理，其余方法放行
+		_ = path
 
 		c.Next()
 	}
