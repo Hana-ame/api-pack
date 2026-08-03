@@ -1,12 +1,12 @@
 // 26.01.11
 // 适配myfetchv2
-// TODO: 遇到jandan图床 redirect时会爆炸。
 package main
 
 import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -151,6 +151,7 @@ func main() {
 
 		// 构造新的 URL
 		scheme := tools.Or(c.Query("proxy_scheme"), c.GetHeader("X-Scheme"), "https")
+		clientScheme := tools.ClientScheme(c)
 		search := c.Request.URL.Query()
 		// 删除代理专用参数，避免传给后端
 		search.Del("proxy_host")
@@ -174,8 +175,9 @@ func main() {
 
 		// --- 处理请求头 (Request Headers) ---
 		for k, vv := range c.Request.Header {
-			// 跳过逐段传输头 (Hop-by-hop headers)
-			if isHopByHop(k) {
+			// 跳过逐段传输头 (Hop-by-hop headers)、客户端可伪造的 IP/转发痕迹头、
+			// 以及浏览器偏好头 Upgrade-Insecure-Requests（会诱导源站 301 跳 https）
+			if tools.IsHopByHop(k) || tools.IsClientIPHeader(k) || tools.IsProxySpoofHeader(k) || strings.EqualFold(k, "Upgrade-Insecure-Requests") {
 				continue
 			}
 			for _, v := range vv {
@@ -203,8 +205,13 @@ func main() {
 		defer resp.Body.Close()
 
 		// --- 转发响应头 (Response Headers) ---
+		// 只补尚未设置的头：CORS 中间件已设的 ACAO 优先，避免上游 CORS 头叠加成多值；
+		// 源站专属的权限/SSL 控制头（HSTS/CSP/X-Frame-Options 等）不透传
 		for k, vv := range resp.Header {
-			if isHopByHop(k) {
+			if tools.IsHopByHop(k) || tools.IsOriginServerHeader(k) {
+				continue
+			}
+			if c.Writer.Header().Get(k) != "" {
 				continue
 			}
 			for _, v := range vv {
@@ -212,34 +219,31 @@ func main() {
 			}
 		}
 
+		// --- 重写 3xx 的 Location,让重定向留在代理内,避免裸 301 引发无限循环 ---
+		if resp.StatusCode >= 300 && resp.StatusCode < 400 {
+			if loc := resp.Header.Get("Location"); loc != "" {
+				carry := url.Values{}
+				if v := tools.Or(c.Query("proxy_origin"), c.GetHeader("X-Origin")); v != "" {
+					carry.Set("proxy_origin", v)
+				}
+				if v := tools.Or(c.Query("proxy_referer"), c.GetHeader("X-Referer")); v != "" {
+					carry.Set("proxy_referer", v)
+				}
+				if v := tools.Or(c.Query("proxy_cookie"), c.GetHeader("X-Cookie")); v != "" {
+					carry.Set("proxy_cookie", v)
+				}
+				c.Writer.Header().Set("Location", tools.RewriteLocation(loc, c.Request.Host, clientScheme, host, scheme, c.Request.URL.Path, search, carry))
+			}
+		}
+
 		// 自定义 Header
 		c.Writer.Header().Set("X-Proxy-Status", "success")
 		c.Writer.Header().Set("Cross-Origin-Resource-Policy", "cross-origin")
+		c.Writer.Header().Set("Timing-Allow-Origin", "*")
 
 		// --- 返回响应内容 ---
 		c.DataFromReader(resp.StatusCode, resp.ContentLength, resp.Header.Get("Content-Type"), resp.Body, nil)
 	})
 
 	r.Run(os.Getenv("PROXY"))
-}
-
-// 辅助函数：过滤 Hop-by-hop 头
-func isHopByHop(header string) bool {
-	hopHeaders := []string{
-		"Connection",
-		"Proxy-Connection",
-		"Keep-Alive",
-		"Proxy-Authenticate",
-		"Proxy-Authorization",
-		"Te",
-		"Trailer",
-		"Transfer-Encoding",
-		"Upgrade",
-	}
-	for _, h := range hopHeaders {
-		if strings.EqualFold(header, h) {
-			return true
-		}
-	}
-	return false
 }
