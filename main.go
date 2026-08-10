@@ -114,8 +114,9 @@ func main() {
 	// go EhProxy() //127.25.23.6:8080
 	// go pastejson.Run(os.Getenv("PASTEJSON"), os.Getenv("PASTEJSON_CONN_STR")) // 127.25.9.10:8080
 
-	go proxies.TwimgProxy(os.Getenv("TWIMG")) // 127.25.9.15:8080
-	go proxies.PximgProxy(os.Getenv("PXIMG")) // 127.25.9.16:8080
+	go proxies.TwimgProxy(os.Getenv("TWIMG"))      // 127.25.9.15:8080
+	go proxies.TwimgProxyV2(os.Getenv("TWIMG_V2")) // 127.26.8.10:8080
+	go proxies.PximgProxy(os.Getenv("PXIMG"))      // 127.25.9.16:8080
 
 	go proxies.EchoJSON() // 127.25.23.101:8080
 
