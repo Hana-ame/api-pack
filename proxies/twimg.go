@@ -79,12 +79,11 @@ func TwimgProxy(addr string) error {
 	}
 
 	twimgProxy := StreamProxy("https://pbs.twimg.com", headerProcesser)
-	videoProxy := StreamProxy("https://video.twimg.com", headerProcesser)
+	videoProxy := StreamVideoProxy("https://video.twimg.com", headerProcesser)
 
-	r.GET("/*any", func(c *gin.Context) {
+	handler := func(c *gin.Context) {
 		path := c.Request.URL.Path
 		country := c.GetHeader("Cf-Ipcountry")
-		// fmt.Printf("Cf-Ipcountry=%s Cf-Connecting-Ip=%s\n", country, c.GetHeader("Cf-Connecting-Ip"))
 		var host string
 		var isVideo bool
 
@@ -108,7 +107,10 @@ func TwimgProxy(addr string) error {
 		} else {
 			twimgProxy(c)
 		}
-	})
+	}
+
+	r.GET("/*any", handler)
+	r.HEAD("/*any", handler)
 
 	return r.Run(addr)
 }
@@ -372,10 +374,10 @@ func TwimgProxyV2(addr string) error {
 		h.Set("Referer", "https://x.com")
 		return h
 	}
-	videoProxy := StreamProxy("https://video.twimg.com", headerProcesser)
+	videoProxy := StreamVideoProxy("https://video.twimg.com", headerProcesser)
 	imageProxy := StreamProxy("https://pbs.twimg.com", headerProcesser)
 
-	r.GET("/*any", func(c *gin.Context) {
+	v2Handler := func(c *gin.Context) {
 		// 所有请求都参与 QPS 统计
 		currentQPS := qps.record()
 
@@ -406,7 +408,9 @@ func TwimgProxyV2(addr string) error {
 		} else {
 			imageProxy(c)
 		}
-	})
+	}
+	r.GET("/*any", v2Handler)
+	r.HEAD("/*any", v2Handler)
 
 	return r.Run(addr)
 }
