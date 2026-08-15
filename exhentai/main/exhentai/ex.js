@@ -736,7 +736,7 @@
                 </p>
                 <p>日后通知等今后会放到这里. 欢迎闲聊</p>
                 <p>如果注册不了可以在 <a href="https://chatto.810114.xyz" style="color:#0066cc;">https://chatto.810114.xyz</a> 提交申请</p>
-                <p><a href="https://opencode.ai/go?ref=G7T0RKWR9N" target="_blank" rel="noopener" style="color:#0066cc;">https://opencode.ai/go?ref=G7T0RKWR9N</a><br>支付宝可订阅，5刀首月，得60刀tokens<br>发我订阅截图（<a href="https://chatto.moonchan.xyz" target="_blank" rel="noopener" style="color:#0066cc;">在chatto群发我截图</a>），视为对服务器捐赠5刀。</p>
+                <p><a href="https://opencode.ai/go?ref=G7T0RKWR9N" target="_blank" rel="noopener" style="color:#0066cc;">https://opencode.ai/go?ref=G7T0RKWR9N</a><br>支付宝可订阅，5刀首月，得60刀tokens<br>订阅后将截图发到<a href="https://chatto.moonchan.xyz" target="_blank" rel="noopener" style="color:#0066cc;">chatto群</a>，视为对服务器捐赠5刀。</p>
             </div>
         `;
     document.body.appendChild(div);
