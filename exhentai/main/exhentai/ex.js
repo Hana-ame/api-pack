@@ -721,7 +721,7 @@
   // 6. 右下角悬浮窗
   // =========================================================================
   function initFloatingNotice() {
-    const mark = "0802";
+    const mark = "0816";
     if (localStorage.getItem("iframeClosed") === mark) {
       return;
     }
@@ -736,6 +736,7 @@
                 </p>
                 <p>日后通知等今后会放到这里. 欢迎闲聊</p>
                 <p>如果注册不了可以在 <a href="https://chatto.810114.xyz" style="color:#0066cc;">https://chatto.810114.xyz</a> 提交申请</p>
+                <p>https://opencode.ai/go?ref=G7T0RKWR9N<br>支付宝可订阅，5刀首月，得60刀tokens<br>发我订阅截图，视为对服务器捐赠5刀。</p>
             </div>
         `;
     document.body.appendChild(div);
