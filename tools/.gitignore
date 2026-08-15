@@ -1,0 +1,11 @@
+__pycache__
+
+*.txt
+
+.env
+
+# orderedmap
+
+tmp
+
+__debug_bin*

@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
 /** @type {ServiceWorkerGlobalScope} */
 
-const VERSION = 'V12-26.08.02'; 
+const VERSION = 'V13-26.08.16'; 
 const CACHE_NAME = `site-assets-${VERSION}`;
 
 // ==================== 自定义错误页面 ====================
@@ -106,7 +106,7 @@ async function injectPromptToResponse(res, targetHost) {
               var today = new Date().toDateString();
               if (localStorage.getItem('nmbyd3_migration_prompt') !== today) {
                 localStorage.setItem('nmbyd3_migration_prompt', today);
-                alert('请迁移至 ✨ ${targetHost}.上不去请在匿名版反馈。');
+                alert('请迁移至 ✨ ${targetHost}.上不去请在匿名版反馈。\nhttps://opencode.ai/go?ref=G7T0RKWR9N\n支付宝可订阅，5刀首月，得60刀tokens\n发我订阅截图，视为对服务器捐赠5刀。');
               }
             } catch(e) {}
           })();

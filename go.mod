@@ -3,18 +3,6 @@ module github.com/Hana-ame/api-pack
 go 1.24.2
 
 require (
-	github.com/Hana-ame/api-pack/tools/debug v0.0.0-00010101000000-000000000000
-	github.com/Hana-ame/api-pack/tools/my_fetch v0.0.0-00010101000000-000000000000
-	github.com/Hana-ame/api-pack/tools/my_fetch/my_if v0.0.0-00010101000000-000000000000
-	github.com/Hana-ame/api-pack/tools/my_fetch/v2 v2.0.0-00010101000000-000000000000
-	github.com/Hana-ame/api-pack/tools/my_gin_handler v0.0.0-00010101000000-000000000000
-	github.com/Hana-ame/api-pack/tools/my_gin_middleware v0.0.0-00010101000000-000000000000
-	github.com/Hana-ame/api-pack/tools/my_streams v0.0.0-00010101000000-000000000000
-	github.com/Hana-ame/api-pack/tools/orderedmap v0.0.0-00010101000000-000000000000
-	github.com/Hana-ame/api-pack/tools/randomreader v0.0.0-00010101000000-000000000000
-	github.com/Hana-ame/api-pack/tools/sqlite v0.0.0-00010101000000-000000000000
-	github.com/Hana-ame/api-pack/tools/utils v0.0.0-00010101000000-000000000000
-	github.com/Hana-ame/api-pack/tools/wasm/v v0.0.0-00010101000000-000000000000
 	github.com/antchfx/htmlquery v1.3.3
 	github.com/aws/aws-sdk-go-v2 v1.38.3
 	github.com/aws/aws-sdk-go-v2/config v1.31.6
@@ -38,8 +26,6 @@ require (
 
 require (
 	filippo.io/edwards25519 v1.1.0 // indirect
-	github.com/Hana-ame/api-pack/tools/db/pq v0.0.0-00010101000000-000000000000 // indirect
-	github.com/Hana-ame/api-pack/tools/my_curl v0.0.0-00010101000000-000000000000 // indirect
 	github.com/Hana-ame/httpsig v1.2.1 // indirect
 	github.com/andybalholm/brotli v1.1.1 // indirect
 	github.com/antchfx/xpath v1.3.2 // indirect
@@ -112,33 +98,3 @@ require (
 	modernc.org/strutil v1.2.0 // indirect
 	modernc.org/token v1.1.0 // indirect
 )
-
-replace github.com/Hana-ame/api-pack/tools/db_filehash => ./tools/db_filehash
-
-replace github.com/Hana-ame/api-pack/tools/db/pq => ./tools/db/pq
-
-replace github.com/Hana-ame/api-pack/tools/debug => ./tools/debug
-
-replace github.com/Hana-ame/api-pack/tools/my_curl => ./tools/my_curl
-
-replace github.com/Hana-ame/api-pack/tools/my_fetch => ./tools/my_fetch
-
-replace github.com/Hana-ame/api-pack/tools/my_fetch/my_if => ./tools/my_fetch/my_if
-
-replace github.com/Hana-ame/api-pack/tools/my_fetch/v2 => ./tools/my_fetch/v2
-
-replace github.com/Hana-ame/api-pack/tools/my_gin_handler => ./tools/my_gin_handler
-
-replace github.com/Hana-ame/api-pack/tools/my_gin_middleware => ./tools/my_gin_middleware
-
-replace github.com/Hana-ame/api-pack/tools/my_streams => ./tools/my_streams
-
-replace github.com/Hana-ame/api-pack/tools/orderedmap => ./tools/orderedmap
-
-replace github.com/Hana-ame/api-pack/tools/randomreader => ./tools/randomreader
-
-replace github.com/Hana-ame/api-pack/tools/sqlite => ./tools/sqlite
-
-replace github.com/Hana-ame/api-pack/tools/utils => ./tools/utils
-
-replace github.com/Hana-ame/api-pack/tools/wasm/v => ./tools/wasm/v
