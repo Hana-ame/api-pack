@@ -124,9 +124,8 @@ func ExhProxy(client *myfetch.Client, addr string) {
 		// 1. Force the correct MIME type (Required by some browsers)
 		c.Header("Content-Type", "application/javascript")
 
-		// 2. Prevent the script itself from being cached by the browser
-		// This ensures that when you change sw.js, the browser sees the change immediately
-		c.Header("Cache-Control", "no-cache, no-store, must-revalidate")
+		// 2. 让浏览器每次检查更新，同时允许 Cloudflare 这样的共享缓存缓存它
+		c.Header("Cache-Control", "public, max-age=0, s-maxage=86400")
 
 		c.File("./exhentai/sw.js")
 	})
