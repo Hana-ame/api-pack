@@ -136,115 +136,120 @@ func main() {
 	r.Use(middleware.ProxyMiddleware())
 
 	// 2. 路由处理函数
-	r.Any("/*any", func(c *gin.Context) {
-		path := c.Request.URL.Path
-		host := tools.Or(c.Query("proxy_host"), c.GetHeader("X-Host"))
-
-		// --- 参数校验 ---
-		if host == "" {
-			if path == "/favicon.ico" {
-				c.Redirect(http.StatusFound, "https://moonchan.xyz/favicon.ico")
-			} else {
-				c.Redirect(http.StatusFound, "https://moonchan.xyz/")
-			}
-			return
-		}
-
-		// 构造新的 URL
-		scheme := tools.Or(c.Query("proxy_scheme"), c.GetHeader("X-Scheme"), "https")
-		clientScheme := tools.ClientScheme(c)
-		search := c.Request.URL.Query()
-		// 删除代理专用参数，避免传给后端
-		search.Del("proxy_host")
-		search.Del("proxy_origin")
-		search.Del("proxy_referer")
-		search.Del("proxy_cookie")
-		search.Del("proxy_scheme")
-
-		targetURL := fmt.Sprintf("%s://%s%s", scheme, host, path)
-		if len(search) > 0 {
-			targetURL += "?" + search.Encode()
-		}
-
-		// --- 构造请求 ---
-		// 必须使用 http.NewRequest 来手动控制
-		req, err := http.NewRequest(c.Request.Method, targetURL, c.Request.Body)
-		if err != nil {
-			c.AbortWithError(http.StatusInternalServerError, err)
-			return
-		}
-
-		// --- 处理请求头 (Request Headers) ---
-		for k, vv := range c.Request.Header {
-			// 跳过逐段传输头 (Hop-by-hop headers)、客户端可伪造的 IP/转发痕迹头、
-			// 以及浏览器偏好头 Upgrade-Insecure-Requests（会诱导源站 301 跳 https）
-			if tools.IsHopByHop(k) || tools.IsClientIPHeader(k) || tools.IsProxySpoofHeader(k) || strings.EqualFold(k, "Upgrade-Insecure-Requests") {
-				continue
-			}
-			for _, v := range vv {
-				req.Header.Add(k, v)
-			}
-		}
-
-		// 关键：设置正确的 Host
-		// 在 Go 中，req.Header.Set("Host", ...) 会被忽略，必须直接设置 req.Host
-		req.Host = host
-
-		// 覆盖特定的 Header
-		req.Header.Set("Origin", tools.Or(c.Query("proxy_origin"), c.GetHeader("X-Origin")))
-		req.Header.Set("Referer", tools.Or(c.Query("proxy_referer"), c.GetHeader("X-Referer")))
-		if cookie := tools.Or(c.Query("proxy_cookie"), c.GetHeader("X-Cookie")); cookie != "" {
-			req.Header.Set("Cookie", cookie)
-		}
-
-		// --- 执行请求 ---
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			c.String(http.StatusBadGateway, "Proxy Error: %v", err)
-			return
-		}
-		defer resp.Body.Close()
-
-		// --- 转发响应头 (Response Headers) ---
-		// 只补尚未设置的头：CORS 中间件已设的 ACAO 优先，避免上游 CORS 头叠加成多值；
-		// 源站专属的权限/SSL 控制头（HSTS/CSP/X-Frame-Options 等）不透传
-		for k, vv := range resp.Header {
-			if tools.IsHopByHop(k) || tools.IsOriginServerHeader(k) {
-				continue
-			}
-			if c.Writer.Header().Get(k) != "" {
-				continue
-			}
-			for _, v := range vv {
-				c.Writer.Header().Add(k, v)
-			}
-		}
-
-		// --- 重写 3xx 的 Location,让重定向留在代理内,避免裸 301 引发无限循环 ---
-		if resp.StatusCode >= 300 && resp.StatusCode < 400 {
-			if loc := resp.Header.Get("Location"); loc != "" {
-				carry := url.Values{}
-				if v := tools.Or(c.Query("proxy_origin"), c.GetHeader("X-Origin")); v != "" {
-					carry.Set("proxy_origin", v)
-				}
-				if v := tools.Or(c.Query("proxy_referer"), c.GetHeader("X-Referer")); v != "" {
-					carry.Set("proxy_referer", v)
-				}
-				if v := tools.Or(c.Query("proxy_cookie"), c.GetHeader("X-Cookie")); v != "" {
-					carry.Set("proxy_cookie", v)
-				}
-				c.Writer.Header().Set("Location", tools.RewriteLocation(loc, c.Request.Host, clientScheme, host, scheme, c.Request.URL.Path, search, carry))
-			}
-		}
-
-		// 自定义 Header
-		c.Writer.Header().Set("X-Proxy-Status", "success")
-		c.Writer.Header().Set("Cross-Origin-Resource-Policy", "cross-origin")
-		c.Writer.Header().Set("Timing-Allow-Origin", "*")
-
-		// --- 返回响应内容 ---
-		c.DataFromReader(resp.StatusCode, resp.ContentLength, resp.Header.Get("Content-Type"), resp.Body, nil)
-	})
+	r.Any("/*any", rootProxyHandler)
 
 	r.Run(os.Getenv("PROXY"))
+}
+
+// rootProxyHandler 通用 HTTP 反向代理：
+// 通过 proxy_host（或 X-Host 头）指定目标，proxy_scheme/X-Scheme 指定协议；
+// proxy_origin/referer/cookie（或对应 X-* 头）覆盖发往上游的对应请求头。
+func rootProxyHandler(c *gin.Context) {
+	path := c.Request.URL.Path
+	host := tools.Or(c.Query("proxy_host"), c.GetHeader("X-Host"))
+
+	// --- 参数校验 ---
+	if host == "" {
+		if path == "/favicon.ico" {
+			c.Redirect(http.StatusFound, "https://moonchan.xyz/favicon.ico")
+		} else {
+			c.Redirect(http.StatusFound, "https://moonchan.xyz/")
+		}
+		return
+	}
+
+	// 构造新的 URL
+	scheme := tools.Or(c.Query("proxy_scheme"), c.GetHeader("X-Scheme"), "https")
+	clientScheme := tools.ClientScheme(c)
+	search := c.Request.URL.Query()
+	// 删除代理专用参数，避免传给后端
+	search.Del("proxy_host")
+	search.Del("proxy_origin")
+	search.Del("proxy_referer")
+	search.Del("proxy_cookie")
+	search.Del("proxy_scheme")
+
+	targetURL := fmt.Sprintf("%s://%s%s", scheme, host, path)
+	if len(search) > 0 {
+		targetURL += "?" + search.Encode()
+	}
+
+	// --- 构造请求 ---
+	// 必须使用 http.NewRequest 来手动控制
+	req, err := http.NewRequest(c.Request.Method, targetURL, c.Request.Body)
+	if err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
+		return
+	}
+
+	// --- 处理请求头 (Request Headers) ---
+	for k, vv := range c.Request.Header {
+		// 跳过逐段传输头 (Hop-by-hop headers)、客户端可伪造的 IP/转发痕迹头、
+		// 以及浏览器偏好头 Upgrade-Insecure-Requests（会诱导源站 301 跳 https）
+		if tools.IsHopByHop(k) || tools.IsClientIPHeader(k) || tools.IsProxySpoofHeader(k) || strings.EqualFold(k, "Upgrade-Insecure-Requests") {
+			continue
+		}
+		for _, v := range vv {
+			req.Header.Add(k, v)
+		}
+	}
+
+	// 关键：设置正确的 Host
+	// 在 Go 中，req.Header.Set("Host", ...) 会被忽略，必须直接设置 req.Host
+	req.Host = host
+
+	// 覆盖特定的 Header
+	req.Header.Set("Origin", tools.Or(c.Query("proxy_origin"), c.GetHeader("X-Origin")))
+	req.Header.Set("Referer", tools.Or(c.Query("proxy_referer"), c.GetHeader("X-Referer")))
+	if cookie := tools.Or(c.Query("proxy_cookie"), c.GetHeader("X-Cookie")); cookie != "" {
+		req.Header.Set("Cookie", cookie)
+	}
+
+	// --- 执行请求 ---
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		c.String(http.StatusBadGateway, "Proxy Error: %v", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	// --- 转发响应头 (Response Headers) ---
+	// 只补尚未设置的头：CORS 中间件已设的 ACAO 优先，避免上游 CORS 头叠加成多值；
+	// 源站专属的权限/SSL 控制头（HSTS/CSP/X-Frame-Options 等）不透传
+	for k, vv := range resp.Header {
+		if tools.IsHopByHop(k) || tools.IsOriginServerHeader(k) {
+			continue
+		}
+		if c.Writer.Header().Get(k) != "" {
+			continue
+		}
+		for _, v := range vv {
+			c.Writer.Header().Add(k, v)
+		}
+	}
+
+	// --- 重写 3xx 的 Location,让重定向留在代理内,避免裸 301 引发无限循环 ---
+	if resp.StatusCode >= 300 && resp.StatusCode < 400 {
+		if loc := resp.Header.Get("Location"); loc != "" {
+			carry := url.Values{}
+			if v := tools.Or(c.Query("proxy_origin"), c.GetHeader("X-Origin")); v != "" {
+				carry.Set("proxy_origin", v)
+			}
+			if v := tools.Or(c.Query("proxy_referer"), c.GetHeader("X-Referer")); v != "" {
+				carry.Set("proxy_referer", v)
+			}
+			if v := tools.Or(c.Query("proxy_cookie"), c.GetHeader("X-Cookie")); v != "" {
+				carry.Set("proxy_cookie", v)
+			}
+			c.Writer.Header().Set("Location", tools.RewriteLocation(loc, c.Request.Host, clientScheme, host, scheme, c.Request.URL.Path, search, carry))
+		}
+	}
+
+	// 自定义 Header
+	c.Writer.Header().Set("X-Proxy-Status", "success")
+	c.Writer.Header().Set("Cross-Origin-Resource-Policy", "cross-origin")
+	c.Writer.Header().Set("Timing-Allow-Origin", "*")
+
+	// --- 返回响应内容 ---
+	c.DataFromReader(resp.StatusCode, resp.ContentLength, resp.Header.Get("Content-Type"), resp.Body, nil)
 }

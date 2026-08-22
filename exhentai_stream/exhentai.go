@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Hana-ame/api-pack/excommon"
 	middleware "github.com/Hana-ame/api-pack/tools/my_gin_middleware"
 	tools "github.com/Hana-ame/api-pack/tools/utils"
 	"github.com/antchfx/htmlquery"
@@ -352,12 +353,12 @@ func (p *ProxyHandler) handleSpecialRedirects(c *gin.Context, data []byte) bool 
 
 	switch redir {
 	case "image":
-		if img, err := findOneAndSelectAttr(doc, "//img[@id='img']", "src"); err == nil {
+		if img, err := excommon.FindOneAndSelectAttr(doc, "//img[@id='img']", "src"); err == nil {
 			c.Redirect(http.StatusFound, img)
 			return true
 		}
 	case "cover":
-		hrefs := findAll(doc, "//a", "href")
+		hrefs := excommon.FindAll(doc, "//a", "href")
 		for _, h := range hrefs {
 			if strings.HasPrefix(h, "/s/") {
 				c.Redirect(http.StatusMovedPermanently, h+"?redirect_to=image")

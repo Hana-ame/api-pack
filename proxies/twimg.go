@@ -1,9 +1,11 @@
 package proxies
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -130,6 +132,9 @@ const (
 	// 服务器每日重启，启动时加载一次即可：增删节点 / 改 limit / 改阈值 / 禁用节点
 	// 都只改这个 JSON，无需重新编译
 	defaultConfigPath = "twimg_v2.json"
+	// 每 IP 视频累计下载配额缺省值（GB）：用户指定 10GB；
+	// 配置缺省即按此值，显式填 0 关闭限速池
+	defaultVideoIPQuotaGB = 10
 )
 
 // configSource 分流配置中的一个节点
@@ -144,6 +149,9 @@ type configSource struct {
 //	{
 //	  "qps_threshold": 10,      // 空闲时全部由本体代理；QPS 超过此值后，只把超过的部分分流
 //	  "max_divert_ratio": 0.8,  // 最多分流比例：即使 QPS 爆掉，本体也始终自扛 1-该值 的流量；填 0 表示不分流
+//	  "video_ip_quota_gb": 10,  // 每 IP 视频累计下载配额（GB，进程存活期累计，每日不清零）；
+//	                            // 超限进限速池（池内同时只服务 1 路视频，排队保活，无 429）。
+//	                            // 缺省 10，想关闭显式填 0
 //	  "sources": [
 //	    {"domain": "twimg.810114.xyz", "limit": 100000, "enabled": true},
 //	    {"domain": "114514.beer", "limit": 100000, "enabled": true}
@@ -152,6 +160,7 @@ type configSource struct {
 type twimgV2Config struct {
 	QPSThreshold   *int           `json:"qps_threshold"`
 	MaxDivertRatio *float64       `json:"max_divert_ratio"`
+	VideoIPQuotaGB *float64       `json:"video_ip_quota_gb"`
 	Sources        []configSource `json:"sources"`
 }
 
@@ -189,6 +198,8 @@ type divertManager struct {
 	qpsThreshold   int
 	divertPermille int          // 最大分流千分比（max_divert_ratio*1000），超出 QPS 阈值部分分流的封顶值
 	tick           atomic.Int64 // 分流抽样计数器
+
+	videoGate *videoGate // 视频准入控制（惩罚池），nil=关闭
 }
 
 // newDivertManager 启动时读取一次分流配置；
@@ -227,6 +238,21 @@ func newDivertManager(path string) *divertManager {
 			ratio = 1
 		}
 		m.divertPermille = int(ratio * 1000)
+	}
+	// 视频限速池（每 IP 下载量配额）：配额 GB 转字节，进程存活期累计。
+	// 缺省 10GB（用户指定）；配置显式填 0 关闭。超限 IP 永久进池，
+	// 池内同时只服务 1 路视频（其余挂起保活排队）
+	quotaGB := float64(defaultVideoIPQuotaGB)
+	if cfg.VideoIPQuotaGB != nil && *cfg.VideoIPQuotaGB >= 0 {
+		quotaGB = *cfg.VideoIPQuotaGB
+	}
+	if quotaGB > 0 {
+		m.videoGate = &videoGate{
+			perIPQuota: int64(quotaGB * 1024 * 1024 * 1024),
+			perIP:      make(map[string]int64),
+			pool:       make(map[string]struct{}),
+			poolSlots:  make(chan struct{}, 1),
+		}
 	}
 	for _, cs := range cfg.Sources {
 		if cs.Domain == "" {
@@ -349,6 +375,10 @@ func (t *qpsTracker) record() int {
 //     且分流比例不超 max_divert_ratio，即使 QPS 爆掉本体也始终自扛一部分；
 //     每个节点独立计数，超过 limit 后禁用该节点，每日 UTC 0 点重置
 //   - UTC 20:00~24:00 为分流域禁用窗口，只走自建反代
+//   - 视频限速池（仅 .mp4）：video_ip_quota_gb（缺省 10GB，进程存活期累计）
+//     每 IP 视频累计下载超配额即永久进池，池内同时只服务 1 路视频，
+//     其余挂起保活排队（不发任何响应、TCP keepalive 保活；等槽期间客户端
+//     没断就照常服务，全程无 4xx/5xx，速度不限）；图片完全不参与
 //   - 非 CN 请求一律 302 到官方源直连，不缓存
 //   - StreamProxy 基于 request context，客户端断开会级联取消上游请求，避免流量空跑
 func TwimgProxyV2(addr string) error {
@@ -374,7 +404,12 @@ func TwimgProxyV2(addr string) error {
 		h.Set("Referer", "https://x.com")
 		return h
 	}
-	videoProxy := StreamVideoProxy("https://video.twimg.com", headerProcesser)
+	// 视频上游地址（默认官方源；TWIMG_V2_UPSTREAM_VIDEO 仅供本地测试注入假上游）
+	videoUpstream := os.Getenv("TWIMG_V2_UPSTREAM_VIDEO")
+	if videoUpstream == "" {
+		videoUpstream = "https://video.twimg.com"
+	}
+	videoProxy := StreamVideoProxy(videoUpstream, headerProcesser)
 	imageProxy := StreamProxy("https://pbs.twimg.com", headerProcesser)
 
 	v2Handler := func(c *gin.Context) {
@@ -397,8 +432,36 @@ func TwimgProxyV2(addr string) error {
 			return
 		}
 
-		// 空闲时本体代理优先；QPS 超过阈值后，只有超过的部分走 302 分流。
-		// 仅 .mp4 参与分流，图片请求绝不分流，始终直接代理 pbs.twimg.com
+		// 视频限速池（每 IP 下载量配额）：超配额 IP 永久进池，池内同时只
+		// 服务 1 路视频，其余挂起保活排队；排队期间客户端断开则放弃。
+		// 不返回任何 4xx/5xx（不允许 429）；池内请求不再走 302 分流（不烧镜像配额）。
+		// 图片不参与（图片短小高频，按下载量限会误伤正常浏览）
+		if isVideo && m.videoGate != nil {
+			ip := c.GetHeader("Cf-Connecting-Ip")
+			if ip == "" {
+				ip = c.ClientIP()
+			}
+			release, pooled := m.videoGate.acquire(c.Request.Context(), ip)
+			if release == nil {
+				// 排队期间客户端已断开：终止请求
+				c.Abort()
+				return
+			}
+			// 未池内且命中分流：视频内容由镜像下发，不计入本机配额，直接 302
+			if !pooled && m.shouldDivert(c, currentQPS) {
+				release(0)
+				return
+			}
+			// 池内 / 未命中分流：自扛。外包计数 writer 统计本路下发字节，
+			// 流结束后累计到该 IP 配额（下载量判定）
+			var served int64
+			orig := c.Writer
+			c.Writer = &countingResponseWriter{ResponseWriter: orig, n: &served}
+			videoProxy(c)
+			c.Writer = orig
+			release(served)
+			return
+		}
 		if isVideo && m.shouldDivert(c, currentQPS) {
 			return
 		}
@@ -412,7 +475,15 @@ func TwimgProxyV2(addr string) error {
 	r.GET("/*any", v2Handler)
 	r.HEAD("/*any", v2Handler)
 
-	return r.Run(addr)
+	// 不用 r.Run：自定义 listener 开启 TCP keepalive。
+	// 惩罚池里挂起排队（不发任何 HTTP 响应）的连接长时间无数据，
+	// 会被中间设备/NAT 认为死连接掐掉；OS 定期发 keepalive 探测保活
+	lc := net.ListenConfig{KeepAlive: 30 * time.Second}
+	ln, err := lc.Listen(context.Background(), "tcp", addr)
+	if err != nil {
+		return err
+	}
+	return (&http.Server{Handler: r}).Serve(ln)
 }
 
 func PximgProxy(addr string) error {

@@ -1,11 +1,16 @@
 package proxies
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -310,3 +315,267 @@ func TestDivertWindow(t *testing.T) {
 		t.Fatal("23:00 应禁止")
 	}
 }
+
+// videoGate 单元测试（按每 IP 视频累计下载量判定）：
+// 累计未达配额直接放行；累计达到配额当场永久进池；
+// 池内只有 1 个服务槽，其余请求挂起等待（不发响应），等槽期间客户端断开则放弃
+// （发现背景：twimgV2 按用户要求实现「每 IP 10GB 配额、超限进限速池、
+// 池内单并发、hangup+keepalive 排队、不允许 429、无全局设限」，
+// 验证字节累计与槽位归还、达配额即进池、ctx 取消退出排队）
+func TestVideoGate(t *testing.T) {
+	newGate := func(quota int64) *videoGate {
+		return &videoGate{
+			perIPQuota: quota,
+			perIP:      make(map[string]int64),
+			pool:       make(map[string]struct{}),
+			poolSlots:  make(chan struct{}, 1),
+		}
+	}
+
+	t.Run("配额关闭直接放行", func(t *testing.T) {
+		g := newGate(0)
+		r1, pooled := g.acquire(context.Background(), "a")
+		if r1 == nil || pooled {
+			t.Fatal("配额关闭应直接放行且非池内")
+		}
+		r1(100)
+		if _, ok := g.pool["a"]; ok {
+			t.Fatal("配额关闭不应进池")
+		}
+	})
+
+	t.Run("累计未达配额不进池", func(t *testing.T) {
+		g := newGate(1000)
+		r1, pooled := g.acquire(context.Background(), "a")
+		if r1 == nil || pooled {
+			t.Fatal("配额内应直接放行")
+		}
+		r1(600)
+		r2, pooled := g.acquire(context.Background(), "a")
+		if r2 == nil || pooled {
+			t.Fatal("累计未达配额应继续放行")
+		}
+		r2(300) // 累计 900 < 1000,仍未达
+		if _, ok := g.pool["a"]; ok {
+			t.Fatal("未达配额不应进池")
+		}
+	})
+
+	t.Run("累计达配额当场进池且永久", func(t *testing.T) {
+		g := newGate(1000)
+		r1, _ := g.acquire(context.Background(), "a")
+		r1(1000) // 达配额 -> 当场进池
+		if _, ok := g.pool["a"]; !ok {
+			t.Fatal("达配额应进池")
+		}
+		// 进池后后续请求走池（一直有效），槽空闲立即拿到
+		_, pooled := g.acquire(context.Background(), "a")
+		if !pooled {
+			t.Fatal("池内成员后续请求应仍然走池")
+		}
+		// 0 字节不触发进池
+		g2 := newGate(1000)
+		r2, _ := g2.acquire(context.Background(), "b")
+		r2(0)
+		if _, ok := g2.pool["b"]; ok {
+			t.Fatal("0 字节不应进池")
+		}
+	})
+
+	t.Run("池内单并发,其余挂起排队", func(t *testing.T) {
+		g := newGate(0) // 先手动塞池,等价于已超配额
+		g.pool["a"] = struct{}{}
+		g.pool["b"] = struct{}{}
+
+		type result struct {
+			release func(int64)
+			pooled  bool
+		}
+		// a 拿到唯一槽
+		r1, pooled := g.acquire(context.Background(), "a")
+		if r1 == nil || !pooled {
+			t.Fatal("池内应走池")
+		}
+		// b 请求：槽被占 -> 挂起等待，不得返回
+		ch1 := make(chan result, 1)
+		go func() {
+			r2, pooled := g.acquire(context.Background(), "b")
+			ch1 <- result{r2, pooled}
+		}()
+		select {
+		case <-ch1:
+			t.Fatal("槽被占用时应挂起等待")
+		case <-time.After(100 * time.Millisecond):
+		}
+
+		// 客户端断开（ctx 取消）-> 放弃排队返回 nil
+		ctx, cancel := context.WithCancel(context.Background())
+		ch2 := make(chan result, 1)
+		go func() {
+			r3, pooled := g.acquire(ctx, "b")
+			ch2 <- result{r3, pooled}
+		}()
+		time.Sleep(50 * time.Millisecond)
+		cancel()
+		select {
+		case res := <-ch2:
+			if res.release != nil {
+				t.Fatal("ctx 取消后 acquire 应返回 nil release")
+			}
+		case <-time.After(time.Second):
+			t.Fatal("ctx 取消后排队应退出")
+		}
+
+		// 槽释放 -> 排队者拿到槽照常服务
+		r1(0)
+		select {
+		case res := <-ch1:
+			if res.release == nil || !res.pooled {
+				t.Fatal("等槽成功应返回 pooled release")
+			}
+			res.release(0)
+		case <-time.After(time.Second):
+			t.Fatal("槽释放后排队者应被唤醒")
+		}
+	})
+
+	t.Run("不同IP配额独立", func(t *testing.T) {
+		g := newGate(1000)
+		r1, _ := g.acquire(context.Background(), "a")
+		r1(1000) // a 达配额进池
+		if _, ok := g.pool["a"]; !ok {
+			t.Fatal("a 应进池")
+		}
+		r2, pooled := g.acquire(context.Background(), "b")
+		if r2 == nil || pooled {
+			t.Fatal("b 配额独立,应正常放行")
+		}
+		r2(999)
+		if _, ok := g.pool["b"]; ok {
+			t.Fatal("b 未达配额不应进池")
+		}
+	})
+}
+
+// videoGate 端到端：视频上游可注入时，IP 累计下载超配额（在流结束时判定）
+// 后永久进池；池内第 2 路占用唯一槽，第 3 路挂起排队（不达上游）；
+// 槽释放后照常服务，全程无 429/5xx
+func TestTwimgV2VideoGateE2E(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "cfg.json")
+	cfg := twimgV2Config{
+		Sources:        []configSource{{Domain: "mirror.test", Limit: 100, Enabled: true}},
+		QPSThreshold:   intPtr(1000), // 高阈值:不触发 302 分流,走本体反代
+		MaxDivertRatio: float64Ptr(1.0),
+		VideoIPQuotaGB: float64Ptr(0.00001), // 约 10KB 配额:第一路就超
+	}
+	data, _ := json.Marshal(cfg)
+	if err := os.WriteFile(cfgPath, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TWIMG_V2_CONFIG", cfgPath)
+
+	// 假上游：首个请求全速写完；后续请求写满 2MB 后阻塞等 release
+	// （模拟长视频下载中，让"排队中"可被观察）
+	const size int64 = 4 << 20
+	var reqCount atomic.Int64
+	release := make(chan struct{})
+	var releaseOnce sync.Once
+	unblock := func() { releaseOnce.Do(func() { close(release) }) }
+	t.Cleanup(unblock) // 失败路径也要放行,否则 httptest.Close 等挂起连接卡死测试
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := reqCount.Add(1)
+		w.Header().Set("Content-Length", strconv.FormatInt(size, 10))
+		w.WriteHeader(http.StatusOK)
+		written := int64(0)
+		for written < size {
+			chunk := int64(1 << 20)
+			if n > 1 && written >= 2<<20 {
+				<-release
+			}
+			if size-written < chunk {
+				chunk = size - written
+			}
+			wn, err := w.Write(make([]byte, chunk))
+			written += int64(wn)
+			if err != nil {
+				return
+			}
+		}
+	}))
+	defer upstream.Close()
+	t.Setenv("TWIMG_V2_UPSTREAM_VIDEO", upstream.URL)
+
+	go TwimgProxyV2("127.0.0.1:18089")
+	sleepStart(t, "18089")
+
+	client := func(ip string) (int, error) {
+		req, _ := http.NewRequest(http.MethodGet, "http://127.0.0.1:18089/tweet_video/a.mp4", nil)
+		req.Header.Set("Cf-Ipcountry", "CN")
+		req.Header.Set("Cf-Connecting-Ip", ip)
+		resp, err := (&http.Client{Timeout: 15 * time.Second}).Do(req)
+		if err != nil {
+			return 0, err
+		}
+		io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+		return resp.StatusCode, nil
+	}
+
+	// 第 1 路：配额内放行，全速完成 -> 流结束时累计超配额，当场进池
+	done1 := make(chan int, 1)
+	go func() { s, _ := client("9.9.9.9"); done1 <- s }()
+	select {
+	case s := <-done1:
+		if s != http.StatusOK {
+			t.Fatalf("第 1 路应 200, got %d", s)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("第 1 路超时未完成")
+	}
+
+	// 第 2 路：已进池 -> 槽空闲,立即占用,开始服务（上游阻塞在 2MB）
+	done2 := make(chan int, 1)
+	go func() { s, _ := client("9.9.9.9"); done2 <- s }()
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) && reqCount.Load() < 2 {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if reqCount.Load() < 2 {
+		t.Fatal("第 2 路未开始服务")
+	}
+
+	// 第 3 路：池内且槽被占 -> 挂起排队,短时间内不应到达上游
+	done3 := make(chan int, 1)
+	go func() { s, _ := client("9.9.9.9"); done3 <- s }()
+	select {
+	case s := <-done3:
+		t.Fatalf("第 3 路应挂起排队,却已完成(status=%d)", s)
+	case <-time.After(500 * time.Millisecond):
+	}
+	if got := reqCount.Load(); got != 2 {
+		t.Fatalf("排队期间不应有第 3 路到达上游, reqCount=%d", got)
+	}
+
+	// 释放第 2 路 -> 第 3 路拿到槽,照常服务完成(200),全程无 429/5xx
+	unblock()
+	select {
+	case s := <-done2:
+		if s != http.StatusOK {
+			t.Fatalf("第 2 路应 200, got %d", s)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("第 2 路超时未完成")
+	}
+	select {
+	case s := <-done3:
+		if s != http.StatusOK {
+			t.Fatalf("第 3 路等槽后应 200, got %d", s)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("第 3 路等槽后超时未完成")
+	}
+}
+
+func intPtr(v int) *int             { return &v }
+func float64Ptr(v float64) *float64 { return &v }

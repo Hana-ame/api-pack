@@ -18,11 +18,11 @@ import (
 
 func TestSingleRange(t *testing.T) {
 	cases := []struct {
-		rng      string
-		start    int64
-		end      int64
-		suffix   int64
-		bounded  bool
+		rng     string
+		start   int64
+		end     int64
+		suffix  int64
+		bounded bool
 	}{
 		{"bytes=0-1023", 0, 1023, 0, true},
 		{"bytes=512-", 512, 0, 0, true},

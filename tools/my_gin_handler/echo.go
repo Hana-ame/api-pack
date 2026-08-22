@@ -30,16 +30,16 @@ func Echo(c *gin.Context) {
 	c.Header("X-Debug-Request-Host", c.Request.Host)     // 要设置 Host $http_host
 	c.Header("X-Debug-Header-Host", c.GetHeader("Host")) // never
 
-	println := func(format string, a ...any) {
+	writeLine := func(format string, a ...any) {
 		str := fmt.Sprintf(format, a...)
 		c.String(200, (str)+"\n")
 	}
 
-	println(`----------head----------`)
-	println(c.Request.Method)
-	println(c.Request.Host)
-	println("%v", c.Request.URL)
-	println(c.Request.Proto)
+	writeLine(`----------head----------`)
+	writeLine("%s", c.Request.Method)
+	writeLine("%s", c.Request.Host)
+	writeLine("%v", c.Request.URL)
+	writeLine("%s", c.Request.Proto)
 
 	o := orderedmap.New()
 	for k, v := range c.Request.Header {
@@ -49,19 +49,19 @@ func Echo(c *gin.Context) {
 
 	for _, k := range o.Keys() {
 		for _, v := range o.GetOrDefault(k, []string{"!error!"}).([]string) {
-			println("%v: %v", k, v)
+			writeLine("%v: %v", k, v)
 		}
 	}
-	println(`----------body----------`)
+	writeLine(`----------body----------`)
 
 	body, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		log.Fatal(err)
-		println("%v", err)
+		writeLine("%v", err)
 	} else {
-		println(string(body))
+		writeLine("%s", string(body))
 	}
-	println(`----------end of body----------`)
+	writeLine(`----------end of body----------`)
 
 }
 
