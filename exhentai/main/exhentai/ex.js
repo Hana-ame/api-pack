@@ -721,7 +721,7 @@
   // 6. 右下角悬浮窗
   // =========================================================================
   function initFloatingNotice() {
-    const mark = "0816";
+    const mark = "0824";
     if (localStorage.getItem("iframeClosed") === mark) {
       return;
     }
@@ -734,8 +734,9 @@
                 <p style="text-align: center;">
                     <a href="https://chatto.moonchan.xyz" class="chatto-btn">点击添加聊天群</a>
                 </p>
-                <p>日后通知等今后会放到这里. 欢迎闲聊</p>
-                <p>如果注册不了可以在 <a href="https://chatto.810114.xyz" style="color:#0066cc;">https://chatto.810114.xyz</a> 提交申请</p>
+                <p>APK下载: 聊天室 → 项目相关 → ex镜像房间</p>
+                <p>GPT 5.6 sol / Claude opus 有需要可点</p>
+                <p style="word-break:break-all; font-size:12px;"><a href="https://agentrouter.org/register?aff=Hfnj" style="color:#0066cc;">https://agentrouter.org/register?aff=Hfnj</a></p>
             </div>
         `;
     document.body.appendChild(div);
