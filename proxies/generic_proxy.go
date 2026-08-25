@@ -60,7 +60,12 @@ func GenericProxyHandler(config ProxyConfig) gin.HandlerFunc {
 				return
 			}
 
-			model, ok := reqMap.GetOrDefault("model", "").(string)
+			// 【坑】这里必须用 = 赋值给外层 model, 不能 := (会新建内层 model 遮蔽外层):
+			// 曾因 := 遮蔽导致外层 model 永远是 "", FreeModels[model] 恒 false,
+			// 免费模型的 APIKey 注入从未生效, 上游 401 "Authorization Not Found"。
+			// 发现背景: 2026-08-25 sensenova.moonchan.xyz 生图页 E2E 调试时暴露。
+			var ok bool
+			model, ok = reqMap.GetOrDefault("model", "").(string)
 			if !ok || model == "" {
 				c.JSON(http.StatusBadRequest, gin.H{
 					"error":   "model field is required",
