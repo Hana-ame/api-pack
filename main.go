@@ -103,6 +103,18 @@ func main() {
 		})
 	}
 
+	if tools.HasEnv("SENSENOVA_PROXY") {
+		// SenseNova 生图 API (token.sensenova.cn) CORS 转发: 代理自带 key (OverrideAuth,
+		// 从 .env 的 SENSENOVA_API_KEY 读, 前端无需持有真实 key), 单独 180s 超时覆盖默认 30s。
+		go proxies.RunProxyRouter(os.Getenv("SENSENOVA_PROXY"), proxies.ProxyConfig{
+			Name:         "sensenova",
+			Endpoint:     "https://token.sensenova.cn",
+			APIKey:       os.Getenv("SENSENOVA_API_KEY"),
+			OverrideAuth: true,
+			Timeout:      180 * time.Second,
+		})
+	}
+
 	if tools.HasEnv("SHIJIMA") {
 		go shijima.Run(os.Getenv("SHIJIMA"))
 	}

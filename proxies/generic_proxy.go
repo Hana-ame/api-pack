@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"time"
 
 	myfetch "github.com/Hana-ame/api-pack/tools/my_fetch/v2"
 	middleware "github.com/Hana-ame/api-pack/tools/my_gin_middleware"
@@ -23,6 +24,12 @@ type ProxyConfig struct {
 	FreeModelsAll bool
 	Models        map[string]ModelInfo
 	CustomHeaders map[string]string
+	// OverrideAuth 为 true 时, 上游 Authorization 始终用 APIKey 覆盖客户端传入值
+	// (代理自带 key, 前端无需持有真实 key)。key 必须来自 .env。
+	OverrideAuth bool
+	// Timeout > 0 时为该代理单独设置上游超时, 覆盖 http.DefaultClient 的 30s 默认
+	// (生图等同步接口可能需数十秒)。
+	Timeout time.Duration
 }
 
 type ModelInfo struct {
@@ -66,7 +73,10 @@ func GenericProxyHandler(config ProxyConfig) gin.HandlerFunc {
 		// Setup headers
 		headers := tools.NewHeader(c.Request.Header)
 		auth := headers.Get("Authorization")
-		if auth == "" || !strings.HasPrefix(auth, "Bearer ") {
+		if config.OverrideAuth && config.APIKey != "" {
+			// 代理自带 key: 始终用 .env 里的 APIKey 覆盖, 前端无需持有真实 key
+			headers.Set("Authorization", "Bearer "+config.APIKey)
+		} else if auth == "" || !strings.HasPrefix(auth, "Bearer ") {
 			if config.APIKey != "" && (config.FreeModelsAll || config.FreeModels[model]) {
 				headers.Set("Authorization", "Bearer "+config.APIKey)
 			}
@@ -85,12 +95,20 @@ func GenericProxyHandler(config ProxyConfig) gin.HandlerFunc {
 			targetURL = config.Endpoint + "/" + c.Request.URL.Path
 		}
 
-		resp, err := myfetch.Fetch(
-			c.Request.Method,
-			targetURL,
-			headers.Header,
-			bytes.NewReader(bodyBytes),
-		)
+		// 上游请求: Timeout>0 时用独立 client 覆盖默认 30s (生图同步接口可能需数十秒)
+		client := http.DefaultClient
+		if config.Timeout > 0 {
+			cc := *http.DefaultClient
+			cc.Timeout = config.Timeout
+			client = &cc
+		}
+		req, err := http.NewRequest(c.Request.Method, targetURL, bytes.NewReader(bodyBytes))
+		if err != nil {
+			c.JSON(http.StatusBadGateway, gin.H{"error": "create request: " + err.Error()})
+			return
+		}
+		req.Header = headers.Header
+		resp, err := client.Do(req)
 		if err != nil {
 			c.JSON(http.StatusBadGateway, gin.H{"error": "upstream request failed: " + err.Error()})
 			return
