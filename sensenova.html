@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SenseNova 生图</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#1a1a2e;color:#eee;display:flex;justify-content:center;min-height:100vh;padding:2rem}
+.card{background:#16213e;border-radius:12px;padding:2rem;width:100%;max-width:560px;box-shadow:0 8px 32px rgba(0,0,0,.4)}
+h1{font-size:1.5rem;margin-bottom:.5rem;color:#e94560}
+.subtitle{color:#888;font-size:.85rem;margin-bottom:1.5rem}
+label{display:block;font-size:.85rem;color:#aaa;margin-bottom:.3rem;margin-top:1rem}
+input,select,textarea{width:100%;padding:.6rem .8rem;background:#0f3460;border:1px solid #1a1a4e;border-radius:6px;color:#eee;font-size:.9rem;outline:none;transition:border .2s}
+input:focus,select:focus,textarea:focus{border-color:#e94560}
+textarea{min-height:100px;resize:vertical;font-family:inherit}
+.row{display:flex;gap:1rem}
+.row>div{flex:1}
+button{width:100%;margin-top:1.5rem;padding:.75rem;background:#e94560;color:#fff;border:none;border-radius:6px;font-size:1rem;font-weight:600;cursor:pointer;transition:opacity .2s}
+button:disabled{opacity:.5;cursor:wait}
+button:hover:not(:disabled){opacity:.85}
+.output{margin-top:1.5rem;display:none}
+.output img{width:100%;border-radius:8px;margin-top:.8rem}
+.output .info{font-size:.8rem;color:#888;margin-top:.6rem}
+.err{color:#e94560;font-size:.85rem;margin-top:.8rem}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>🎨 SenseNova 生图</h1>
+  <div class="subtitle">基于 Flux 模型 · 免费额度</div>
+
+  <label for="model">模型</label>
+  <select id="model">
+    <option value="sensenova-u1.5-lite">sensenova-u1.5-lite</option>
+    <option value="sensenova-u1-fast">sensenova-u1-fast</option>
+  </select>
+
+  <label for="prompt">提示词 (Prompt)</label>
+  <textarea id="prompt" placeholder="描述你想生成的图片…"></textarea>
+
+  <div class="row">
+    <div>
+      <label for="size">尺寸</label>
+      <select id="size">
+        <option value="1024x1024">1024×1024</option>
+        <option value="1280x720">1280×720</option>
+        <option value="720x1280">720×1280</option>
+        <option value="512x512">512×512</option>
+      </select>
+    </div>
+    <div>
+      <label for="steps">步数</label>
+      <input type="number" id="steps" value="20" min="1" max="50">
+    </div>
+  </div>
+
+  <label for="seed">随机种子 (留空随机)</label>
+  <input type="number" id="seed" placeholder="随机">
+
+  <button id="gen" onclick="generate()">生成图片</button>
+  <div class="output" id="out">
+    <div class="info" id="info"></div>
+    <img id="img">
+  </div>
+  <div class="err" id="err"></div>
+</div>
+
+<script>
+const API = '/v1/images/generations';
+
+async function generate(){
+  const btn=document.getElementById('gen');
+  const errEl=document.getElementById('err');
+  const out=document.getElementById('out');
+  const info=document.getElementById('info');
+  const img=document.getElementById('img');
+  errEl.textContent='';out.style.display='none';
+  const prompt=document.getElementById('prompt').value.trim();
+  if(!prompt){errEl.textContent='请输入提示词';return}
+  btn.disabled=true;btn.textContent='生成中…';
+  const seedVal=document.getElementById('seed').value.trim();
+  const body={
+    model:document.getElementById('model').value,
+    prompt:prompt,
+    size:document.getElementById('size').value,
+    steps:parseInt(document.getElementById('steps').value),
+  };
+  if(seedVal)body.seed=parseInt(seedVal);
+  try{
+    const res=await fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    if(!res.ok){
+      const t=await res.text();
+      throw new Error('HTTP '+res.status+': '+(t.slice(0,200)||res.statusText));
+    }
+    const data=await res.json();
+    // 尝试多种响应格式取图片 URL
+    let url=null;
+    if(data.data&&data.data[0])url=data.data[0].url||data.data[0].b64_json;
+    else if(data.url)url=data.url;
+    else if(data.b64_json)url='data:image/png;base64,'+data.b64_json;
+    if(!url){errEl.textContent='无法解析响应: '+JSON.stringify(data).slice(0,300);return}
+    if(url.startsWith('data:'))img.src=url;
+    else img.src=url;
+    info.textContent='模型 '+data.model||document.getElementById('model').value+' · '+document.getElementById('size').value;
+    out.style.display='block';
+  }catch(e){errEl.textContent=e.message}
+  btn.disabled=false;btn.textContent='生成图片';
+}
+</script>
+</body>
+</html>

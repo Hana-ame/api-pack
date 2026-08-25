@@ -104,14 +104,18 @@ func main() {
 	}
 
 	if tools.HasEnv("SENSENOVA_PROXY") {
-		// SenseNova 生图 API (token.sensenova.cn) CORS 转发: 代理自带 key (OverrideAuth,
-		// 从 .env 的 SENSENOVA_API_KEY 读, 前端无需持有真实 key), 单独 180s 超时覆盖默认 30s。
+		// SenseNova 生图 API (token.sensenova.cn) CORS 转发:
+		// 只对 sensenova-u1.5-lite/u1-fast 两个模型在客户端未传 key 时注入 APIKey,
+		// 其他情况透传客户端的 Authorization (FreeModels 模式)。
 		go proxies.RunProxyRouter(os.Getenv("SENSENOVA_PROXY"), proxies.ProxyConfig{
-			Name:         "sensenova",
-			Endpoint:     "https://token.sensenova.cn",
-			APIKey:       os.Getenv("SENSENOVA_API_KEY"),
-			OverrideAuth: true,
-			Timeout:      180 * time.Second,
+			Name:     "sensenova",
+			Endpoint: "https://token.sensenova.cn",
+			APIKey:   os.Getenv("SENSENOVA_API_KEY"),
+			FreeModels: map[string]bool{
+				"sensenova-u1.5-lite": true,
+				"sensenova-u1-fast":   true,
+			},
+			Timeout: 180 * time.Second,
 		})
 	}
 
