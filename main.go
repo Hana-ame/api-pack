@@ -116,6 +116,11 @@ func main() {
 				"sensenova-u1-fast":   true,
 			},
 			Timeout: 180 * time.Second,
+			MaskedHeaders: []string{
+				"Authorization",
+				"X-Api-Key",
+				"Cookie",
+			},
 		})
 	}
 

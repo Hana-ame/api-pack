@@ -88,3 +88,45 @@ func TestGenericProxyFreeModelKeyInjection(t *testing.T) {
 		t.Fatalf("case4 status=%d body=%s", w.Code, w.Body.String())
 	}
 }
+
+// TestGenericProxyErrorMasksSensitiveHeaders —— 回归测试: 上游返回错误(非 2xx)时,
+// 回显的 Request/Response Headers 里 Authorization 等敏感头必须用 *** 打码,
+// 不能把服务端注入或客户端传来的 APIKey 泄露给前端。
+func TestGenericProxyErrorMasksSensitiveHeaders(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte(`{"error":"bad key"}`))
+	}))
+	defer upstream.Close()
+
+	cfg := ProxyConfig{
+		Name:     "test-mask",
+		Endpoint: upstream.URL,
+		APIKey:   "sk-super-secret-server-key",
+		FreeModels: map[string]bool{
+			"test-model-free": true,
+		},
+		MaskedHeaders: []string{"Authorization", "X-Api-Key", "Cookie"},
+	}
+
+	r := gin.New()
+	r.Any("/*any", GenericProxyHandler(cfg))
+
+	// 客户端不带 key → 代理注入服务端 key → 错误回显里绝不能出现该 key
+	req := httptest.NewRequest("POST", "/v1/images/generations", strings.NewReader(`{"model":"test-model-free","prompt":"hi"}`))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+	}
+	body := w.Body.String()
+	if strings.Contains(body, "sk-super-secret-server-key") {
+		t.Fatalf("server APIKey leaked in error body:\n%s", body)
+	}
+	if !strings.Contains(body, "Authorization: ***") {
+		t.Fatalf("Authorization header not masked, body:\n%s", body)
+	}
+}

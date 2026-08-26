@@ -30,6 +30,10 @@ type ProxyConfig struct {
 	// Timeout > 0 时为该代理单独设置上游超时, 覆盖 http.DefaultClient 的 30s 默认
 	// (生图等同步接口可能需数十秒)。
 	Timeout time.Duration
+	// MaskedHeaders 列出错误(非 2xx)调试回显里需要用 *** 屏蔽的 header key(大小写不敏感)。
+	// 防止 Authorization / X-Api-Key 等敏感信息(尤其服务端注入的 APIKey)泄露给客户端。
+	// 为空时仍会默认屏蔽 Authorization、Cookie 以及常见 key/token 头。
+	MaskedHeaders []string
 }
 
 type ModelInfo struct {
@@ -42,8 +46,7 @@ func GenericProxyHandler(config ProxyConfig) gin.HandlerFunc {
 		bodyBytes, err := io.ReadAll(c.Request.Body)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{
-				"error":   "failed to read request body",
-				"headers": c.Request.Header,
+				"error": "failed to read request body",
 			})
 			return
 		}
@@ -54,8 +57,7 @@ func GenericProxyHandler(config ProxyConfig) gin.HandlerFunc {
 			reqMap, err := tools.ReaderToJSON(bytes.NewReader(bodyBytes))
 			if err != nil {
 				c.JSON(http.StatusBadRequest, gin.H{
-					"error":   "invalid JSON",
-					"headers": c.Request.Header,
+					"error": "invalid JSON",
 				})
 				return
 			}
@@ -68,8 +70,7 @@ func GenericProxyHandler(config ProxyConfig) gin.HandlerFunc {
 			model, ok = reqMap.GetOrDefault("model", "").(string)
 			if !ok || model == "" {
 				c.JSON(http.StatusBadRequest, gin.H{
-					"error":   "model field is required",
-					"headers": c.Request.Header,
+					"error": "model field is required",
 				})
 				return
 			}
@@ -135,18 +136,26 @@ func GenericProxyHandler(config ProxyConfig) gin.HandlerFunc {
 			}
 			respBody, err := io.ReadAll(reader)
 			if err == nil {
-				// Sort and format request headers
+				// Sort and format request headers (敏感头用 *** 打码, 防 APIKey 泄露)
 				var reqHeaderLines []string
 				for k, v := range headers.Header {
-					reqHeaderLines = append(reqHeaderLines, fmt.Sprintf("%s: %s", k, strings.Join(v, ", ")))
+					var vals []string
+					for _, vv := range v {
+						vals = append(vals, maskHeaderValue(k, vv, config.MaskedHeaders))
+					}
+					reqHeaderLines = append(reqHeaderLines, fmt.Sprintf("%s: %s", k, strings.Join(vals, ", ")))
 				}
 				sort.Strings(reqHeaderLines)
 				reqHeaders := strings.Join(reqHeaderLines, "\n")
 
-				// Sort and format response headers
+				// Sort and format response headers (同样打码)
 				var respHeaderLines []string
 				for k, v := range resp.Header {
-					respHeaderLines = append(respHeaderLines, fmt.Sprintf("%s: %s", k, strings.Join(v, ", ")))
+					var vals []string
+					for _, vv := range v {
+						vals = append(vals, maskHeaderValue(k, vv, config.MaskedHeaders))
+					}
+					respHeaderLines = append(respHeaderLines, fmt.Sprintf("%s: %s", k, strings.Join(vals, ", ")))
 				}
 				sort.Strings(respHeaderLines)
 				respHeaders := strings.Join(respHeaderLines, "\n")
@@ -166,6 +175,21 @@ func GenericProxyHandler(config ProxyConfig) gin.HandlerFunc {
 			map[string]string{"X-Service": config.Name},
 		)
 	}
+}
+
+// maskHeaderValue 对命中的敏感 header 值打码。
+// 优先按 config.MaskedHeaders 屏蔽; 兜底屏蔽 Authorization、Cookie 以及常见 key/token 头。
+func maskHeaderValue(key, value string, masked []string) string {
+	for _, m := range masked {
+		if strings.EqualFold(key, m) {
+			return "***"
+		}
+	}
+	switch strings.ToLower(key) {
+	case "authorization", "proxy-authorization", "cookie", "x-api-key", "api-key", "apikey", "x-auth-token", "x-api-token", "x-access-token", "x-session-key":
+		return "***"
+	}
+	return value
 }
 
 // RunProxyRouter starts a gin server that proxies all requests to the provided config
