@@ -169,8 +169,11 @@ func (p *ProxyHandler) accessControlMiddleware() gin.HandlerFunc {
 		path := strings.ToLower(c.Request.URL.Path)
 
 		// 26.07.07: 只禁止 /g/ 开头的非 GET 请求
+		// 【坑】c.Redirect 后必须 c.Abort(), 否则 gin 继续执行链上的
+		// mainProxyHandler 覆盖响应, 302 拦截实际失效 (2026-08-25 E2E 发现)
 		if strings.HasPrefix(path, "/g/") && c.Request.Method != http.MethodGet {
 			c.Redirect(302, "https://810114.xyz")
+			c.Abort()
 			return
 		}
 
@@ -216,7 +219,7 @@ func (p *ProxyHandler) accessControlMiddleware() gin.HandlerFunc {
 			// 如果有 redirect_to 参数，说明是点击了某些跳转，可以考虑放行
 			if c.Query("redirect_to") == "" {
 				c.Redirect(302, "https://810114.xyz")
-				// c.AbortWithStatus(http.StatusForbidden) // 没在白名单里的一律 404
+				c.Abort() // 【坑】不 Abort 会让链上后续 handler(mainProxyHandler) 覆盖响应, 拦截失效
 				return
 			}
 		}
@@ -224,7 +227,7 @@ func (p *ProxyHandler) accessControlMiddleware() gin.HandlerFunc {
 		// --- C. 基础防护 (即使在白名单，也要防止路径遍历) ---
 		if strings.Contains(path, "/../") || strings.Contains(strings.ToLower(c.Request.URL.EscapedPath()), "%2e") {
 			c.Redirect(302, "https://810114.xyz")
-			// c.AbortWithStatus(http.StatusForbidden)
+			c.Abort() // 【坑】不 Abort 会让链上后续 handler 继续执行, 拦截失效
 			return
 		}
 
@@ -236,7 +239,7 @@ func (p *ProxyHandler) accessControlMiddleware() gin.HandlerFunc {
 			}
 			if !slices.Contains(allowPHP, path) {
 				c.Redirect(302, "https://810114.xyz")
-				// c.AbortWithStatus(http.StatusForbidden)
+				c.Abort() // 【坑】不 Abort 会让链上后续 handler 继续执行, 拦截失效
 				return
 			}
 		}

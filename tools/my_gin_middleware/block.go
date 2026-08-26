@@ -53,6 +53,8 @@ func RedirectMiddleware(host string) gin.HandlerFunc {
 		if !slices.Contains([]string{"CN", ""}, c.Request.Header.Get("Cf-Ipcountry")) {
 			path := c.Request.URL.String()
 			c.Redirect(http.StatusFound, "https://"+host+path)
+			// 【坑】作为中间件必须 Abort, 否则链上后续 handler 继续执行覆盖 302
+			c.Abort()
 			return
 		}
 
