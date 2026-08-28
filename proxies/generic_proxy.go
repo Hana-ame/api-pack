@@ -87,6 +87,7 @@ func GenericProxyHandler(config ProxyConfig) gin.HandlerFunc {
 				headers.Set("Authorization", "Bearer "+config.APIKey)
 			}
 		}
+		// else 直接保留原来的 auth
 		headers.Set("Content-Type", "application/json")
 
 		for k, v := range config.CustomHeaders {

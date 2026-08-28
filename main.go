@@ -124,6 +124,18 @@ func main() {
 		})
 	}
 
+	if tools.HasEnv("SCNET_PROXY") {
+		// SCNet (api.scnet.cn) GLM 系列 OpenAI 兼容端点:
+		// 纯 CORS 透传反代, 不做任何 key 注入/请求改写, 前端自带 Bearer。
+		// SCNET_TIMEOUT 单位秒, 留空 = 不设超时 (LLM 生成可能几十秒,
+		// 默认 30s 会掐断, 这里跟 sensenova 的 Timeout 配置同一思路)。
+		go proxies.RunProxyRouter(os.Getenv("SCNET_PROXY"), proxies.ProxyConfig{
+			Name:     "scnet",
+			Endpoint: "https://api.scnet.cn/api/llm/v1",
+			Timeout:  180 * time.Second,
+		})
+	}
+
 	if tools.HasEnv("SHIJIMA") {
 		go shijima.Run(os.Getenv("SHIJIMA"))
 	}
