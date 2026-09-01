@@ -71,6 +71,11 @@ func main() {
 			Endpoint:      "https://api.groq.com",
 			APIKey:        os.Getenv("GROQ_API_KEY"),
 			FreeModelsAll: true,
+			MaskedHeaders: []string{
+				"Authorization",
+				"X-Api-Key",
+				"Cookie",
+			},
 		})
 	}
 	if tools.HasEnv("SILICONFLOW_PROXY") {
@@ -93,6 +98,11 @@ func main() {
 				"THUDM/GLM-4-9B-0414":                     true,
 				"internlm/internlm2_5-7b-chat":            true,
 			},
+			MaskedHeaders: []string{
+				"Authorization",
+				"X-Api-Key",
+				"Cookie",
+			},
 		})
 	}
 	if tools.HasEnv("GEMINI_PROXY") {
@@ -100,6 +110,11 @@ func main() {
 			Name:          "gemini",
 			Endpoint:      "https://generativelanguage.googleapis.com",
 			FreeModelsAll: true,
+			MaskedHeaders: []string{
+				"Authorization",
+				"X-Api-Key",
+				"Cookie",
+			},
 		})
 	}
 
@@ -112,8 +127,9 @@ func main() {
 			Endpoint: "https://token.sensenova.cn",
 			APIKey:   os.Getenv("SENSENOVA_API_KEY"),
 			FreeModels: map[string]bool{
-				"sensenova-u1.5-lite": true,
-				"sensenova-u1-fast":   true,
+				"sensenova-u1.5-lite":    true,
+				"sensenova-u1-fast":      true,
+				"sensenova-6.8-flash-lite": true,
 			},
 			Timeout: 180 * time.Second,
 			MaskedHeaders: []string{
@@ -133,6 +149,11 @@ func main() {
 			Name:     "scnet",
 			Endpoint: "https://api.scnet.cn",
 			Timeout:  180 * time.Second,
+			MaskedHeaders: []string{
+				"Authorization",
+				"X-Api-Key",
+				"Cookie",
+			},
 		})
 	}
 
