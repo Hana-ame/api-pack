@@ -3,6 +3,8 @@
 package main
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -127,8 +129,8 @@ func main() {
 			Endpoint: "https://token.sensenova.cn",
 			APIKey:   os.Getenv("SENSENOVA_API_KEY"),
 			FreeModels: map[string]bool{
-				"sensenova-u1.5-lite":    true,
-				"sensenova-u1-fast":      true,
+				"sensenova-u1.5-lite":      true,
+				"sensenova-u1-fast":        true,
 				"sensenova-6.8-flash-lite": true,
 			},
 			Timeout: 180 * time.Second,
@@ -195,12 +197,38 @@ func main() {
 	r.Run(os.Getenv("PROXY"))
 }
 
+// ProxyParams holds base64-encoded JSON parameters for the proxy
+type ProxyParams struct {
+	Host    string `json:"host"`
+	Referer string `json:"referer"`
+	Scheme  string `json:"scheme"`
+	Origin  string `json:"origin"`
+}
+
 // rootProxyHandler 通用 HTTP 反向代理：
 // 通过 proxy_host（或 X-Host 头）指定目标，proxy_scheme/X-Scheme 指定协议；
 // proxy_origin/referer/cookie（或对应 X-* 头）覆盖发往上游的对应请求头。
+// 支持 params 查询参数，接受 base64 编码的 JSON: {"host":"...","referer":"...","scheme":"...","origin":"..."}
 func rootProxyHandler(c *gin.Context) {
 	path := c.Request.URL.Path
-	host := tools.Or(c.Query("proxy_host"), c.GetHeader("X-Host"))
+
+	// 解析 params 参数（URL-safe base64 编码的 JSON）
+	var params ProxyParams
+	if paramsStr := c.Query("params"); paramsStr != "" {
+		// 使用 URL-safe base64 解码（支持 - 和 _ 字符，无需填充）
+		decoded, err := base64.RawURLEncoding.DecodeString(paramsStr)
+		if err != nil {
+			// 尝试带填充的版本
+			decoded, err = base64.URLEncoding.DecodeString(paramsStr)
+		}
+		if err == nil {
+			if jsonErr := json.Unmarshal(decoded, &params); jsonErr == nil {
+				// 成功解析 params，使用其中的值作为默认值
+			}
+		}
+	}
+
+	host := tools.Or(c.Query("proxy_host"), c.GetHeader("X-Host"), params.Host)
 
 	// --- 参数校验 ---
 	if host == "" {
@@ -213,7 +241,7 @@ func rootProxyHandler(c *gin.Context) {
 	}
 
 	// 构造新的 URL
-	scheme := tools.Or(c.Query("proxy_scheme"), c.GetHeader("X-Scheme"), "https")
+	scheme := tools.Or(c.Query("proxy_scheme"), c.GetHeader("X-Scheme"), params.Scheme, "https")
 	clientScheme := tools.ClientScheme(c)
 	search := c.Request.URL.Query()
 	// 删除代理专用参数，避免传给后端
@@ -222,6 +250,7 @@ func rootProxyHandler(c *gin.Context) {
 	search.Del("proxy_referer")
 	search.Del("proxy_cookie")
 	search.Del("proxy_scheme")
+	search.Del("params")
 
 	targetURL := fmt.Sprintf("%s://%s%s", scheme, host, path)
 	if len(search) > 0 {
@@ -253,8 +282,8 @@ func rootProxyHandler(c *gin.Context) {
 	req.Host = host
 
 	// 覆盖特定的 Header
-	req.Header.Set("Origin", tools.Or(c.Query("proxy_origin"), c.GetHeader("X-Origin")))
-	req.Header.Set("Referer", tools.Or(c.Query("proxy_referer"), c.GetHeader("X-Referer")))
+	req.Header.Set("Origin", tools.Or(c.Query("proxy_origin"), c.GetHeader("X-Origin"), params.Origin))
+	req.Header.Set("Referer", tools.Or(c.Query("proxy_referer"), c.GetHeader("X-Referer"), params.Referer))
 	if cookie := tools.Or(c.Query("proxy_cookie"), c.GetHeader("X-Cookie")); cookie != "" {
 		req.Header.Set("Cookie", cookie)
 	}
