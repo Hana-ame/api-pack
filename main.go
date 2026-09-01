@@ -234,6 +234,10 @@ func rootProxyHandler(c *gin.Context) {
 	if host == "" {
 		if path == "/favicon.ico" {
 			c.Redirect(http.StatusFound, "https://moonchan.xyz/favicon.ico")
+		} else if path == "/" || path == "" {
+			// 显示代理生成器页面
+			c.Header("Content-Type", "text/html; charset=utf-8")
+			c.String(http.StatusOK, generateProxyGeneratorHTML())
 		} else {
 			c.Redirect(http.StatusFound, "https://moonchan.xyz/")
 		}
@@ -335,4 +339,412 @@ func rootProxyHandler(c *gin.Context) {
 
 	// --- 返回响应内容 ---
 	c.DataFromReader(resp.StatusCode, resp.ContentLength, resp.Header.Get("Content-Type"), resp.Body, nil)
+}
+
+// generateProxyGeneratorHTML 生成代理 URL 生成器页面
+func generateProxyGeneratorHTML() string {
+	return `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Proxy URL Generator - moonchan.xyz</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            opacity: 0.9;
+            font-size: 14px;
+        }
+        
+        .content {
+            padding: 30px;
+        }
+        
+        .input-group {
+            margin-bottom: 25px;
+        }
+        
+        .input-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+            font-size: 14px;
+        }
+        
+        .input-group input[type="text"] {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+        
+        .input-group input[type="text"]:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        .input-group .hint {
+            margin-top: 6px;
+            font-size: 12px;
+            color: #666;
+        }
+        
+        .btn-generate {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .btn-generate:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+        
+        .btn-generate:active {
+            transform: translateY(0);
+        }
+        
+        .results {
+            margin-top: 30px;
+            display: none;
+        }
+        
+        .results.show {
+            display: block;
+        }
+        
+        .result-card {
+            background: #f8f9fa;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .result-card h3 {
+            color: #667eea;
+            margin-bottom: 12px;
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .result-card h3 .badge {
+            background: #667eea;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        
+        .url-display {
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            padding: 12px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            word-break: break-all;
+            margin-bottom: 10px;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+        
+        .btn-copy {
+            padding: 8px 16px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 13px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        
+        .btn-copy:hover {
+            background: #5568d3;
+        }
+        
+        .btn-copy.copied {
+            background: #28a745;
+        }
+        
+        .info-box {
+            background: #e7f3ff;
+            border-left: 4px solid #667eea;
+            padding: 12px 15px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+            font-size: 13px;
+            color: #333;
+        }
+        
+        .auto-detect {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 10px 15px;
+            margin-top: 10px;
+            border-radius: 4px;
+            font-size: 13px;
+            display: none;
+        }
+        
+        .auto-detect.show {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔗 Proxy URL Generator</h1>
+            <p>输入目标 URL，自动生成代理链接</p>
+        </div>
+        
+        <div class="content">
+            <div class="info-box">
+                💡 提示：支持 Pixiv、微博等网站的图片代理，会自动添加合适的 Referer
+            </div>
+            
+            <div class="input-group">
+                <label for="targetUrl">目标 URL</label>
+                <input type="text" id="targetUrl" placeholder="例如: https://i.pximg.net/img-master/img/2024/01/01/0000/123456.jpg">
+                <div class="hint">输入完整的图片或其他资源 URL</div>
+                <div class="auto-detect" id="autoDetect"></div>
+            </div>
+            
+            <button class="btn-generate" onclick="generateUrls()">生成代理 URL</button>
+            
+            <div class="results" id="results">
+                <div class="result-card">
+                    <h3>
+                        方式一：传统参数
+                        <span class="badge">推荐</span>
+                    </h3>
+                    <div class="url-display" id="traditionalUrl"></div>
+                    <button class="btn-copy" onclick="copyToClipboard('traditionalUrl', this)">复制</button>
+                </div>
+                
+                <div class="result-card">
+                    <h3>
+                        方式二：Params 编码
+                        <span class="badge">简洁</span>
+                    </h3>
+                    <div class="url-display" id="paramsUrl"></div>
+                    <button class="btn-copy" onclick="copyToClipboard('paramsUrl', this)">复制</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // URL-safe Base64 编码
+        function urlSafeBase64Encode(str) {
+            return btoa(str)
+                .replace(/\+/g, '-')
+                .replace(/\//g, '_')
+                .replace(/=/g, '');
+        }
+        
+        // 自动检测域名并设置 Referer
+        function detectReferer(url) {
+            try {
+                const urlObj = new URL(url);
+                const hostname = urlObj.hostname;
+                
+                // Pixiv 图片
+                if (hostname.match(/^i\.pximg\.net$/) || hostname.match(/^pximg\.net$/)) {
+                    return 'https://www.pixiv.net/';
+                }
+                
+                // 微博图片
+                if (hostname.match(/^wx[1-4]\.sinaimg\.cn$/) || hostname.match(/^sinaimg\.cn$/)) {
+                    return 'https://weibo.com/';
+                }
+                
+                // Twitter/X 图片
+                if (hostname.match(/^(pbs\.twimg\.com|ton\.twitter\.com)$/)) {
+                    return 'https://twitter.com/';
+                }
+                
+                return null;
+            } catch (e) {
+                return null;
+            }
+        }
+        
+        // 监听输入变化，自动检测
+        document.getElementById('targetUrl').addEventListener('input', function(e) {
+            const url = e.target.value.trim();
+            const autoDetect = document.getElementById('autoDetect');
+            
+            if (url) {
+                const referer = detectReferer(url);
+                if (referer) {
+                    autoDetect.textContent = '✨ 检测到 ' + new URL(url).hostname + '，将自动添加 Referer: ' + referer;
+                    autoDetect.classList.add('show');
+                } else {
+                    autoDetect.classList.remove('show');
+                }
+            } else {
+                autoDetect.classList.remove('show');
+            }
+        });
+        
+        // 生成 URL
+        function generateUrls() {
+            const targetUrl = document.getElementById('targetUrl').value.trim();
+            
+            if (!targetUrl) {
+                alert('请输入目标 URL');
+                return;
+            }
+            
+            try {
+                const urlObj = new URL(targetUrl);
+                const host = urlObj.hostname;
+                const path = urlObj.pathname + urlObj.search;
+                const scheme = urlObj.protocol.replace(':', '');
+                
+                // 自动检测 Referer
+                let referer = detectReferer(targetUrl);
+                
+                // 构建传统参数 URL
+                let traditionalParams = [];
+                traditionalParams.push('proxy_host=' + encodeURIComponent(host));
+                traditionalParams.push('proxy_scheme=' + encodeURIComponent(scheme));
+                if (referer) {
+                    traditionalParams.push('proxy_referer=' + encodeURIComponent(referer));
+                }
+                
+                // 保留原有的查询参数（排除代理专用参数）
+                urlObj.searchParams.forEach((value, key) => {
+                    if (!key.startsWith('proxy_') && key !== 'params') {
+                        traditionalParams.push(encodeURIComponent(key) + '=' + encodeURIComponent(value));
+                    }
+                });
+                
+                const traditionalUrl = window.location.origin + path + '?' + traditionalParams.join('&');
+                
+                // 构建 Params 编码 URL
+                const paramsObj = {
+                    host: host,
+                    scheme: scheme
+                };
+                if (referer) {
+                    paramsObj.referer = referer;
+                }
+                
+                const paramsJson = JSON.stringify(paramsObj);
+                const paramsBase64 = urlSafeBase64Encode(paramsJson);
+                
+                // 保留原有的查询参数
+                let otherParams = [];
+                urlObj.searchParams.forEach((value, key) => {
+                    if (!key.startsWith('proxy_') && key !== 'params') {
+                        otherParams.push(encodeURIComponent(key) + '=' + encodeURIComponent(value));
+                    }
+                });
+                
+                let paramsUrl = window.location.origin + path + '?params=' + paramsBase64;
+                if (otherParams.length > 0) {
+                    paramsUrl += '&' + otherParams.join('&');
+                }
+                
+                // 显示结果
+                document.getElementById('traditionalUrl').textContent = traditionalUrl;
+                document.getElementById('paramsUrl').textContent = paramsUrl;
+                document.getElementById('results').classList.add('show');
+                
+            } catch (e) {
+                alert('URL 格式错误: ' + e.message);
+            }
+        }
+        
+        // 复制到剪贴板
+        function copyToClipboard(elementId, btn) {
+            const text = document.getElementById(elementId).textContent;
+            
+            navigator.clipboard.writeText(text).then(() => {
+                const originalText = btn.textContent;
+                btn.textContent = '已复制!';
+                btn.classList.add('copied');
+                
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                    btn.classList.remove('copied');
+                }, 2000);
+            }).catch(err => {
+                // 降级方案
+                const textarea = document.createElement('textarea');
+                textarea.value = text;
+                document.body.appendChild(textarea);
+                textarea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textarea);
+                
+                btn.textContent = '已复制!';
+                btn.classList.add('copied');
+                setTimeout(() => {
+                    btn.textContent = '复制';
+                    btn.classList.remove('copied');
+                }, 2000);
+            });
+        }
+        
+        // 支持回车键生成
+        document.getElementById('targetUrl').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                generateUrls();
+            }
+        });
+    </script>
+</body>
+</html>`
 }
