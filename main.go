@@ -15,6 +15,7 @@ import (
 
 	_ "github.com/joho/godotenv/autoload"
 
+	"github.com/Hana-ame/api-pack/api"
 	"github.com/Hana-ame/api-pack/chatto_reg"
 	"github.com/Hana-ame/api-pack/exhentai"
 	"github.com/Hana-ame/api-pack/exhentai_modify"
@@ -177,6 +178,8 @@ func main() {
 	go proxies.EchoJSON() // 127.25.23.101:8080
 
 	go qwen.Run(os.Getenv("QWEN_PROXY")) // 127.25.12.16:8080
+
+	go api.Run("") // bilibili 封面 + 页面: 127.25.9.17:8080 /api/v2/bili  不用配 env
 
 	go exhentai.Run(os.Getenv("EX_PROXY"))
 	go exhentai_stream.Run(os.Getenv("EX_STREAM"))

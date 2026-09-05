@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>哔哩哔哩封面查询 · api-pack</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #171a21;
+    --panel-2: #1e222b;
+    --line: #2b313c;
+    --txt: #e6e9ef;
+    --dim: #8b95a7;
+    --acc: #fb7299;
+    --acc-2: #23ade5;
+    --ok: #4ade80;
+    --err: #f87171;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--txt);
+    font: 14px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+           "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    min-height: 100vh;
+  }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 28px 20px 60px; }
+
+  header { margin-bottom: 22px; }
+  h1 { font-size: 22px; margin: 0 0 6px; letter-spacing: .3px; }
+  h1 .dot { color: var(--acc); }
+  .sub { color: var(--dim); font-size: 13px; }
+  .sub code {
+    background: var(--panel-2); padding: 1px 6px; border-radius: 5px;
+    color: var(--txt); font-size: 12px;
+  }
+
+  .box {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: var(--radius); padding: 16px; margin-bottom: 22px;
+  }
+  textarea {
+    width: 100%; min-height: 74px; resize: vertical;
+    background: var(--bg); color: var(--txt);
+    border: 1px solid var(--line); border-radius: 8px;
+    padding: 10px 12px; font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+    outline: none;
+  }
+  textarea:focus { border-color: var(--acc); }
+
+  .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 12px; }
+  button {
+    background: var(--acc); color: #fff; border: 0; cursor: pointer;
+    padding: 9px 18px; border-radius: 8px; font-size: 14px; font-weight: 600;
+  }
+  button.ghost {
+    background: var(--panel-2); color: var(--dim); border: 1px solid var(--line); font-weight: 400;
+  }
+  button:hover { filter: brightness(1.08); }
+  label.opt { color: var(--dim); font-size: 13px; cursor: pointer; user-select: none; }
+  label.opt input { margin-right: 5px; accent-color: var(--acc); }
+  .grow { flex: 1; }
+
+  #toast { color: var(--err); font-size: 13px; margin-left: 4px; }
+  #toast.ok { color: var(--ok); }
+
+  .hist { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 12px; }
+  .hist:empty { display: none; }
+  .chip {
+    background: var(--panel-2); border: 1px solid var(--line); color: var(--dim);
+    padding: 4px 11px; border-radius: 999px; font-size: 12px; cursor: pointer;
+    max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .chip:hover { color: var(--txt); border-color: var(--acc); }
+
+  .bar { color: var(--dim); font-size: 13px; margin: 4px 0 14px; min-height: 20px; }
+  .bar b { color: var(--txt); font-weight: 600; }
+
+  .grid {
+    display: grid; gap: 18px;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  }
+  .card {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: var(--radius); overflow: hidden; display: flex; flex-direction: column;
+  }
+  .thumb {
+    position: relative; background: #000; display: grid; place-items: center;
+    max-height: 420px; overflow: hidden;
+  }
+  .thumb img { max-width: 100%; max-height: 420px; display: block; }
+  .thumb .placeholder { color: var(--dim); font-size: 12px; padding: 30px 10px; text-align: center; }
+  .badge {
+    position: absolute; top: 8px; left: 8px;
+    background: rgba(0,0,0,.7); color: #fff; font-size: 11px;
+    padding: 2px 8px; border-radius: 999px; font-variant-numeric: tabular-nums;
+  }
+  .body { padding: 12px 14px 14px; }
+  .title { font-size: 15px; font-weight: 600; margin: 0 0 6px; word-break: break-word; }
+  .title a { color: var(--txt); text-decoration: none; }
+  .title a:hover { color: var(--acc); }
+  .meta { color: var(--dim); font-size: 12.5px; margin: 0 0 4px; word-break: break-word; }
+  .meta .sep { opacity: .45; margin: 0 5px; }
+  .stats { color: var(--dim); font-size: 12.5px; margin: 0 0 10px; }
+  .stats span { margin-right: 12px; }
+  .acts { display: flex; flex-wrap: wrap; gap: 7px; }
+  .acts a, .acts button {
+    padding: 6px 11px; font-size: 12.5px; border-radius: 7px;
+    background: var(--panel-2); color: var(--dim);
+    border: 1px solid var(--line); text-decoration: none; cursor: pointer;
+  }
+  .acts a:hover, .acts button:hover { color: var(--txt); border-color: var(--acc); }
+  .acts button.done { color: var(--ok); border-color: var(--ok); }
+  details.json { margin-top: 11px; }
+  details.json summary {
+    color: var(--dim); font-size: 12.5px; cursor: pointer; user-select: none;
+  }
+  pre {
+    background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
+    padding: 10px 12px; overflow: auto; font-size: 12px; margin: 8px 0 0;
+    max-height: 320px;
+  }
+
+  .fail {
+    background: var(--panel); border: 1px solid var(--err); border-left: 3px solid var(--err);
+    border-radius: 8px; padding: 11px 14px; margin-bottom: 12px; font-size: 13px;
+    word-break: break-all;
+  }
+  .fail code { color: var(--err); }
+
+  footer {
+    color: var(--dim); font-size: 12.5px; margin-top: 34px;
+    border-top: 1px solid var(--line); padding-top: 16px;
+  }
+  footer code {
+    background: var(--panel-2); padding: 1px 6px; border-radius: 5px; color: var(--txt);
+  }
+  footer p { margin: 5px 0; }
+  @media (prefers-color-scheme: light) { }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>哔哩哔哩封面查询<span class="dot">.</span></h1>
+    <div class="sub">
+      粘贴 <code>b23.tv</code> 短链 / 完整视频地址 / <code>BV</code> 号 / aid，一行一个可批量。
+      回车查询，也可拖进来。
+    </div>
+  </header>
+
+  <div class="box">
+    <textarea id="q" placeholder="https://b23.tv/G2o7PT6&#10;BV15ntz6gEHd&#10;117212023168283" autofocus></textarea>
+    <div class="row">
+      <button id="go">查询</button>
+      <button id="clear" class="ghost">清空</button>
+      <label class="opt"><input type="checkbox" id="useRaw" checked> 用 <code>/raw</code> 代理显示</label>
+      <label class="opt"><input type="checkbox" id="showJson"> 展开 JSON</label>
+      <div class="grow"></div>
+      <span id="toast"></span>
+    </div>
+    <div class="hist" id="hist"></div>
+  </div>
+
+  <div class="bar" id="bar"></div>
+  <div id="fails"></div>
+  <div class="grid" id="grid"></div>
+
+  <footer>
+    <p><code>GET /api/v2/bili/cover?url=</code> — JSON 元数据（<code>pic</code> 字段即封面）</p>
+    <p><code>GET /api/v2/bili/redirect?url=</code> — 302 跳封面直链</p>
+    <p><code>GET /api/v2/bili/raw?url=</code> — 直接回图片字节，可当 <code>&lt;img src&gt;</code></p>
+    <p>页面地址带 <code>?url=</code> 会自动查询，方便做书签。</p>
+  </footer>
+</div>
+
+<script>
+"use strict";
+
+// serveIndex 会把 __API_BASE__ 替换成真实挂载路径（见 api/main.go）。
+// 直接看这个文件时标记没被替换, 就退回按相对路径推。
+let BASE = "__API_BASE__";
+if (BASE === "__API_BASE__") {
+  try {
+    const u = new URL(".", location.href);
+    BASE = u.pathname.replace(/\/$/, "");
+  } catch (_) { BASE = "/api/v2/bili"; }
+}
+
+const $ = (id) => document.getElementById(id);
+const q = $("q"), bar = $("bar"), grid = $("grid"), fails = $("fails"),
+      toast = $("toast"), hist = $("hist"), useRaw = $("useRaw"), showJson = $("showJson");
+
+const HKEY = "bili-cover-history";
+const MAXHIST = 30;
+
+let toastTimer = null;
+function say(msg, ok) {
+  toast.textContent = msg;
+  toast.className = ok ? "ok" : "";
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { toast.textContent = ""; }, 4000);
+}
+
+function fmt(n) {
+  if (n == null) return "-";
+  if (n >= 1e8) return (n / 1e8).toFixed(2) + " 亿";
+  if (n >= 1e4) return (n / 1e4).toFixed(1) + " 万";
+  return String(n);
+}
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text != null) e.textContent = text;
+  return e;
+}
+function metaLine(parts) {
+  const p = el("p", "meta");
+  parts.forEach((s, i) => {
+    if (!s) return;
+    if (i && p.childNodes.length) p.appendChild(el("span", "sep", "·"));
+    p.appendChild(document.createTextNode(s));
+  });
+  return p;
+}
+
+function useHistory(input) {
+  let list = [];
+  try { list = JSON.parse(localStorage.getItem(HKEY) || "[]"); } catch (_) {}
+  list = list.filter((x) => x !== input);
+  list.unshift(input);
+  localStorage.setItem(HKEY, JSON.stringify(list.slice(0, MAXHIST)));
+  renderHist();
+}
+function renderHist() {
+  let list = [];
+  try { list = JSON.parse(localStorage.getItem(HKEY) || "[]"); } catch (_) {}
+  hist.replaceChildren();
+  list.forEach((s) => {
+    const c = el("div", "chip", s);
+    c.title = s;
+    c.onclick = () => { q.value = s; go(); };
+    hist.appendChild(c);
+  });
+}
+
+async function fetchOne(input) {
+  const r = await fetch(BASE + "/cover?url=" + encodeURIComponent(input), {
+    headers: { Accept: "application/json" }
+  });
+  const text = await r.text();
+  let data = null;
+  try { data = JSON.parse(text); } catch (_) {}
+  if (!r.ok) throw new Error((data && data.error) || ("HTTP " + r.status));
+  if (!data || !data.bvid) throw new Error("返回里没有 bvid");
+  return data;
+}
+
+function showFail(input, msg) {
+  const f = el("div", "fail");
+  f.appendChild(el("code", null, input));
+  f.appendChild(document.createTextNode("  — " + msg));
+  fails.appendChild(f);
+}
+
+function card(d) {
+  const c = el("div", "card");
+
+  const thumb = el("div", "thumb");
+  const img = document.createElement("img");
+  img.loading = "lazy";
+  img.alt = d.title || d.bvid;
+  const bvid = encodeURIComponent(d.bvid);
+  img.src = useRaw.checked ? BASE + "/raw?url=" + bvid : d.pic;
+  img.onerror = () => {
+    // 代理挂了就退回直链
+    if (!/\/raw\?/.test(img.src)) return;
+    img.src = d.pic;
+  };
+  thumb.appendChild(img);
+  if (d.width && d.height) thumb.appendChild(el("div", "badge", d.width + "×" + d.height));
+  c.appendChild(thumb);
+
+  const body = el("div", "body");
+
+  const h = el("h3", "title");
+  const a = document.createElement("a");
+  a.href = "https://www.bilibili.com/video/" + d.bvid + "/";
+  a.target = "_blank"; a.rel = "noopener";
+  a.textContent = d.title || d.bvid;
+  h.appendChild(a);
+  body.appendChild(h);
+
+  body.appendChild(metaLine([
+    d.bvid,
+    d.aid ? "aid " + d.aid : "",
+    d.owner ? (d.owner + (d.owner_id ? " #" + d.owner_id : "")) : ""
+  ]));
+
+  if (d.desc && d.desc !== "-") body.appendChild(el("p", "meta", d.desc));
+
+  const st = el("p", "stats");
+  [["播放", d.view], ["点赞", d.like], ["收藏", d.favorite], ["评论", d.reply]].forEach(([k, v]) => {
+    if (v == null) return;
+    const s = el("span");
+    s.appendChild(el("b", null, fmt(v)));
+    s.appendChild(document.createTextNode(" " + k));
+    st.appendChild(s);
+  });
+  body.appendChild(st);
+
+  const acts = el("div", "acts");
+
+  const rawLink = document.createElement("a");
+  rawLink.href = BASE + "/raw?url=" + bvid;
+  rawLink.target = "_blank"; rawLink.rel = "noopener";
+  rawLink.textContent = "看大图";
+  acts.appendChild(rawLink);
+
+  const dl = document.createElement("a");
+  dl.href = BASE + "/raw?url=" + bvid;
+  dl.target = "_blank"; dl.rel = "noopener";
+  dl.download = d.bvid + ".jpg";
+  dl.textContent = "下载";
+  acts.appendChild(dl);
+
+  const copy = el("button", null, "复制直链");
+  copy.onclick = () => copyText(d.pic, copy);
+  acts.appendChild(copy);
+
+  const jsonBtn = el("button", null, "JSON");
+  jsonBtn.onclick = () => {
+    const box = c.querySelector("details.json");
+    box.open = !box.open;
+  };
+  acts.appendChild(jsonBtn);
+
+  body.appendChild(acts);
+
+  const det = el("details", "json");
+  det.open = showJson.checked;
+  det.appendChild(el("summary", null, "响应 JSON"));
+  const pre = el("pre");
+  pre.textContent = JSON.stringify(d, null, 2);
+  det.appendChild(pre);
+  body.appendChild(det);
+
+  c.appendChild(body);
+  return c;
+}
+
+function copyText(text, btn) {
+  const done = () => {
+    if (!btn) return;
+    const old = btn.textContent;
+    btn.textContent = "已复制";
+    btn.className = "done";
+    setTimeout(() => { btn.textContent = old; btn.className = ""; }, 1400);
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(done).catch(() => legacy(text, done));
+  } else legacy(text, done);
+
+  function legacy(text, done) {
+    const ta = el("textarea");
+    ta.value = text;
+    ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand("copy"); done(); } catch (_) { say("复制失败，请手动选"); }
+    ta.remove();
+  }
+}
+
+function parseInputs(text) {
+  return [...new Set(text.split(/\n+/).map((s) => s.trim()).filter(Boolean))];
+}
+
+async function go() {
+  const inputs = parseInputs(q.value);
+  if (!inputs.length) return say("先粘贴个链接或 BV 号", false);
+
+  grid.replaceChildren();
+  fails.replaceChildren();
+  bar.textContent = "查询 " + inputs.length + " 个…";
+
+  const results = await Promise.all(inputs.map(async (s) => {
+    try { return { input: s, data: await fetchOne(s) }; }
+    catch (e) { return { input: s, error: e.message }; }
+  }));
+
+  let n = 0;
+  results.forEach(({ input, data, error }) => {
+    if (error) { showFail(input, error); return; }
+    n++;
+    useHistory(input);
+    grid.appendChild(card(data));
+  });
+
+  bar.innerHTML = "";
+  bar.appendChild(document.createTextNode("完成 " + n));
+  bar.appendChild(el("b", null, results.length - n > 0 ? " / 失败 " + (results.length - n) : " 个"));
+  say(n ? "完成" : "全部失败", n > 0);
+  renderHist();
+}
+
+$("go").onclick = go;
+$("clear").onclick = () => {
+  q.value = ""; grid.replaceChildren(); fails.replaceChildren(); bar.textContent = ""; q.focus();
+};
+$("q").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); go(); }
+});
+
+// 页面自带 ?url= 就自动查一次
+renderHist();
+const boot = new URLSearchParams(location.search).get("url");
+if (boot) { q.value = boot; go(); }
+</script>
+</body>
+</html>

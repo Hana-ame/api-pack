@@ -1,0 +1,181 @@
+// 26.09.05
+// bilibili 封面 API（见 bili.go 的取图流程说明）。
+//
+// 启动: main.go 里 go api.Run("") 即可, 不需要配 env, 默认监听 127.25.9.17:8080
+//
+// 路由:
+//
+//	GET /api/v2/bili            客户端页面（浏览器直接开这个就能用）
+//	GET /api/v2/bili/cover?url=<b23短链|完整地址|BV号|aid>   JSON 元数据（含 pic 封面）
+//	GET /api/v2/bili/cover/:id                              同上，id 放在路径里
+//	GET /api/v2/bili/info?url=...                           /cover 的别名
+//	GET /api/v2/bili/redirect?url=...                       302 跳到封面直链
+//	GET /api/v2/bili/raw?url=...                            直接回封面图片字节（可当 <img> src）
+//
+// 入参兼容三种写法: ?url= / ?u= / ?id= ，也支持 /cover/BV1xxxx 这种路径写法。
+package api
+
+import (
+	"bytes"
+	"embed"
+	"io"
+	"net/http"
+	"strings"
+	"time"
+
+	middleware "github.com/Hana-ame/api-pack/tools/my_gin_middleware"
+	tools "github.com/Hana-ame/api-pack/tools/utils"
+	"github.com/gin-gonic/gin"
+)
+
+//go:embed index.html
+var indexHTML embed.FS
+
+// routePrefix 所有路由的挂载前缀; 页面用它定位 API, 所以别乱改
+const routePrefix = "/api/v2/bili"
+
+// defaultAddr 监听地址, 不需要配 env 就能直接跑
+const defaultAddr = "127.25.9.17:8080"
+
+// Run 启动 bilibili 封面服务; addr 为空时用 defaultAddr（main.go 里直接 go api.Run("")）
+func Run(addr string) error {
+	if addr == "" {
+		addr = defaultAddr
+	}
+
+	return newRouter().Run(addr)
+}
+
+// newRouter 装配路由。拆出来好测: Run 会阻塞在 ListenAndServe 上
+func newRouter() *gin.Engine {
+	r := gin.Default()
+	r.Use(middleware.CORSMiddleware())
+
+	cover := r.Group(routePrefix)
+	{
+		// 前端页面: 浏览器直接开 /api/v2/bili 就能用
+		// serveIndex 把 HTML 里的 __API_BASE__ 替换成真实前缀, 页面才知道去哪调 API
+		cover.GET("", serveIndex(routePrefix))
+		cover.GET("/index.html", serveIndex(routePrefix))
+
+		cover.GET("/cover", getInfo)
+		cover.GET("/cover/:id", getInfo)
+		cover.GET("/info", getInfo)
+
+		// 显式注册 HEAD: 这个 gin 版本不会把 HEAD 自动映射到 GET, 不注册的话 curl -I 会 404
+		cover.GET("/redirect", redirectCover)
+		cover.HEAD("/redirect", redirectCover)
+		cover.GET("/raw", rawCover)
+		cover.HEAD("/raw", rawCover)
+	}
+
+	return r
+}
+
+// serveIndex 返回嵌进二进制的客户端页面（api/index.html, 用 go:embed 打进包）。
+// 页面里的 __API_BASE__ 在这里替换成 base（去掉尾部斜杠）—— 页面靠它知道去哪调 API。
+func serveIndex(base string) gin.HandlerFunc {
+	apiBase := strings.TrimSuffix(base, "/")
+	return func(c *gin.Context) {
+		b, err := indexHTML.ReadFile("index.html")
+		if err != nil {
+			tools.AbortWithError(c, http.StatusInternalServerError, err)
+			return
+		}
+		c.Header("Cache-Control", "no-cache")
+		c.Data(http.StatusOK, "text/html; charset=utf-8",
+			bytes.ReplaceAll(b, []byte("__API_BASE__"), []byte(apiBase)))
+	}
+}
+
+// inputFrom 从 query（url/u/id）或路径参数里取出输入
+func inputFrom(c *gin.Context) string {
+	if id := c.Param("id"); id != "" {
+		return id
+	}
+	for _, k := range []string{"url", "u", "id", "bvid", "link"} {
+		if v := c.Query(k); v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+// getInfo 返回视频元数据 JSON（pic 字段即封面）
+func getInfo(c *gin.Context) {
+	info, err := GetInfo(inputFrom(c))
+	if err != nil {
+		tools.AbortWithError(c, http.StatusBadRequest, err)
+		return
+	}
+	c.JSON(http.StatusOK, info)
+}
+
+// redirectCover 302 跳转到封面直链
+func redirectCover(c *gin.Context) {
+	info, err := GetInfo(inputFrom(c))
+	if err != nil {
+		tools.AbortWithError(c, http.StatusBadRequest, err)
+		return
+	}
+	if info.Pic == "" {
+		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": "empty pic", "bvid": info.Bvid})
+		return
+	}
+	c.Redirect(http.StatusFound, info.Pic)
+}
+
+// rawCover 代理封面图片字节，方便直接作为 <img src> 使用
+func rawCover(c *gin.Context) {
+	info, err := GetInfo(inputFrom(c))
+	if err != nil {
+		tools.AbortWithError(c, http.StatusBadRequest, err)
+		return
+	}
+	if info.Pic == "" {
+		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": "empty pic"})
+		return
+	}
+
+	req, err := http.NewRequest(http.MethodGet, info.Pic, nil)
+	if err != nil {
+		tools.AbortWithError(c, http.StatusInternalServerError, err)
+		return
+	}
+	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("Referer", "https://www.bilibili.com/video/"+info.Bvid)
+
+	// 继承 DefaultClient.Transport（main.go 里配了 LocalAddr 的自定义 transport）,
+	// 但不复用它的 CheckRedirect——生产环境那个返回 ErrUseLastResponse, 遇到 302 会卡住。
+	// Transport 为 nil（测试进程）时 http.Client 自动退回 http.DefaultTransport。
+	client := &http.Client{Timeout: 30 * time.Second, Transport: http.DefaultClient.Transport}
+	resp, err := client.Do(req)
+	if err != nil {
+		tools.AbortWithError(c, http.StatusBadGateway, err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		c.AbortWithStatusJSON(http.StatusBadGateway, gin.H{
+			"error": "upstream status " + resp.Status,
+			"cover": info.Pic,
+			"bvid":  info.Bvid,
+			"title": info.Title,
+		})
+		return
+	}
+
+	ctype := resp.Header.Get("Content-Type")
+	if ctype == "" {
+		ctype = "image/jpeg"
+	}
+	c.Header("Content-Type", ctype)
+	c.Header("Cache-Control", "public, max-age=86400")
+	c.Header("X-Bilibili-Bvid", info.Bvid)
+	if l := resp.Header.Get("Content-Length"); l != "" {
+		c.Header("Content-Length", l)
+	}
+
+	_, _ = io.Copy(c.Writer, io.LimitReader(resp.Body, 32<<20))
+}
