@@ -1,7 +1,8 @@
 // 26.09.05
 // bilibili 封面 API（见 bili.go 的取图流程说明）。
 //
-// 启动: main.go 里 go api.Run("") 即可, 不需要配 env, 默认监听 127.25.9.17:8080
+// 不自开端口: main.go 里在根 engine 上 api.Register(r), 作为 /api/v2 系列的一个 handler。
+// 必须在 r.Any("/*any", rootProxyHandler) 之前调用, 否则被通配代理吃掉。
 //
 // 路由:
 //
@@ -23,7 +24,6 @@ import (
 	"strings"
 	"time"
 
-	middleware "github.com/Hana-ame/api-pack/tools/my_gin_middleware"
 	tools "github.com/Hana-ame/api-pack/tools/utils"
 	"github.com/gin-gonic/gin"
 )
@@ -34,23 +34,10 @@ var indexHTML embed.FS
 // routePrefix 所有路由的挂载前缀; 页面用它定位 API, 所以别乱改
 const routePrefix = "/api/v2/bili"
 
-// defaultAddr 监听地址, 不需要配 env 就能直接跑
-const defaultAddr = "127.25.9.17:8080"
-
-// Run 启动 bilibili 封面服务; addr 为空时用 defaultAddr（main.go 里直接 go api.Run("")）
-func Run(addr string) error {
-	if addr == "" {
-		addr = defaultAddr
-	}
-
-	return newRouter().Run(addr)
-}
-
-// newRouter 装配路由。拆出来好测: Run 会阻塞在 ListenAndServe 上
-func newRouter() *gin.Engine {
-	r := gin.Default()
-	r.Use(middleware.CORSMiddleware())
-
+// Register 把 /api/v2/bili 系列路由挂到外部 engine 上, 不自开端口。
+// 调用方不要用 r.Any("/*any", ...) 做兜底——gin 不允许 root 级 catch-all 和静态路由
+// 共存（会 panic）, 得用 r.NoRoute(...)。见 main.go。
+func Register(r *gin.Engine) {
 	cover := r.Group(routePrefix)
 	{
 		// 前端页面: 浏览器直接开 /api/v2/bili 就能用
@@ -68,8 +55,6 @@ func newRouter() *gin.Engine {
 		cover.GET("/raw", rawCover)
 		cover.HEAD("/raw", rawCover)
 	}
-
-	return r
 }
 
 // serveIndex 返回嵌进二进制的客户端页面（api/index.html, 用 go:embed 打进包）。

@@ -179,8 +179,6 @@ func main() {
 
 	go qwen.Run(os.Getenv("QWEN_PROXY")) // 127.25.12.16:8080
 
-	go api.Run("") // bilibili 封面 + 页面: 127.25.9.17:8080 /api/v2/bili  不用配 env
-
 	go exhentai.Run(os.Getenv("EX_PROXY"))
 	go exhentai_stream.Run(os.Getenv("EX_STREAM"))
 	go exhentai_modify.Run(os.Getenv("EX_MODIFY")) // env: EXHENTAI_ENDPOINT
@@ -195,7 +193,14 @@ func main() {
 	r.Use(middleware.ProxyMiddleware())
 
 	// 2. 路由处理函数
-	r.Any("/*any", rootProxyHandler)
+	api.Register(r) // /api/v2/bili 封面 + 页面
+
+	// 注意: 不能用 r.Any("/*any", ...)。gin 的 radix tree 不允许 root 级 catch-all
+	// 与任何静态路由共存, 两者顺序都会 panic:
+	//   "catch-all wildcard '*any' in new path '/*any' conflicts with existing path segment 'api'"
+	// NoRoute 是 gin 官方给的兜底, 不占路由节点, 和静态路由任意顺序都共存。
+	// 行为不变: 没匹配到路由的请求同样交给 rootProxyHandler。
+	r.NoRoute(rootProxyHandler)
 
 	r.Run(os.Getenv("PROXY"))
 }

@@ -13,9 +13,16 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func TestServeIndex(t *testing.T) {
+// testRouter 按生产方式装配: 一个裸 engine + api.Register
+func testRouter() *gin.Engine {
 	gin.SetMode(gin.TestMode)
-	r := newRouter()
+	r := gin.New()
+	Register(r)
+	return r
+}
+
+func TestServeIndex(t *testing.T) {
+	r := testRouter()
 
 	for _, path := range []string{"/api/v2/bili", "/api/v2/bili/index.html"} {
 		w := httptest.NewRecorder()
@@ -123,8 +130,7 @@ func TestGetInfoLive(t *testing.T) {
 }
 
 func TestBiliHandlers(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	r := newRouter()
+	r := testRouter()
 
 	mustGet := func(path string) *httptest.ResponseRecorder {
 		w := httptest.NewRecorder()
@@ -179,19 +185,67 @@ func TestBiliHandlers(t *testing.T) {
 	}
 }
 
-func TestMiddlewareStack(t *testing.T) {
-	// 与 Run() 完全一致的中间件栈, 确认生产路由不会在注册或执行时 panic
+func TestNoRouteFallback(t *testing.T) {
+	// 复现 main.go: api.Register(r) + r.NoRoute(rootProxyHandler)
 	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	Register(r)
+
+	fellThrough := false
+	r.NoRoute(func(c *gin.Context) {
+		fellThrough = true
+		c.String(http.StatusBadGateway, "caught by NoRoute")
+	})
+
+	// 已注册的 bili 路由优先
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v2/bili/cover?url=BV15ntz6gEHd", nil))
+	if fellThrough {
+		t.Fatal("/api/v2/bili/cover 落到了 NoRoute, 注册有问题")
+	}
+	if w.Code != http.StatusOK {
+		t.Errorf("want 200, got %d %s", w.Code, w.Body.String())
+	}
+
+	// 没注册的 path 才落到 NoRoute
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/other/path", nil))
+	if !fellThrough {
+		t.Error("expected /other/path to fall through to NoRoute")
+	}
+}
+
+// TestCatchAllConflicts 记录 gin 的硬限制: root 级 catch-all 和任何静态路由不能共存。
+// main.go 原本用 r.Any("/*any", rootProxyHandler), 加了 /api/v2/bili 之后注册阶段就 panic,
+// 整个进程起不来, 所以换成了 r.NoRoute。留这条测试, 免得哪天有人改回去。
+func TestCatchAllConflicts(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for _, order := range []string{"static-first", "catchall-first"} {
+		func() {
+			defer func() {
+				if recover() == nil {
+					t.Errorf("%s: expected panic, got none", order)
+				}
+			}()
+			r := gin.New()
+			static := func(c *gin.Context) {}
+			catchall := func(c *gin.Context) {}
+			if order == "static-first" {
+				r.GET("/api/v2/bili/cover", static)
+				r.Any("/*any", catchall)
+			} else {
+				r.Any("/*any", catchall)
+				r.GET("/api/v2/bili/cover", static)
+			}
+		}()
+	}
+}
+
+func TestMiddlewareStack(t *testing.T) {
+	// 与生产一致的中间件栈: main.go 里 gin.Default() + CORS + Proxy
 	r := gin.Default()
 	r.Use(middleware.CORSMiddleware())
-	g := r.Group("/api/v2/bili")
-	g.GET("/cover", getInfo)
-	g.GET("/cover/:id", getInfo)
-	g.GET("/info", getInfo)
-	g.GET("/redirect", redirectCover)
-	g.HEAD("/redirect", redirectCover)
-	g.GET("/raw", rawCover)
-	g.HEAD("/raw", rawCover)
+	Register(r)
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/bili/cover?url=BV15ntz6gEHd", nil)
