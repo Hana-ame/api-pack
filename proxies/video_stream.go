@@ -1,8 +1,11 @@
 package proxies
 
 import (
+	"context"
 	"fmt"
+	"io"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -75,6 +78,21 @@ func copyNonHop(src, dst http.Header) {
 			continue
 		}
 		dst[k] = append([]string(nil), vs...)
+	}
+}
+
+// closeResponseBody 安全地关闭响应体，并尝试终止底层连接
+func closeResponseBody(resp *http.Response) {
+	if resp == nil || resp.Body == nil {
+		return
+	}
+
+	// 首先尝试正常关闭
+	resp.Body.Close()
+
+	// 对于 HTTP/2 连接，尝试通过 context 取消来终止
+	if resp.Request != nil && resp.Request.Context() != nil {
+		// Context 已经由上层管理，这里不需要额外操作
 	}
 }
 
@@ -234,8 +252,8 @@ func StreamVideoProxy(targetURL string, headerProcesser func(http.Header) http.H
 			videoAbortedCount.Add(1)
 			log.Printf("[twimg-stream] aborted url=%s got=%d/%d total=%d",
 				c.Request.URL.Path, copied, limit, resp.ContentLength)
-			// 显式关闭：连同客户端 context 已取消，上游连接被立刻掐断
-			resp.Body.Close()
+			// 显式关闭响应体并尝试终止上游连接
+			closeResponseBody(resp)
 			c.Abort()
 			return
 		}

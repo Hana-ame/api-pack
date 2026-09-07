@@ -45,6 +45,18 @@ func StreamProxy(targetURL string, headerProcesser func(http.Header) http.Header
 			// （可选）如果你想把客户端的真实 IP 传给目标，可以解除下一行的注释
 			// pr.SetXForwarded()
 		},
+		// 添加错误处理，更好地处理客户端断开连接的情况
+		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
+			// 检查是否是客户端断开连接导致的错误
+			if r.Context().Err() != nil {
+				// 客户端已断开，记录日志但不返回错误
+				log.Printf("[twimg-proxy] client disconnected: %v", err)
+				return
+			}
+			// 其他错误正常处理
+			log.Printf("[twimg-proxy] proxy error: %v", err)
+			http.Error(w, "Bad Gateway", http.StatusBadGateway)
+		},
 	}
 
 	return func(c *gin.Context) {
@@ -80,7 +92,33 @@ func TwimgProxy(addr string) error {
 		return h
 	}
 
-	twimgProxy := StreamProxy("https://pbs.twimg.com", headerProcesser)
+	// 创建自定义的 ReverseProxy 以更好地处理连接终止
+	twimgTarget, _ := url.Parse("https://pbs.twimg.com")
+	twimgProxy := &httputil.ReverseProxy{
+		Rewrite: func(pr *httputil.ProxyRequest) {
+			pr.SetURL(twimgTarget)
+			pr.Out.Host = twimgTarget.Host
+			if headerProcesser != nil {
+				pr.Out.Header = headerProcesser(pr.Out.Header)
+			}
+		},
+		Transport: &http.Transport{
+			MaxIdleConns:        100,
+			MaxConnsPerHost:     200,
+			IdleConnTimeout:     90 * time.Second,
+			TLSHandshakeTimeout: 5 * time.Second,
+			ResponseHeaderTimeout: 20 * time.Second,
+		},
+		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
+			if r.Context().Err() != nil {
+				log.Printf("[twimg-proxy] client disconnected: %v", err)
+				return
+			}
+			log.Printf("[twimg-proxy] proxy error: %v", err)
+			http.Error(w, "Bad Gateway", http.StatusBadGateway)
+		},
+	}
+
 	videoProxy := StreamVideoProxy("https://video.twimg.com", headerProcesser)
 
 	handler := func(c *gin.Context) {
