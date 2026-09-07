@@ -145,7 +145,7 @@ func TwimgProxy(addr string) error {
 		if isVideo {
 			videoProxy(c)
 		} else {
-			twimgProxy(c)
+			twimgProxy.ServeHTTP(c.Writer, c.Request)
 		}
 	}
 
