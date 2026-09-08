@@ -1,5 +1,6 @@
 // 26.09.05
 // bilibili 封面 API（见 bili.go 的取图流程说明）。
+// bilibili 字幕 API（见 bili_subtitle.go 的字幕下载流程说明）。
 //
 // 不自开端口: main.go 里在根 engine 上 api.Register(r), 作为 /api/v2 系列的一个 handler。
 // 必须在 r.Any("/*any", rootProxyHandler) 之前调用, 否则被通配代理吃掉。
@@ -12,6 +13,12 @@
 //	GET /api/v2/bili/info?url=...                           /cover 的别名
 //	GET /api/v2/bili/redirect?url=...                       302 跳到封面直链
 //	GET /api/v2/bili/raw?url=...                            直接回封面图片字节（可当 <img> src）
+//	GET /api/v2/bili/subtitle?url=...                       JSON 字幕数据（含 VTT + 元信息）
+//	GET /api/v2/bili/subtitle/:id                           同上，id 放在路径里
+//	GET /api/v2/bili/subtitle/vtt?url=...                   直接回 VTT 格式字幕文本
+//	GET /api/v2/bili/subtitle/vtt/:id                       同上，id 放在路径里
+//	GET /api/v2/bili/subtitle.html                          字幕操作界面（粘贴文本自动提取 BV 号）
+//	GET /api/v2/bili/ui/subtitle                            同上
 //
 // 入参兼容三种写法: ?url= / ?u= / ?id= ，也支持 /cover/BV1xxxx 这种路径写法。
 package api
@@ -31,6 +38,9 @@ import (
 //go:embed index.html
 var indexHTML embed.FS
 
+//go:embed subtitle.html
+var subtitleHTML embed.FS
+
 // routePrefix 所有路由的挂载前缀; 页面用它定位 API, 所以别乱改
 const routePrefix = "/api/v2/bili"
 
@@ -49,6 +59,16 @@ func Register(r *gin.Engine) {
 		cover.GET("/cover/:id", getInfo)
 		cover.GET("/info", getInfo)
 
+		// 字幕下载: 优先中文，fallback 英文
+		cover.GET("/subtitle", getSubtitleJSON)
+		cover.GET("/subtitle/:id", getSubtitleJSON)
+		cover.GET("/subtitle/vtt", getSubtitleVTT)
+		cover.GET("/subtitle/vtt/:id", getSubtitleVTT)
+
+		// 字幕操作页面
+		cover.GET("/subtitle.html", serveSubtitleIndex(routePrefix))
+		cover.GET("/ui/subtitle", serveSubtitleIndex(routePrefix))
+
 		// 显式注册 HEAD: 这个 gin 版本不会把 HEAD 自动映射到 GET, 不注册的话 curl -I 会 404
 		cover.GET("/redirect", redirectCover)
 		cover.HEAD("/redirect", redirectCover)
@@ -63,6 +83,22 @@ func serveIndex(base string) gin.HandlerFunc {
 	apiBase := strings.TrimSuffix(base, "/")
 	return func(c *gin.Context) {
 		b, err := indexHTML.ReadFile("index.html")
+		if err != nil {
+			tools.AbortWithError(c, http.StatusInternalServerError, err)
+			return
+		}
+		c.Header("Cache-Control", "no-cache")
+		c.Data(http.StatusOK, "text/html; charset=utf-8",
+			bytes.ReplaceAll(b, []byte("__API_BASE__"), []byte(apiBase)))
+	}
+}
+
+// serveSubtitleIndex 返回嵌进二进制的字幕操作页面（api/subtitle.html）。
+// 页面里的 __API_BASE__ 在这里替换成 base（去掉尾部斜杠）。
+func serveSubtitleIndex(base string) gin.HandlerFunc {
+	apiBase := strings.TrimSuffix(base, "/")
+	return func(c *gin.Context) {
+		b, err := subtitleHTML.ReadFile("subtitle.html")
 		if err != nil {
 			tools.AbortWithError(c, http.StatusInternalServerError, err)
 			return
@@ -163,4 +199,28 @@ func rawCover(c *gin.Context) {
 	}
 
 	_, _ = io.Copy(c.Writer, io.LimitReader(resp.Body, 32<<20))
+}
+
+// getSubtitleJSON 返回字幕 JSON（含 VTT 内容 + 元信息 + 可用语言列表）
+func getSubtitleJSON(c *gin.Context) {
+	result, err := GetSubtitle(inputFrom(c))
+	if err != nil {
+		tools.AbortWithError(c, http.StatusBadRequest, err)
+		return
+	}
+	c.JSON(http.StatusOK, result)
+}
+
+// getSubtitleVTT 直接返回 VTT 格式字幕文本，可用作 <track src="..."> 的 src
+func getSubtitleVTT(c *gin.Context) {
+	result, err := GetSubtitle(inputFrom(c))
+	if err != nil {
+		tools.AbortWithError(c, http.StatusBadRequest, err)
+		return
+	}
+	c.Header("Content-Type", "text/vtt; charset=utf-8")
+	c.Header("Cache-Control", "public, max-age=3600")
+	c.Header("X-Bilibili-Bvid", result.Bvid)
+	c.Header("X-Bilibili-Lang", result.Lang)
+	c.String(http.StatusOK, result.VTT)
 }

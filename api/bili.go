@@ -71,6 +71,7 @@ type Page struct {
 type BiliInfo struct {
 	Bvid     string `json:"bvid"`
 	Aid      int64  `json:"aid"`
+	Cid      int64  `json:"cid"`
 	Title    string `json:"title"`
 	Desc     string `json:"desc"`
 	Pic      string `json:"pic"` // 封面直链（已转 https）
@@ -94,6 +95,7 @@ type viewResp struct {
 	Data    struct {
 		Bvid     string `json:"bvid"`
 		Aid      int64  `json:"aid"`
+		Cid      int64  `json:"cid"`
 		Title    string `json:"title"`
 		Desc     string `json:"desc"`
 		Pic      string `json:"pic"`
@@ -279,6 +281,7 @@ func fetchView(bvid string, aid int64) (*BiliInfo, error) {
 	info := &BiliInfo{
 		Bvid:     d.Bvid,
 		Aid:      d.Aid,
+		Cid:      d.Cid,
 		Title:    d.Title,
 		Desc:     d.Desc,
 		Pic:      toHTTPS(d.Pic),

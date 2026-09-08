@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>哔哩哔哩字幕下载 · api-pack</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #171a21;
+    --panel-2: #1e222b;
+    --line: #2b313c;
+    --txt: #e6e9ef;
+    --dim: #8b95a7;
+    --acc: #fb7299;
+    --acc-2: #23ade5;
+    --ok: #4ade80;
+    --err: #f87171;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--txt);
+    font: 14px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+           "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    min-height: 100vh;
+  }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 28px 20px 60px; }
+
+  header { margin-bottom: 22px; }
+  h1 { font-size: 22px; margin: 0 0 6px; letter-spacing: .3px; }
+  h1 .dot { color: var(--acc); }
+  .sub { color: var(--dim); font-size: 13px; }
+  .sub code {
+    background: var(--panel-2); padding: 1px 6px; border-radius: 5px;
+    color: var(--txt); font-size: 12px;
+  }
+
+  .box {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: var(--radius); padding: 16px; margin-bottom: 22px;
+  }
+  textarea {
+    width: 100%; min-height: 120px; resize: vertical;
+    background: var(--bg); color: var(--txt);
+    border: 1px solid var(--line); border-radius: 8px;
+    padding: 10px 12px; font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+    outline: none;
+  }
+  textarea:focus { border-color: var(--acc); }
+
+  .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 12px; }
+  button {
+    background: var(--acc); color: #fff; border: 0; cursor: pointer;
+    padding: 9px 18px; border-radius: 8px; font-size: 14px; font-weight: 600;
+  }
+  button.ghost {
+    background: var(--panel-2); color: var(--dim); border: 1px solid var(--line); font-weight: 400;
+  }
+  button:hover { filter: brightness(1.08); }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  label.opt { color: var(--dim); font-size: 13px; cursor: pointer; user-select: none; }
+  label.opt input { margin-right: 5px; accent-color: var(--acc); }
+  .grow { flex: 1; }
+
+  #toast { color: var(--err); font-size: 13px; margin-left: 4px; }
+  #toast.ok { color: var(--ok); }
+
+  .bar { color: var(--dim); font-size: 13px; margin: 4px 0 14px; min-height: 20px; }
+  .bar b { color: var(--txt); font-weight: 600; }
+
+  /* 视频列表 */
+  .vidlist { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+  .viditem {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 8px; padding: 10px 14px;
+    display: flex; align-items: center; gap: 12px;
+    cursor: pointer; transition: border-color .15s;
+  }
+  .viditem:hover { border-color: var(--acc); }
+  .viditem.active { border-color: var(--acc); background: var(--panel-2); }
+  .viditem .vidtitle { flex: 1; font-size: 14px; font-weight: 500; word-break: break-all; }
+  .viditem .vidmeta { color: var(--dim); font-size: 12px; white-space: nowrap; }
+  .viditem .vidmeta.ok { color: var(--ok); }
+  .viditem .vidmeta.fail { color: var(--err); }
+  .viditem .vidbtn {
+    padding: 4px 12px; font-size: 12px; border-radius: 6px;
+    background: var(--panel-2); color: var(--dim);
+    border: 1px solid var(--line); cursor: pointer; white-space: nowrap;
+  }
+  .viditem .vidbtn:hover { color: var(--txt); border-color: var(--acc); }
+
+  /* 字幕结果 */
+  .result {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: var(--radius); overflow: hidden; margin-bottom: 16px;
+  }
+  .rheader {
+    padding: 12px 14px; border-bottom: 1px solid var(--line);
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  }
+  .rtitle { font-size: 15px; font-weight: 600; flex: 1; min-width: 200px; word-break: break-word; }
+  .lang-badge {
+    font-size: 11px; padding: 2px 8px; border-radius: 999px; font-weight: 600; color: #fff;
+  }
+  .lang-badge.zh { background: var(--acc); }
+  .lang-badge.en { background: var(--acc-2); }
+  .lang-badge.other { background: var(--dim); }
+  .rstat { color: var(--dim); font-size: 12px; white-space: nowrap; }
+
+  /* VTT 内容 */
+  .vttbox {
+    background: var(--bg); border-top: 1px solid var(--line);
+    padding: 12px 14px; max-height: 480px; overflow: auto;
+  }
+  .vttbox pre {
+    margin: 0; font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
+    white-space: pre-wrap; word-break: break-word;
+  }
+
+  /* 可用语言 */
+  .avail {
+    padding: 10px 14px; border-top: 1px solid var(--line);
+    display: flex; flex-wrap: wrap; gap: 6px;
+  }
+  .avail .chip {
+    background: var(--panel-2); border: 1px solid var(--line); color: var(--dim);
+    padding: 3px 10px; border-radius: 999px; font-size: 12px;
+  }
+  .avail .chip.sel { color: var(--acc); border-color: var(--acc); }
+
+  .acts { display: flex; flex-wrap: wrap; gap: 7px; padding: 10px 14px; border-top: 1px solid var(--line); }
+  .acts a, .acts button {
+    padding: 6px 11px; font-size: 12.5px; border-radius: 7px;
+    background: var(--panel-2); color: var(--dim);
+    border: 1px solid var(--line); text-decoration: none; cursor: pointer;
+  }
+  .acts a:hover, .acts button:hover { color: var(--txt); border-color: var(--acc); }
+  .acts button.done { color: var(--ok); border-color: var(--ok); }
+
+  .fail {
+    background: var(--panel); border: 1px solid var(--err); border-left: 3px solid var(--err);
+    border-radius: 8px; padding: 11px 14px; margin-bottom: 12px; font-size: 13px;
+    word-break: break-all;
+  }
+  .fail code { color: var(--err); }
+
+  .loading {
+    display: inline-flex; align-items: center; gap: 6px; color: var(--dim); font-size: 13px;
+  }
+  .spinner {
+    width: 14px; height: 14px; border: 2px solid var(--line);
+    border-top-color: var(--acc); border-radius: 50%;
+    animation: spin .6s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  details.json { margin-top: 8px; }
+  details.json summary {
+    color: var(--dim); font-size: 12.5px; cursor: pointer; user-select: none;
+  }
+  details.json pre {
+    background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
+    padding: 10px 12px; overflow: auto; font-size: 12px; margin: 8px 0 0;
+    max-height: 320px;
+  }
+
+  footer {
+    color: var(--dim); font-size: 12.5px; margin-top: 34px;
+    border-top: 1px solid var(--line); padding-top: 16px;
+  }
+  footer code {
+    background: var(--panel-2); padding: 1px 6px; border-radius: 5px; color: var(--txt);
+  }
+  footer p { margin: 5px 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>哔哩哔哩字幕下载<span class="dot">.</span></h1>
+    <div class="sub">
+      粘贴任意文本，自动提取 <code>BV</code> 号并下载字幕。优先中文，fallback 英文。
+    </div>
+  </header>
+
+  <div class="box">
+    <textarea id="q" placeholder="粘贴任意包含 B 站视频链接或 BV 号的文本…&#10;例如：https://b23.tv/G2o7PT6&#10;BV15ntz6gEHd&#10;【开盖即食♡-哔哩哔哩】BV15ntz6gEHd 看看" autofocus></textarea>
+    <div class="row">
+      <button id="go">提取字幕</button>
+      <button id="clear" class="ghost">清空</button>
+      <label class="opt"><input type="checkbox" id="showJson"> 展开 JSON</label>
+      <div class="grow"></div>
+      <span id="toast"></span>
+    </div>
+  </div>
+
+  <div id="vidsection">
+    <div class="bar" id="bar"></div>
+    <div class="vidlist" id="vidlist"></div>
+  </div>
+
+  <div id="fails"></div>
+  <div id="results"></div>
+
+  <footer>
+    <p><code>GET /api/v2/bili/subtitle?url=</code> — JSON 字幕数据（含 VTT + 元信息 + 可用语言列表）</p>
+    <p><code>GET /api/v2/bili/subtitle/vtt?url=</code> — 纯 VTT 格式字幕文本</p>
+    <p>需要设置 <code>BILIBILI_COOKIES_FILE</code> 环境变量指向 Netscape 格式 cookie 文件</p>
+  </footer>
+</div>
+
+<script>
+"use strict";
+
+let BASE = "__API_BASE__";
+if (BASE === "__API_BASE__") {
+  try {
+    const u = new URL(".", location.href);
+    BASE = u.pathname.replace(/\/$/, "");
+  } catch (_) { BASE = "/api/v2/bili"; }
+}
+
+const $ = (id) => document.getElementById(id);
+const q = $("q"), bar = $("bar"), toast = $("toast");
+
+const HKEY = "bili-subtitle-history";
+const MAXHIST = 30;
+
+let toastTimer = null;
+let fetching = false;
+
+function say(msg, ok) {
+  toast.textContent = msg;
+  toast.className = ok ? "ok" : "";
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { toast.textContent = ""; }, 4000);
+}
+
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text != null) e.textContent = text;
+  return e;
+}
+
+function showSpinner(btn) {
+  const old = btn.textContent;
+  btn.disabled = true;
+  const s = el("span", "spinner");
+  btn.appendChild(s);
+  btn._oldText = old;
+}
+function hideSpinner(btn) {
+  const sp = btn.querySelector(".spinner");
+  if (sp) sp.remove();
+  btn.disabled = false;
+  btn.textContent = btn._oldText || "提取";
+  btn._oldText = null;
+}
+
+// 从任意文本中提取 BV 号和 B 站链接
+function extractBvids(text) {
+  const results = new Set();
+
+  // BV 号
+  for (const m of text.matchAll(/BV[0-9A-Za-z]{10}/g)) {
+    results.add(m[0]);
+  }
+  // b23.tv 短链
+  for (const m of text.matchAll(/https?:\/\/b23\.tv\/[^\s,，。、！"')\]}>]+/gi)) {
+    results.add(m[0].replace(/[).,，。、！"')\]}>]+$/, ""));
+  }
+  // space.bilibili.com/video?bvid=
+  for (const m of text.matchAll(/bvid=(BV[0-9A-Za-z]{10})/g)) {
+    results.add(m[1]);
+  }
+
+  return [...results];
+}
+
+async function fetchSubtitle(input) {
+  const r = await fetch(BASE + "/subtitle?url=" + encodeURIComponent(input), {
+    headers: { Accept: "application/json" }
+  });
+  const text = await r.text();
+  let data = null;
+  try { data = JSON.parse(text); } catch (_) {}
+  if (!r.ok) throw new Error((data && data.error) || ("HTTP " + r.status));
+  if (!data || !data.bvid) throw new Error("返回里没有 bvid");
+  return data;
+}
+
+function showFail(input, msg) {
+  const f = el("div", "fail");
+  f.appendChild(el("code", null, input));
+  f.appendChild(document.createTextNode("  — " + msg));
+  $("fails").appendChild(f);
+}
+
+function langClass(lang) {
+  if (!lang) return "other";
+  const l = lang.toLowerCase();
+  if (l.startsWith("zh")) return "zh";
+  if (l.startsWith("en")) return "en";
+  return "other";
+}
+
+function renderSubtitle(data) {
+  const results = $("results");
+  results.replaceChildren();
+
+  const r = el("div", "result");
+
+  // 标题 + 语言徽章 + 统计
+  const header = el("div", "rheader");
+  const title = el("div", "rtitle", (data.title || data.bvid) + " (" + data.bvid + ")");
+  header.appendChild(title);
+  header.appendChild(el("span", "lang-badge " + langClass(data.lang), data.lang_doc || data.lang));
+  header.appendChild(el("span", "rstat", data.lines.length + " 行"));
+  r.appendChild(header);
+
+  // VTT 内容
+  const vttDiv = el("div", "vttbox");
+  const pre = el("pre");
+  pre.textContent = data.vtt;
+  vttDiv.appendChild(pre);
+  r.appendChild(vttDiv);
+
+  // 可用语言
+  const avail = el("div", "avail");
+  avail.appendChild(el("span", "chip", "可用: "));
+  for (const s of data.available) {
+    const chip = el("span", "chip" + (s.lan === data.lang ? " sel" : ""), s.lan_doc || s.lan);
+    avail.appendChild(chip);
+  }
+  r.appendChild(avail);
+
+  // 操作按钮
+  const acts = el("div", "acts");
+
+  const vttLink = document.createElement("a");
+  vttLink.href = BASE + "/subtitle/vtt?url=" + encodeURIComponent(data.bvid);
+  vttLink.target = "_blank"; vttLink.rel = "noopener";
+  vttLink.textContent = "预览 VTT";
+  acts.appendChild(vttLink);
+
+  const dlLink = document.createElement("a");
+  dlLink.href = BASE + "/subtitle/vtt?url=" + encodeURIComponent(data.bvid);
+  dlLink.target = "_blank"; dlLink.rel = "noopener";
+  dlLink.download = data.bvid + "." + (data.lang || "zh") + ".vtt";
+  dlLink.textContent = "下载 VTT";
+  acts.appendChild(dlLink);
+
+  const copyBtn = el("button", null, "复制 VTT");
+  copyBtn.onclick = () => copyText(data.vtt, copyBtn);
+  acts.appendChild(copyBtn);
+
+  if (document.getElementById("showJson").checked) {
+    const jsonBtn = el("button", null, "JSON");
+    jsonBtn.onclick = () => {
+      const det = r.querySelector("details.json");
+      det.open = !det.open;
+    };
+    acts.appendChild(jsonBtn);
+    const det = el("details", "json");
+    det.appendChild(el("summary", null, "完整响应 JSON"));
+    const pre2 = el("pre");
+    pre2.textContent = JSON.stringify(data, null, 2);
+    det.appendChild(pre2);
+    r.appendChild(det);
+  }
+
+  r.appendChild(acts);
+  results.appendChild(r);
+}
+
+function copyText(text, btn) {
+  const done = () => {
+    if (!btn) return;
+    const old = btn.textContent;
+    btn.textContent = "已复制";
+    btn.className = "done";
+    setTimeout(() => { btn.textContent = old; btn.className = ""; }, 1400);
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(done).catch(() => legacy(text, done));
+  } else legacy(text, done);
+
+  function legacy(text, done) {
+    const ta = el("textarea");
+    ta.value = text;
+    ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand("copy"); done(); } catch (_) { say("复制失败", false); }
+    ta.remove();
+  }
+}
+
+function useHistory(input) {
+  let list = [];
+  try { list = JSON.parse(localStorage.getItem(HKEY) || "[]"); } catch (_) {}
+  list = list.filter((x) => x !== input);
+  list.unshift(input);
+  localStorage.setItem(HKEY, JSON.stringify(list.slice(0, MAXHIST)));
+}
+
+async function fetchAndShow(input, btn) {
+  if (fetching) return;
+  fetching = true;
+
+  $("results").replaceChildren();
+  if (btn) showSpinner(btn);
+
+  // 高亮当前项
+  document.querySelectorAll(".viditem").forEach(item => {
+    const t = item.querySelector(".vidtitle").textContent;
+    item.classList.toggle("active", t === input);
+    const meta = item.querySelector(".vidmeta");
+    if (meta) { meta.textContent = ""; meta.className = "vidmeta"; }
+  });
+
+  try {
+    const data = await fetchSubtitle(input);
+    renderSubtitle(data);
+    useHistory(input);
+    say("字幕提取成功 (" + data.lang_doc + ")", true);
+    if (btn) {
+      hideSpinner(btn);
+      btn.textContent = "完成";
+      btn.className = "vidbtn";
+      const meta = btn.parentElement.querySelector(".vidmeta");
+      if (meta) { meta.textContent = data.lang_doc; meta.className = "vidmeta ok"; }
+    }
+  } catch (e) {
+    showFail(input, e.message);
+    say("失败: " + e.message, false);
+    if (btn) {
+      hideSpinner(btn);
+      const meta = btn.parentElement.querySelector(".vidmeta");
+      if (meta) { meta.textContent = "失败"; meta.className = "vidmeta fail"; }
+    }
+  } finally {
+    fetching = false;
+  }
+}
+
+async function go() {
+  const inputs = extractBvids(q.value);
+  if (!inputs.length) {
+    return say("没有找到 BV 号或 B 站链接", false);
+  }
+
+  $("vidlist").replaceChildren();
+  $("fails").replaceChildren();
+  $("results").replaceChildren();
+  bar.textContent = "找到 " + inputs.length + " 个视频…";
+
+  const list = $("vidlist");
+  for (const bvid of inputs) {
+    const item = el("div", "viditem");
+    const title = el("div", "vidtitle", bvid);
+    title.title = "点击提取字幕";
+    item.appendChild(title);
+
+    const meta = el("span", "vidmeta", "");
+    item.appendChild(meta);
+
+    const btn = el("button", "vidbtn", "提取");
+    btn.onclick = async (e) => {
+      e.stopPropagation();
+      await fetchAndShow(bvid, btn);
+    };
+    item.appendChild(btn);
+
+    item.onclick = async () => {
+      await fetchAndShow(bvid, btn);
+    };
+
+    list.appendChild(item);
+  }
+
+  // 自动提取第一个
+  const firstBtn = list.querySelector(".vidbtn");
+  if (firstBtn) await fetchAndShow(inputs[0], firstBtn);
+}
+
+$("go").onclick = go;
+$("clear").onclick = () => {
+  q.value = ""; $("vidlist").replaceChildren(); $("fails").replaceChildren();
+  $("results").replaceChildren(); bar.textContent = ""; q.focus();
+};
+$("q").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); go(); }
+});
+
+// 页面自带 ?url= 就自动提取
+const boot = new URLSearchParams(location.search).get("url");
+if (boot) { q.value = boot; go(); }
+</script>
+</body>
+</html>
