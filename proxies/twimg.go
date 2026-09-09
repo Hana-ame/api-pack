@@ -451,16 +451,26 @@ func TwimgProxyV2(addr string) error {
 	imageProxy := StreamProxy("https://pbs.twimg.com", headerProcesser)
 
 	v2Handler := func(c *gin.Context) {
-		// 所有请求都参与 QPS 统计
-		currentQPS := qps.record()
-
 		// 只有扩展名为 .mp4 的请求才属于视频，允许走 video.twimg.com 和参与分流；
 		// 无扩展名、.jpg、query 里出现 =jpg（如 format=jpg）等一律 pbs.twimg.com 直接代理。
 		// URL.Path 不含 query，因此 /abc.mp4?tag=8 之类带参数的 .mp4 也能正确命中
 		isVideo := strings.HasSuffix(strings.ToLower(c.Request.URL.Path), ".mp4")
+		// QPS 只统计视频请求：分流决策只针对视频，图片流量不应影响分流比例
+		// （修复：原实现所有请求都计入 QPS，导致图片高峰期视频被过度分流）
+		var currentQPS int
+		if isVideo {
+			currentQPS = qps.record()
+		}
 		host := "pbs.twimg.com"
 		if isVideo {
 			host = "video.twimg.com"
+		}
+
+		// 所有视频请求统一 302 重定向到 twimg.moonchan.xyz
+		if isVideo {
+			c.Header("Cache-Control", "no-cache, no-store, private")
+			c.Redirect(http.StatusFound, "https://twimg.moonchan.xyz"+c.Request.URL.String())
+			return
 		}
 
 		// 非 CN 请求直接 302 到官方源，由客户端直连，不缓存
@@ -470,45 +480,8 @@ func TwimgProxyV2(addr string) error {
 			return
 		}
 
-		// 视频限速池（每 IP 下载量配额）：超配额 IP 永久进池，池内同时只
-		// 服务 1 路视频，其余挂起保活排队；排队期间客户端断开则放弃。
-		// 不返回任何 4xx/5xx（不允许 429）；池内请求不再走 302 分流（不烧镜像配额）。
-		// 图片不参与（图片短小高频，按下载量限会误伤正常浏览）
-		if isVideo && m.videoGate != nil {
-			ip := c.GetHeader("Cf-Connecting-Ip")
-			if ip == "" {
-				ip = c.ClientIP()
-			}
-			release, pooled := m.videoGate.acquire(c.Request.Context(), ip)
-			if release == nil {
-				// 排队期间客户端已断开：终止请求
-				c.Abort()
-				return
-			}
-			// 未池内且命中分流：视频内容由镜像下发，不计入本机配额，直接 302
-			if !pooled && m.shouldDivert(c, currentQPS) {
-				release(0)
-				return
-			}
-			// 池内 / 未命中分流：自扛。外包计数 writer 统计本路下发字节，
-			// 流结束后累计到该 IP 配额（下载量判定）
-			var served int64
-			orig := c.Writer
-			c.Writer = &countingResponseWriter{ResponseWriter: orig, n: &served}
-			videoProxy(c)
-			c.Writer = orig
-			release(served)
-			return
-		}
-		if isVideo && m.shouldDivert(c, currentQPS) {
-			return
-		}
-
-		if isVideo {
-			videoProxy(c)
-		} else {
-			imageProxy(c)
-		}
+		// 图片请求继续走原有逻辑
+		imageProxy(c)
 	}
 	r.GET("/*any", v2Handler)
 	r.HEAD("/*any", v2Handler)
@@ -521,7 +494,13 @@ func TwimgProxyV2(addr string) error {
 	if err != nil {
 		return err
 	}
-	return (&http.Server{Handler: r}).Serve(ln)
+	return (&http.Server{
+		Handler:     r,
+		IdleTimeout: 120 * time.Second,
+		// 不设 ReadTimeout：池内排队请求不发字节，超过 ReadTimeout 会被 RST
+		// 客户端主动断开由 TCP keepalive 探测 + request context 取消兜底
+		WriteTimeout: 30 * time.Minute,
+	}).Serve(ln)
 }
 
 func PximgProxy(addr string) error {
