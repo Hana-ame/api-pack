@@ -184,7 +184,7 @@ func main() {
 	go exhentai_modify.Run(os.Getenv("EX_MODIFY")) // env: EXHENTAI_ENDPOINT
 
 	// proxy.moonchan.xyz
-	//127.24.11.16:8080
+	// 127.24.11.16:8080 (由 r.Run(os.Getenv("PROXY")) 监听)
 	// 创建 Gin 引擎
 	r := gin.Default()
 
