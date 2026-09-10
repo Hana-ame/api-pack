@@ -721,7 +721,7 @@
   // 6. 右下角悬浮窗
   // =========================================================================
   function initFloatingNotice() {
-    const mark = "0824";
+    const mark = "0910";
     if (localStorage.getItem("iframeClosed") === mark) {
       return;
     }
@@ -731,12 +731,10 @@
     div.innerHTML = `
             <button id="moonchan-close-button">×</button>
             <div style="padding: 10px; font-size: 14px;">
+                <p>810114.xyz被举报。新域名：<a href="https://ex.4545810.xyz" style="color:#0066cc;">ex.4545810.xyz</a></p>
                 <p style="text-align: center;">
                     <a href="https://chatto.moonchan.xyz" class="chatto-btn">点击添加聊天群</a>
                 </p>
-                <p>APK下载: 聊天室 → 项目相关 → ex镜像房间</p>
-                <p>GPT 5.6 sol / Claude opus 有需要可点</p>
-                <p style="word-break:break-all; font-size:12px;"><a href="https://agentrouter.org/register?aff=Hfnj" style="color:#0066cc;">https://agentrouter.org/register?aff=Hfnj</a></p>
             </div>
         `;
     document.body.appendChild(div);
@@ -760,7 +758,7 @@
   }
 
   async function main() {
-    console.log("26.03.22");
+    console.log("26.09.10");
     // fixBaseUrls(); // 1. URL 替换
     injectStyles(); // 2. 样式注入
     initReloadCover(); // 3. 封面重载 (列表页)

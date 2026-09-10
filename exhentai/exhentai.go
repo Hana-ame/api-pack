@@ -72,6 +72,10 @@ const (
 
 	StaticHost = "page.moonchan.xyz"
 
+	// NextEndpoint /endpoint 对外通告的下一可用入口, 换域名时只改这一行
+	// 返回 200 + text/plain, body 就是这个域名（不带 scheme）
+	NextEndpoint = "ex.4545810.xyz"
+
 // MigrationDate = "2025-04-10T00:00:00Z"
 
 )
@@ -141,6 +145,17 @@ func ExhProxy(rotator *IPRotator, addr string) {
 		c.File("./exhentai/failed.html")
 	})
 
+	// 下一可用入口: 纯文本返回, 供客户端在当前域名不可用时切换
+	// 注册在 r 上而不是 NoRoute, 因此不受 accessControlMiddleware 的 GeoIP/白名单拦截
+	r.GET("/endpoint", func(c *gin.Context) {
+		c.Header("Content-Type", "text/plain; charset=utf-8")
+
+		// 换域名后必须立刻生效, 所以禁止浏览器和 Cloudflare 缓存
+		c.Header("Cache-Control", "no-store, no-cache, must-revalidate")
+
+		c.String(http.StatusOK, NextEndpoint)
+	})
+
 	// D. 核心代理逻辑 (包含屏蔽逻辑和内容注入)
 	r.NoRoute(p.accessControlMiddleware(), p.mainProxyHandler)
 
@@ -161,7 +176,7 @@ func (p *ProxyHandler) accessControlMiddleware() gin.HandlerFunc {
 	// 2. 定义系统必要路径白名单 (js, css, logo 等)
 	systemPaths := []string{
 		"/", "/sw.js", "/favicon.ico", "/manifest.json", "/logo192.png", "/failed.html",
-		"/popular", "/watched",
+		"/endpoint", "/popular", "/watched",
 	}
 
 	return func(c *gin.Context) {
