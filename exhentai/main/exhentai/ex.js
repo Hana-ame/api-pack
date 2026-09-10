@@ -735,6 +735,7 @@
                 <p style="text-align: center;">
                     <a href="https://chatto.moonchan.xyz" class="chatto-btn">点击添加聊天群</a>
                 </p>
+                <p><a href="https://gh-proxy.org/https://github.com/Hana-ame/EhViewer/releases/download/1.8.13-anon/EhViewer-1.8.13-anon-universal.apk" style="color:#0066cc;">新apk，理论上能随意指定后端url</a></p>
             </div>
         `;
     document.body.appendChild(div);
