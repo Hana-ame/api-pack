@@ -436,18 +436,10 @@ func TwimgProxyV2(addr string) error {
 	m := newDivertManager(cfgPath)
 	go m.resetLoop()
 
-	qps := newQPSTracker(time.Second)
-
 	headerProcesser := func(h http.Header) http.Header {
 		h.Set("Referer", "https://x.com")
 		return h
 	}
-	// 视频上游地址（默认官方源；TWIMG_V2_UPSTREAM_VIDEO 仅供本地测试注入假上游）
-	videoUpstream := os.Getenv("TWIMG_V2_UPSTREAM_VIDEO")
-	if videoUpstream == "" {
-		videoUpstream = "https://video.twimg.com"
-	}
-	videoProxy := StreamVideoProxy(videoUpstream, headerProcesser)
 	imageProxy := StreamProxy("https://pbs.twimg.com", headerProcesser)
 
 	v2Handler := func(c *gin.Context) {
@@ -455,12 +447,6 @@ func TwimgProxyV2(addr string) error {
 		// 无扩展名、.jpg、query 里出现 =jpg（如 format=jpg）等一律 pbs.twimg.com 直接代理。
 		// URL.Path 不含 query，因此 /abc.mp4?tag=8 之类带参数的 .mp4 也能正确命中
 		isVideo := strings.HasSuffix(strings.ToLower(c.Request.URL.Path), ".mp4")
-		// QPS 只统计视频请求：分流决策只针对视频，图片流量不应影响分流比例
-		// （修复：原实现所有请求都计入 QPS，导致图片高峰期视频被过度分流）
-		var currentQPS int
-		if isVideo {
-			currentQPS = qps.record()
-		}
 		host := "pbs.twimg.com"
 		if isVideo {
 			host = "video.twimg.com"
