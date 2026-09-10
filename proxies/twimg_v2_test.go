@@ -2,15 +2,8 @@ package proxies
 
 import (
 	"context"
-	"encoding/json"
 	"io"
 	"net/http"
-	"net/http/httptest"
-	"os"
-	"path/filepath"
-	"strconv"
-	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -20,23 +13,17 @@ func sleepStart(t *testing.T, port string) {
 	time.Sleep(400 * time.Millisecond)
 }
 
-func writeCfg(t *testing.T, path string, threshold int, ratio float64, srcs []configSource) {
+// 注意：分流配置（twimg_v2.json / TWIMG_V2_CONFIG）与 videoGate 的接线已被移除，
+// TwimgProxyV2 不再读取配置，因此这里不再有写配置文件的帮助函数
+
+// 发一个请求（默认带 Cf-Ipcountry: CN）；不跟随 302，直接看 Location
+func request(t *testing.T, url string, timeout time.Duration) (*http.Response, error) {
 	t.Helper()
-	cfg := twimgV2Config{Sources: srcs}
-	if threshold >= 0 {
-		cfg.QPSThreshold = &threshold
-	}
-	if ratio >= 0 {
-		cfg.MaxDivertRatio = &ratio
-	}
-	data, _ := json.Marshal(cfg)
-	if err := os.WriteFile(path, data, 0o644); err != nil {
-		t.Fatal(err)
-	}
+	return requestWithCountry(t, url, "CN", timeout)
 }
 
-// 发一个请求；CN 且非 302 时会走反代（上游不可达，客户端超时）
-func request(t *testing.T, url string, timeout time.Duration) (*http.Response, error) {
+// requestWithCountry 带指定 Cf-Ipcountry 发请求；country 为空串表示不带该头
+func requestWithCountry(t *testing.T, url, country string, timeout time.Duration) (*http.Response, error) {
 	t.Helper()
 	hc := &http.Client{
 		Timeout: timeout,
@@ -45,7 +32,9 @@ func request(t *testing.T, url string, timeout time.Duration) (*http.Response, e
 		},
 	}
 	req, _ := http.NewRequest(http.MethodGet, url, nil)
-	req.Header.Set("Cf-Ipcountry", "CN")
+	if country != "" {
+		req.Header.Set("Cf-Ipcountry", country)
+	}
 	resp, err := hc.Do(req)
 	if err != nil {
 		return nil, err
@@ -55,180 +44,66 @@ func request(t *testing.T, url string, timeout time.Duration) (*http.Response, e
 	return resp, nil
 }
 
-// 302 分流 + 计数器：limit=3 的节点集中用满,前 3 次 302,第 4 次起 fallback 反代
-func TestTwimgV2DivertAndCounter(t *testing.T) {
-	dir := t.TempDir()
-	cfgPath := filepath.Join(dir, "cfg.json")
-	writeCfg(t, cfgPath, 0, 1.0, []configSource{ // qps_threshold=0 + ratio=1 -> 全分流
-		{Domain: "mirror.test", Limit: 3, Enabled: true},
-	})
-	t.Setenv("TWIMG_V2_CONFIG", cfgPath)
+// 视频（.mp4）一律 302 到 twimg.moonchan.xyz：保留原 path+query、禁缓存、
+// 扩展名大小写不敏感；query 不影响判定（URL.Path 不含 query）
+func TestTwimgV2Video302(t *testing.T) {
 	go TwimgProxyV2("127.0.0.1:18081")
 	sleepStart(t, "18081")
 
-	for i := 1; i <= 3; i++ {
-		// 带 query 参数的 .mp4 也要正确命中分流,且 302 Location 保留原 query
-		resp, err := request(t, "http://127.0.0.1:18081/tweet_video/1.mp4?tag=8&x=1", time.Second)
+	for _, p := range []string{
+		"/tweet_video/1.mp4",
+		"/tweet_video/1.mp4?tag=8&x=1",
+		"/ext_tw_video/123/pu/vid/320x180/abc.mp4?tag=12",
+		"/amplify_video/456/vid/avc1/720x1280/xyz.MP4",
+	} {
+		resp, err := request(t, "http://127.0.0.1:18081"+p, time.Second)
 		if err != nil {
-			t.Fatalf("第 %d 次应 302,却报错: %v", i, err)
+			t.Fatalf("%s 应 302,却报错: %v", p, err)
 		}
 		if resp.StatusCode != 302 {
-			t.Fatalf("第 %d 次应 302,got %d", i, resp.StatusCode)
+			t.Fatalf("%s 应 302, got %d", p, resp.StatusCode)
 		}
-		if loc := resp.Header.Get("Location"); loc != "https://mirror.test/tweet_video/1.mp4?tag=8&x=1" {
-			t.Fatalf("302 Location 错误: %s", loc)
+		if loc, want := resp.Header.Get("Location"), "https://twimg.moonchan.xyz"+p; loc != want {
+			t.Fatalf("%s Location=%s,期望 %s", p, loc, want)
 		}
 		if cc := resp.Header.Get("Cache-Control"); cc == "" {
 			t.Fatal("302 必须带 Cache-Control 禁止缓存")
 		}
 	}
-
-	// 计数器到 limit:第 4 次不应再 302(fallback 自建反代,上游不可达 -> 超时)
-	if resp, err := request(t, "http://127.0.0.1:18081/tweet_video/1.mp4?tag=8", 1500*time.Millisecond); err == nil {
-		if resp.StatusCode == 302 {
-			t.Fatal("limit 用尽后不应再 302")
-		}
-	}
 }
 
-// 集中使用：节点按配置顺序排队,前一个用满 limit 才切下一个
-func TestTwimgV2Concentrated(t *testing.T) {
-	dir := t.TempDir()
-	cfgPath := filepath.Join(dir, "cfg.json")
-	writeCfg(t, cfgPath, 0, 1.0, []configSource{
-		{Domain: "a.mirror.test", Limit: 2, Enabled: true},
-		{Domain: "b.mirror.test", Limit: 100, Enabled: true},
-	})
-	t.Setenv("TWIMG_V2_CONFIG", cfgPath)
-	go TwimgProxyV2("127.0.0.1:18085")
-	sleepStart(t, "18085")
-
-	want := []string{
-		"https://a.mirror.test/tweet_video/1.mp4",
-		"https://a.mirror.test/tweet_video/1.mp4",
-		"https://b.mirror.test/tweet_video/1.mp4",
-		"https://b.mirror.test/tweet_video/1.mp4",
-	}
-	for i, w := range want {
-		resp, err := request(t, "http://127.0.0.1:18085/tweet_video/1.mp4", time.Second)
-		if err != nil {
-			t.Fatalf("第 %d 次应 302,却报错: %v", i+1, err)
-		}
-		if loc := resp.Header.Get("Location"); loc != w {
-			t.Fatalf("第 %d 次 Location=%s,期望 %s", i+1, loc, w)
-		}
-	}
-}
-
-// 本体兜底：ratio=0.5 时请求交错抽样,偶数次 302、奇数次由本体自扛(反代,上游不可达 -> 超时)
-func TestTwimgV2OriginShare(t *testing.T) {
-	dir := t.TempDir()
-	cfgPath := filepath.Join(dir, "cfg.json")
-	writeCfg(t, cfgPath, 0, 0.5, []configSource{
-		{Domain: "mirror.test", Limit: 100, Enabled: true},
-	})
-	t.Setenv("TWIMG_V2_CONFIG", cfgPath)
-	go TwimgProxyV2("127.0.0.1:18086")
-	sleepStart(t, "18086")
-
-	for i := 1; i <= 5; i++ {
-		resp, err := request(t, "http://127.0.0.1:18086/tweet_video/1.mp4", 1500*time.Millisecond)
-		if i%2 == 0 {
-			if err != nil || resp.StatusCode != 302 {
-				t.Fatalf("第 %d 次应 302,got err=%v resp=%v", i, err, resp)
-			}
-			if loc := resp.Header.Get("Location"); loc != "https://mirror.test/tweet_video/1.mp4" {
-				t.Fatalf("第 %d 次 Location 错误: %s", i, loc)
-			}
-		} else if err == nil && resp.StatusCode == 302 {
-			t.Fatalf("第 %d 次是本体兜底,不应 302", i)
-		}
-	}
-}
-
-// 禁用节点:enabled=false 后不走 302
-func TestTwimgV2DisableNode(t *testing.T) {
-	dir := t.TempDir()
-	cfgPath := filepath.Join(dir, "cfg.json")
-	writeCfg(t, cfgPath, 0, 1.0, []configSource{
-		{Domain: "mirror.test", Limit: 10, Enabled: false},
-	})
-	t.Setenv("TWIMG_V2_CONFIG", cfgPath)
-	go TwimgProxyV2("127.0.0.1:18082")
-	sleepStart(t, "18082")
-
-	if resp, err := request(t, "http://127.0.0.1:18082/tweet_video/1.mp4", 1*time.Second); err == nil {
-		if resp.StatusCode == 302 {
-			t.Fatal("被禁用的节点不应产生 302")
-		}
-	}
-}
-
-// 非 CN 直接 302 官方源;CN 低 QPS 用 /tweet_video/1.mp4 验证走自建反代(不是 302)
-func TestTwimgV2NonCNAndSelfProxy(t *testing.T) {
-	dir := t.TempDir()
-	cfgPath := filepath.Join(dir, "cfg.json")
-	writeCfg(t, cfgPath, 10, 1.0, []configSource{
-		{Domain: "mirror.test", Limit: 100, Enabled: true},
-	})
-	t.Setenv("TWIMG_V2_CONFIG", cfgPath)
+// 视频 302 与地区无关：CN / 非 CN / 无 Cf-Ipcountry 都是同一个 Location
+func TestTwimgV2VideoRedirectIgnoresCountry(t *testing.T) {
 	go TwimgProxyV2("127.0.0.1:18084")
 	sleepStart(t, "18084")
 
-	// 非 CN -> 直接 302 官方源
-	hc := &http.Client{
-		Timeout: time.Second,
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			return http.ErrUseLastResponse // 不跟随 302,直接看 Location
-		},
-	}
-	req, _ := http.NewRequest(http.MethodGet, "http://127.0.0.1:18084/foo.jpg", nil)
-	req.Header.Set("Cf-Ipcountry", "US")
-	resp, err := hc.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	io.Copy(io.Discard, resp.Body)
-	resp.Body.Close()
-	if resp.StatusCode != 302 || resp.Header.Get("Location") != "https://pbs.twimg.com/foo.jpg" {
-		t.Fatalf("非CN 302 错误: %d %s", resp.StatusCode, resp.Header.Get("Location"))
-	}
-	req, _ = http.NewRequest(http.MethodGet, "http://127.0.0.1:18084/tweet_video/1.mp4?x=1", nil)
-	req.Header.Set("Cf-Ipcountry", "JP")
-	resp, err = hc.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	io.Copy(io.Discard, resp.Body)
-	resp.Body.Close()
-	if resp.StatusCode != 302 || resp.Header.Get("Location") != "https://video.twimg.com/tweet_video/1.mp4?x=1" {
-		t.Fatalf("非CN video 302 错误: %d %s", resp.StatusCode, resp.Header.Get("Location"))
-	}
-
-	// CN 低 QPS -> 自建反代(favicon.ico,上游不可达 -> 超时,必非 302)
-	resp, err = request(t, "http://127.0.0.1:18084/tweet_video/1.mp4", 1500*time.Millisecond)
-	if err == nil && resp.StatusCode == 302 {
-		t.Fatal("CN 低 QPS 不应 302 分流")
+	for _, country := range []string{"CN", "US", "JP", ""} {
+		resp, err := requestWithCountry(t, "http://127.0.0.1:18084/tweet_video/1.mp4?x=1", country, time.Second)
+		if err != nil {
+			t.Fatalf("country=%q 应 302,却报错: %v", country, err)
+		}
+		if resp.StatusCode != 302 || resp.Header.Get("Location") != "https://twimg.moonchan.xyz/tweet_video/1.mp4?x=1" {
+			t.Fatalf("country=%q 302 错误: %d %s", country, resp.StatusCode, resp.Header.Get("Location"))
+		}
 	}
 }
 
-// 非 mp4 绝不分流：即使 threshold=0 + ratio=1.0（mp4 全分流），
-// .jpg / 无扩展名 / query 含 =jpg 的请求也一律直接代理 pbs.twimg.com（上游不可达 -> 超时）
-func TestTwimgV2ImageNeverDiverts(t *testing.T) {
-	dir := t.TempDir()
-	cfgPath := filepath.Join(dir, "cfg.json")
-	writeCfg(t, cfgPath, 0, 1.0, []configSource{
-		{Domain: "mirror.test", Limit: 100, Enabled: true},
-	})
-	t.Setenv("TWIMG_V2_CONFIG", cfgPath)
+// 图片绝不做 302：.jpg / 无扩展名 / query 形如 format=jpg 一律本体反代 pbs.twimg.com,
+// 且不分地区。上游在本机不可达 -> 请求被反代挂住直到客户端超时,这正好证明没被 302
+// （一旦拿到 302 就是回归：曾经 d81e812 把所有请求无条件 302 到 twimg.moonchan.xyz）
+func TestTwimgV2ImageProxiedNever302(t *testing.T) {
 	go TwimgProxyV2("127.0.0.1:18087")
 	sleepStart(t, "18087")
 
-	paths := []string{"/foo.jpg", "/media/abc", "/media/abc?format=jpg&name=large"}
-	for _, p := range paths {
-		if resp, err := request(t, "http://127.0.0.1:18087"+p, 1*time.Second); err == nil {
+	paths := []string{"/foo.jpg", "/media/abc", "/media/abc?format=jpg&name=large", "/profile_images/1/x.png"}
+	for _, country := range []string{"CN", "US", "JP", ""} {
+		for _, p := range paths {
+			resp, err := requestWithCountry(t, "http://127.0.0.1:18087"+p, country, 500*time.Millisecond)
+			if err != nil {
+				continue // 反代上游不可达 -> 超时,符合预期
+			}
 			if resp.StatusCode == 302 {
-				t.Fatalf("非 mp4 请求 %s 不应 302 分流,Location=%s", p, resp.Header.Get("Location"))
+				t.Fatalf("图片 %s (country=%q) 不应 302,Location=%s", p, country, resp.Header.Get("Location"))
 			}
 		}
 	}
@@ -456,126 +331,3 @@ func TestVideoGate(t *testing.T) {
 		}
 	})
 }
-
-// videoGate 端到端：视频上游可注入时，IP 累计下载超配额（在流结束时判定）
-// 后永久进池；池内第 2 路占用唯一槽，第 3 路挂起排队（不达上游）；
-// 槽释放后照常服务，全程无 429/5xx
-func TestTwimgV2VideoGateE2E(t *testing.T) {
-	dir := t.TempDir()
-	cfgPath := filepath.Join(dir, "cfg.json")
-	cfg := twimgV2Config{
-		Sources:        []configSource{{Domain: "mirror.test", Limit: 100, Enabled: true}},
-		QPSThreshold:   intPtr(1000), // 高阈值:不触发 302 分流,走本体反代
-		MaxDivertRatio: float64Ptr(1.0),
-		VideoIPQuotaGB: float64Ptr(0.00001), // 约 10KB 配额:第一路就超
-	}
-	data, _ := json.Marshal(cfg)
-	if err := os.WriteFile(cfgPath, data, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("TWIMG_V2_CONFIG", cfgPath)
-
-	// 假上游：首个请求全速写完；后续请求写满 2MB 后阻塞等 release
-	// （模拟长视频下载中，让"排队中"可被观察）
-	const size int64 = 4 << 20
-	var reqCount atomic.Int64
-	release := make(chan struct{})
-	var releaseOnce sync.Once
-	unblock := func() { releaseOnce.Do(func() { close(release) }) }
-	t.Cleanup(unblock) // 失败路径也要放行,否则 httptest.Close 等挂起连接卡死测试
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		n := reqCount.Add(1)
-		w.Header().Set("Content-Length", strconv.FormatInt(size, 10))
-		w.WriteHeader(http.StatusOK)
-		written := int64(0)
-		for written < size {
-			chunk := int64(1 << 20)
-			if n > 1 && written >= 2<<20 {
-				<-release
-			}
-			if size-written < chunk {
-				chunk = size - written
-			}
-			wn, err := w.Write(make([]byte, chunk))
-			written += int64(wn)
-			if err != nil {
-				return
-			}
-		}
-	}))
-	defer upstream.Close()
-	t.Setenv("TWIMG_V2_UPSTREAM_VIDEO", upstream.URL)
-
-	go TwimgProxyV2("127.0.0.1:18089")
-	sleepStart(t, "18089")
-
-	client := func(ip string) (int, error) {
-		req, _ := http.NewRequest(http.MethodGet, "http://127.0.0.1:18089/tweet_video/a.mp4", nil)
-		req.Header.Set("Cf-Ipcountry", "CN")
-		req.Header.Set("Cf-Connecting-Ip", ip)
-		resp, err := (&http.Client{Timeout: 15 * time.Second}).Do(req)
-		if err != nil {
-			return 0, err
-		}
-		io.Copy(io.Discard, resp.Body)
-		resp.Body.Close()
-		return resp.StatusCode, nil
-	}
-
-	// 第 1 路：配额内放行，全速完成 -> 流结束时累计超配额，当场进池
-	done1 := make(chan int, 1)
-	go func() { s, _ := client("9.9.9.9"); done1 <- s }()
-	select {
-	case s := <-done1:
-		if s != http.StatusOK {
-			t.Fatalf("第 1 路应 200, got %d", s)
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("第 1 路超时未完成")
-	}
-
-	// 第 2 路：已进池 -> 槽空闲,立即占用,开始服务（上游阻塞在 2MB）
-	done2 := make(chan int, 1)
-	go func() { s, _ := client("9.9.9.9"); done2 <- s }()
-	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) && reqCount.Load() < 2 {
-		time.Sleep(20 * time.Millisecond)
-	}
-	if reqCount.Load() < 2 {
-		t.Fatal("第 2 路未开始服务")
-	}
-
-	// 第 3 路：池内且槽被占 -> 挂起排队,短时间内不应到达上游
-	done3 := make(chan int, 1)
-	go func() { s, _ := client("9.9.9.9"); done3 <- s }()
-	select {
-	case s := <-done3:
-		t.Fatalf("第 3 路应挂起排队,却已完成(status=%d)", s)
-	case <-time.After(500 * time.Millisecond):
-	}
-	if got := reqCount.Load(); got != 2 {
-		t.Fatalf("排队期间不应有第 3 路到达上游, reqCount=%d", got)
-	}
-
-	// 释放第 2 路 -> 第 3 路拿到槽,照常服务完成(200),全程无 429/5xx
-	unblock()
-	select {
-	case s := <-done2:
-		if s != http.StatusOK {
-			t.Fatalf("第 2 路应 200, got %d", s)
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("第 2 路超时未完成")
-	}
-	select {
-	case s := <-done3:
-		if s != http.StatusOK {
-			t.Fatalf("第 3 路等槽后应 200, got %d", s)
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("第 3 路等槽后超时未完成")
-	}
-}
-
-func intPtr(v int) *int             { return &v }
-func float64Ptr(v float64) *float64 { return &v }

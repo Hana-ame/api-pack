@@ -404,20 +404,12 @@ func (t *qpsTracker) record() int {
 	return len(t.times)
 }
 
-// TwimgProxyV2 镜像分流版 twimg 反代：
-//   - 仅 .mp4 请求走 video.twimg.com 并参与分流；无扩展名 / .jpg / query 含 =jpg 的
-//     请求一律直接代理 pbs.twimg.com，绝不分流
-//   - 空闲（QPS<=阈值）时 .mp4 全部由本体反代 video.twimg.com；
-//     QPS 超阈值后只把超过的部分按比例 302 分流到镜像节点
-//     （配置文件 twimg_v2.json 启动时加载，改配置等每日重启生效），禁止缓存；
-//     且分流比例不超 max_divert_ratio，即使 QPS 爆掉本体也始终自扛一部分；
-//     每个节点独立计数，超过 limit 后禁用该节点，每日 UTC 0 点重置
-//   - UTC 20:00~24:00 为分流域禁用窗口，只走自建反代
-//   - 视频限速池（仅 .mp4）：video_ip_quota_gb（缺省 10GB，进程存活期累计）
-//     每 IP 视频累计下载超配额即永久进池，池内同时只服务 1 路视频，
-//     其余挂起保活排队（不发任何响应、TCP keepalive 保活；等槽期间客户端
-//     没断就照常服务，全程无 4xx/5xx，速度不限）；图片完全不参与
-//   - 非 CN 请求一律 302 到官方源直连，不缓存
+// TwimgProxyV2 twimg 反代（部署于 pbs.moonchan.xyz）：
+//   - 仅扩展名为 .mp4 的请求（视频）302 重定向到 twimg.moonchan.xyz，保留 path+query，禁缓存
+//   - 其余请求（.jpg / 无扩展名 / query 形如 format=jpg 的图片）一律由本体直接反代
+//     pbs.twimg.com，不做任何 302，也不看 Cf-Ipcountry
+//   - 视频不再参与本体反代：StreamVideoProxy / 分流计数 / 每 IP 配额那套代码
+//     目前未被 handler 调用（保留供后续恢复，详见 divertManager、videoGate）
 //   - StreamProxy 基于 request context，客户端断开会级联取消上游请求，避免流量空跑
 func TwimgProxyV2(addr string) error {
 	if addr == "" {
@@ -428,10 +420,21 @@ func TwimgProxyV2(addr string) error {
 	r.Use(middleware.CORSMiddleware())
 	r.Use(middleware.ProxyMiddleware())
 
-	// 所有请求无条件 302 重定向到 twimg.moonchan.xyz
+	headerProcesser := func(h http.Header) http.Header {
+		h.Set("Referer", "https://x.com")
+		return h
+	}
+	// 图片走本体反代（StreamProxy 自带背压 + 客户端断开级联取消）
+	imageProxy := StreamProxy("https://pbs.twimg.com", headerProcesser)
+
 	v2Handler := func(c *gin.Context) {
-		c.Header("Cache-Control", "no-cache, no-store, private")
-		c.Redirect(http.StatusFound, "https://twimg.moonchan.xyz"+c.Request.URL.String())
+		// URL.Path 不含 query，所以 /abc.mp4?tag=8 这类带参视频也能命中
+		if strings.HasSuffix(strings.ToLower(c.Request.URL.Path), ".mp4") {
+			c.Header("Cache-Control", "no-cache, no-store, private")
+			c.Redirect(http.StatusFound, "https://twimg.moonchan.xyz"+c.Request.URL.String())
+			return
+		}
+		imageProxy(c)
 	}
 	r.GET("/*any", v2Handler)
 	r.HEAD("/*any", v2Handler)
