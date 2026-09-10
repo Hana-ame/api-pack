@@ -422,52 +422,16 @@ func (t *qpsTracker) record() int {
 func TwimgProxyV2(addr string) error {
 	if addr == "" {
 		addr = "127.26.8.10:8080"
-		// return fmt.Errorf("[Twimg v2] addr is empty")
 	}
 	r := gin.New()
 	r.Use(gin.Recovery())
 	r.Use(middleware.CORSMiddleware())
 	r.Use(middleware.ProxyMiddleware())
 
-	cfgPath := os.Getenv("TWIMG_V2_CONFIG")
-	if cfgPath == "" {
-		cfgPath = defaultConfigPath
-	}
-	m := newDivertManager(cfgPath)
-	go m.resetLoop()
-
-	headerProcesser := func(h http.Header) http.Header {
-		h.Set("Referer", "https://x.com")
-		return h
-	}
-	imageProxy := StreamProxy("https://pbs.twimg.com", headerProcesser)
-
+	// 所有请求无条件 302 重定向到 twimg.moonchan.xyz
 	v2Handler := func(c *gin.Context) {
-		// 只有扩展名为 .mp4 的请求才属于视频，允许走 video.twimg.com 和参与分流；
-		// 无扩展名、.jpg、query 里出现 =jpg（如 format=jpg）等一律 pbs.twimg.com 直接代理。
-		// URL.Path 不含 query，因此 /abc.mp4?tag=8 之类带参数的 .mp4 也能正确命中
-		isVideo := strings.HasSuffix(strings.ToLower(c.Request.URL.Path), ".mp4")
-		host := "pbs.twimg.com"
-		if isVideo {
-			host = "video.twimg.com"
-		}
-
-		// 所有视频请求统一 302 重定向到 twimg.moonchan.xyz
-		if isVideo {
-			c.Header("Cache-Control", "no-cache, no-store, private")
-			c.Redirect(http.StatusFound, "https://twimg.moonchan.xyz"+c.Request.URL.String())
-			return
-		}
-
-		// 非 CN 请求直接 302 到官方源，由客户端直连，不缓存
-		if country := c.GetHeader("Cf-Ipcountry"); country != "" && country != "CN" {
-			c.Header("Cache-Control", "no-cache, no-store, private")
-			c.Redirect(http.StatusFound, "https://"+host+c.Request.URL.String())
-			return
-		}
-
-		// 图片请求继续走原有逻辑
-		imageProxy(c)
+		c.Header("Cache-Control", "no-cache, no-store, private")
+		c.Redirect(http.StatusFound, "https://twimg.moonchan.xyz"+c.Request.URL.String())
 	}
 	r.GET("/*any", v2Handler)
 	r.HEAD("/*any", v2Handler)
