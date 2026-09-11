@@ -286,13 +286,11 @@ class Ehentai extends ComicSource {
 
         onImageLoad: async (image, comicId, epId, nl) => {
             let page = Number(image)
-            let url = comicId
-            if (page > 0) url += "?p=" + page
-
-            let res = await Network.get(url, { 'cookie': 'nw=1' })
+            let res = await Network.get(comicId, { 'cookie': 'nw=1', 'cache-time': 'long' })
             if (res.status !== 200) throw `Invalid status code: ${res.status}`
             let document = new HtmlDocument(res.body)
 
+            // 找到所有缩略图 div，取第 page 个
             let parseBgUrl = (el) => {
                 let style = el.attributes['style'];
                 if (!style) return null;
@@ -309,23 +307,30 @@ class Ehentai extends ComicSource {
                 return bgUrl;
             }
 
-            let imgEl = document.querySelector("div.gt100 > a > div")
-                || document.querySelector("div.gt200 > a > div")
-                || document.querySelector("div.gdtm > div")
+            // 按优先级选择缩略图容器
+            let thumbs = document.querySelectorAll("div.gt100 > a > div")
+                || document.querySelectorAll("div.gt200 > a > div")
+                || document.querySelectorAll("div.gdtm > div")
 
+            if (thumbs.length === 0) {
+                // 尝试直接 img 标签
+                let imgs = document.querySelectorAll("div.gt100 > a > img")
+                    || document.querySelectorAll("div.gt200 > a > img")
+                if (imgs[page]) {
+                    document.dispose()
+                    return { url: imgs[page].attributes["src"], headers: { 'referer': this.baseUrl } }
+                }
+            }
+
+            let imgEl = thumbs[page]
             let imageUrl = null
             if (imgEl) {
                 let child = imgEl.children.length === 0 ? imgEl : imgEl.children[0]
                 imageUrl = parseBgUrl(child)
             }
-            if (!imageUrl) {
-                let img = document.querySelector("div.gt100 > a > img")
-                    || document.querySelector("div.gt200 > a > img")
-                if (img) imageUrl = img.attributes["src"]
-            }
 
             document.dispose()
-            if (!imageUrl) throw "Failed to parse image URL from page"
+            if (!imageUrl) throw `Failed to parse image URL for page ${page}`
             return { url: imageUrl, headers: { 'referer': this.baseUrl } }
         },
 
