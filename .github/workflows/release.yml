@@ -19,9 +19,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          # 关键点：设置为 true 或 recursive 以拉取子模块
-          submodules: recursive
-          # 建议同时拉取所有历史，防止某些版本计算工具失效
+          # 不再使用 submodule；拉取全部历史以防版本计算工具失效
           fetch-depth: 0
 
       - name: Set up Go
@@ -48,7 +46,7 @@ jobs:
           fi
 
           # 执行编译
-          go build -v -o "$BINARY_NAME" .
+          go build -v -o "$BINARY_NAME" ./cmd/api-pack
 
           # 存储文件名供后续步骤使用
           echo "BINARY_NAME=$BINARY_NAME" >> $GITHUB_ENV

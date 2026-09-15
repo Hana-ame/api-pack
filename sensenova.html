@@ -53,6 +53,13 @@ button:hover:not(:disabled){opacity:.85}
       <label for="steps">步数</label>
       <input type="number" id="steps" value="20" min="1" max="50">
     </div>
+    <div>
+      <label for="format">输出格式</label>
+      <select id="format">
+        <option value="b64_json">b64_json</option>
+        <option value="url">url</option>
+      </select>
+    </div>
   </div>
 
   <label for="seed">随机种子 (留空随机)</label>
@@ -85,6 +92,7 @@ async function generate(){
     prompt:prompt,
     size:document.getElementById('size').value,
     steps:parseInt(document.getElementById('steps').value),
+    response_format:document.getElementById('format').value,
   };
   if(seedVal)body.seed=parseInt(seedVal);
   try{
@@ -102,7 +110,7 @@ async function generate(){
     if(!url){errEl.textContent='无法解析响应: '+JSON.stringify(data).slice(0,300);return}
     if(url.startsWith('data:'))img.src=url;
     else img.src=url;
-    info.textContent='模型 '+data.model||document.getElementById('model').value+' · '+document.getElementById('size').value;
+    info.textContent='模型 '+(data.model||document.getElementById('model').value)+' · '+document.getElementById('size').value+' · '+(data.data&&data.data[0]&&data.data[0].url?'url':'b64_json');
     out.style.display='block';
   }catch(e){errEl.textContent=e.message}
   btn.disabled=false;btn.textContent='生成图片';
