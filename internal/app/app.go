@@ -100,6 +100,8 @@ func Run() {
 				"deepseek-ai/DeepSeek-R1-0528-Qwen3-8B":   true,
 				"THUDM/GLM-Z1-9B-0414":                    true,
 				"Qwen/Qwen2.5-7B-Instruct":                true,
+				"BAAI/bge-m3":                              true,
+				"BAAI/bge-reranker-v2-m3":                  true,
 				"THUDM/GLM-4-9B-0414":                     true,
 				"internlm/internlm2_5-7b-chat":            true,
 			},
