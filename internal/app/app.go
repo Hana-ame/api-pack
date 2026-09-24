@@ -112,11 +112,25 @@ func Run() {
 			},
 		})
 	})
+	// Gemini (Google AI Studio / generativelanguage.googleapis.com) CORS 反代:
+	// 客户端不带头时按模型注入 GEMINI_API_KEY（AI Studio key）:
+	//   gemma-4-31b-it / gemma-4-26b-a4b-it 命中即注入, 其余模型走透传(客户端自带 Bearer)。
+	// Endpoint 不含 /v1beta, 客户端路径原样透传:
+	//   OpenAI 兼容  /v1beta/openai/chat/completions
+	//   原生 REST    /v1beta/models/<model>:generateContent
+	// 注: FreeModels 非空时的两个 400 副作用(属既有行为, 见 generic_proxy.go):
+	//   ① 非 JSON 请求体(GET /v1beta/openai/models) -> 400 "invalid JSON";
+	//   ② 原生 REST /v1beta/models/<m>:generateContent(model 在 URL 不在 body) -> 400
+	//      "model field is required"。本代理请走 OpenAI 兼容路径 /v1beta/openai/。
 	startIfEnv("GEMINI_PROXY", func() {
 		proxy.RunProxyRouter(os.Getenv("GEMINI_PROXY"), proxy.ProxyConfig{
-			Name:          "gemini",
-			Endpoint:      "https://generativelanguage.googleapis.com",
-			FreeModelsAll: true,
+			Name:     "gemini",
+			Endpoint: "https://generativelanguage.googleapis.com",
+			APIKey:   os.Getenv("GEMINI_API_KEY"),
+			FreeModels: map[string]bool{
+				"gemma-4-31b-it":     true,
+				"gemma-4-26b-a4b-it": true,
+			},
 			MaskedHeaders: []string{
 				"Authorization",
 				"X-Api-Key",
