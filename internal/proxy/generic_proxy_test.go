@@ -130,3 +130,73 @@ func TestGenericProxyErrorMasksSensitiveHeaders(t *testing.T) {
 		t.Fatalf("Authorization header not masked, body:\n%s", body)
 	}
 }
+
+// TestStripBodyKeys —— DropBodyKeys 顶层剥键: 命中删除、非命中保留、值字节保真。
+func TestStripBodyKeys(t *testing.T) {
+	body := `{"model":"gemma-4-26b-a4b-it","store":false,"stream_options":{"include_usage":true},"messages":[],"max_tokens":100,"n":1.5}`
+	got, err := stripBodyKeys([]byte(body), []string{"store", "stream_options"})
+	if err != nil {
+		t.Fatalf("stripBodyKeys err: %v", err)
+	}
+	s := string(got)
+	for _, banned := range []string{"store", "stream_options", "include_usage"} {
+		if strings.Contains(s, banned) {
+			t.Errorf("被删字段仍存在 %q: %s", banned, s)
+		}
+	}
+	for _, kept := range []string{`"model":"gemma-4-26b-a4b-it"`, `"max_tokens":100`, `"n":1.5`} {
+		if !strings.Contains(s, kept) {
+			t.Errorf("应保留字段丢失 %q: %s", kept, s)
+		}
+	}
+}
+
+// TestStripBodyKeysNonJSON —— 非 JSON 体(如 GET 无体)原样返回 + err, 不透传乱改。
+func TestStripBodyKeysNonJSON(t *testing.T) {
+	if out, err := stripBodyKeys([]byte(""), []string{"store"}); err == nil {
+		t.Errorf("空体应报 err, 得到 %q", out)
+	}
+	if out, err := stripBodyKeys([]byte("plain text"), []string{"store"}); err == nil {
+		t.Errorf("非 JSON 应报 err, 得到 %q", out)
+	}
+	if out, err := stripBodyKeys([]byte(`[1,2,3]`), []string{"store"}); err == nil {
+		t.Errorf("数组应报 err, 得到 %q", out)
+	}
+}
+
+// TestStripBodyKeysHandler —— 端到端: DropBodyKeys 配置下, 上游收到的 body 不含被删键。
+func TestStripBodyKeysHandler(t *testing.T) {
+	var upstreamBody string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b := make([]byte, r.ContentLength)
+		r.Body.Read(b)
+		upstreamBody = string(b)
+		w.WriteHeader(200)
+		w.Write([]byte(`{}`))
+	}))
+	defer upstream.Close()
+
+	gin.SetMode(gin.TestMode)
+	h := GenericProxyHandler(ProxyConfig{
+		Name:         "t",
+		Endpoint:     upstream.URL,
+		DropBodyKeys: []string{"store", "stream_options"},
+	})
+	req := httptest.NewRequest("POST", "/v1/chat/completions",
+		strings.NewReader(`{"model":"m","store":false,"stream_options":{"include_usage":true},"messages":[]}`))
+	w := httptest.NewRecorder()
+	h(ginCtx(req, w))
+
+	if strings.Contains(upstreamBody, "store") || strings.Contains(upstreamBody, "include_usage") {
+		t.Errorf("上游仍收到被删字段: %s", upstreamBody)
+	}
+	if !strings.Contains(upstreamBody, `"model":"m"`) {
+		t.Errorf("上游 body 丢失 model: %s", upstreamBody)
+	}
+}
+
+func ginCtx(req *http.Request, w *httptest.ResponseRecorder) *gin.Context {
+	c, _ := gin.CreateTestContext(w)
+	c.Request = req
+	return c
+}

@@ -100,8 +100,8 @@ func Run() {
 				"deepseek-ai/DeepSeek-R1-0528-Qwen3-8B":   true,
 				"THUDM/GLM-Z1-9B-0414":                    true,
 				"Qwen/Qwen2.5-7B-Instruct":                true,
-				"BAAI/bge-m3":                              true,
-				"BAAI/bge-reranker-v2-m3":                  true,
+				"BAAI/bge-m3":                             true,
+				"BAAI/bge-reranker-v2-m3":                 true,
 				"THUDM/GLM-4-9B-0414":                     true,
 				"internlm/internlm2_5-7b-chat":            true,
 			},
@@ -122,6 +122,8 @@ func Run() {
 	//   ① 非 JSON 请求体(GET /v1beta/openai/models) -> 400 "invalid JSON";
 	//   ② 原生 REST /v1beta/models/<m>:generateContent(model 在 URL 不在 body) -> 400
 	//      "model field is required"。本代理请走 OpenAI 兼容路径 /v1beta/openai/。
+	// DropBodyKeys: Google 严格 OpenAI 兼容端点拒绝 OpenAI 专有字段(实测
+	//   store/stream_options -> 400 "Unknown name"), 转发前剥掉顶层键。
 	startIfEnv("GEMINI_PROXY", func() {
 		proxy.RunProxyRouter(os.Getenv("GEMINI_PROXY"), proxy.ProxyConfig{
 			Name:     "gemini",
@@ -130,6 +132,10 @@ func Run() {
 			FreeModels: map[string]bool{
 				"gemma-4-31b-it":     true,
 				"gemma-4-26b-a4b-it": true,
+			},
+			DropBodyKeys: []string{
+				"store",
+				"stream_options",
 			},
 			MaskedHeaders: []string{
 				"Authorization",

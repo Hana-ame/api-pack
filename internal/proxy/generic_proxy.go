@@ -3,6 +3,7 @@ package proxy
 import (
 	"bytes"
 	"compress/gzip"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -44,6 +45,11 @@ type ProxyConfig struct {
 	// 防止 Authorization / X-Api-Key 等敏感信息(尤其服务端注入的 APIKey)泄露给客户端。
 	// 为空时仍会默认屏蔽 Authorization、Cookie 以及常见 key/token 头。
 	MaskedHeaders []string
+	// DropBodyKeys 非空时, 转发上游前从请求 JSON body 顶层删除这些键——
+	// 用于 Google generativelanguage 等【严格】OpenAI 兼容端点: 它们拒绝 OpenAI
+	// 专有字段(如 store / stream_options), 报 400 "Unknown name ... Cannot find field"。
+	// 只删顶层键; 非 JSON 体原样透传。
+	DropBodyKeys []string
 }
 
 type ModelInfo struct {
@@ -143,6 +149,15 @@ func GenericProxyHandler(config ProxyConfig) gin.HandlerFunc {
 			// Handle cases where Endpoint might not have trailing slash and path is empty
 		} else if !strings.HasSuffix(config.Endpoint, "/") && !strings.HasPrefix(c.Request.URL.Path, "/") {
 			targetURL = config.Endpoint + "/" + c.Request.URL.Path
+		}
+
+		// 按配置删除请求体顶层 OpenAI 专有字段(store/stream_options 等):
+		// Google 等严格 OpenAI 兼容端点会 400 "Unknown name ... Cannot find field"。
+		if len(config.DropBodyKeys) > 0 {
+			if cleaned, err := stripBodyKeys(bodyBytes, config.DropBodyKeys); err == nil {
+				bodyBytes = cleaned
+			}
+			// 解析失败(非 JSON / 非对象, 如 GET 无体)保持原样透传
 		}
 
 		// 上游请求: Timeout>0 时用独立 client 覆盖默认 30s (生图同步接口可能需数十秒)
@@ -259,6 +274,26 @@ func maskHeaderValue(key, value string, masked []string) string {
 		return "***"
 	}
 	return value
+}
+
+// stripBodyKeys 从 JSON 对象顶层删除指定键并重新序列化。
+// body 不是 JSON 对象(非 JSON / 数组 / 空)时返回 err, 调用方保持原样透传。
+// 用 json.RawMessage 保留各值的原始字节(数值/字符串不被重编码走样)。
+func stripBodyKeys(body []byte, keys []string) ([]byte, error) {
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(body, &m); err != nil {
+		return nil, err
+	}
+	drop := make(map[string]bool, len(keys))
+	for _, k := range keys {
+		drop[k] = true
+	}
+	for k := range m {
+		if drop[k] {
+			delete(m, k)
+		}
+	}
+	return json.Marshal(m)
 }
 
 // RunProxyRouter starts a gin server that proxies all requests to the provided config
