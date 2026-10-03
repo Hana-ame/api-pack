@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/Hana-ame/api-pack/internal/service/moonchan/bot"
+	"github.com/Hana-ame/api-pack/internal/service/opencode"
 	myfetch "github.com/Hana-ame/api-pack/pkg/fetch"
 	handler "github.com/Hana-ame/api-pack/pkg/ginutil/handler"
 	middleware "github.com/Hana-ame/api-pack/pkg/ginutil/middleware"
@@ -692,6 +693,9 @@ func Run(addr string) error {
 	}, bot.Handler)
 
 	r.NoRoute(handler.NoRoute("/var/www/moonchan", "index.html"))
+
+	// opencode zen free-tier 反代: /api/v2/opencode/*any?net=v4|v6|auto
+	opencode.Routes(r)
 
 	return r.Run(addr)
 }
