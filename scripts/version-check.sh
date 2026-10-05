@@ -113,6 +113,30 @@ fi
 api_latest() { $GH "repos/$REPO/releases/latest"; }
 api_tags()   { $GH "repos/$REPO/tags?per_page=100"; }
 
+# --- tag 形态分类 -------------------------------------------------
+# "版本对不上"至少有三类，必须分开报，否则没法处置：
+#   semver    正常发布版本（v26.10.03）——参与正常比对与 behind_count
+#   untagged  GitHub Actions 自动打的孤儿 tag（untagged-<40位hex>）。
+#             它不是发布版本，永远不该被当成"线上该有的版本"；
+#             出现即说明有 Actions 产物没被 tag 收敛掉。
+#   other     其它形态（latest / flutter-lib-v1.0.0 这类非版本 tag）
+# 注意：untagged-<sha> 出现在 **git refs** 里，通常不出现在 /releases，
+# 所以只看 releases 会漏掉它——这正是要单独查 refs 的原因。
+# 判据说明：
+#  - 只认**严格三段数字** semver（v26.10.03）。
+#  - "v0.0.0-<sha>" 这种形态是 GitHub Actions 的自动 tag（commit 被 tag 过
+#    但没走发布流程），本仓实测存在 36 个。它们带 release，但**不是人类发布的版本**，
+#    绝不能参与 behind_count——否则一次自动 tag 就会把"落后 N 个版本"算错。
+#  - "untagged-<sha>" 是未收敛的 Actions 产物，**不该存在**；出现即残留。
+classify_tag() {
+  case "$1" in
+    v[0-9]*.[0-9]*.[0-9]*)                  echo "semver" ;;
+    untagged-*)                              echo "untagged" ;;
+    v0.0.0-*)                               echo "orphan" ;;
+    *)                                       echo "other" ;;
+  esac
+}
+
 have_jq() { command -v jq >/dev/null 2>&1; }
 
 if have_jq; then
@@ -126,6 +150,7 @@ if have_jq; then
   if [ -z "$UPSTREAM_SHA" ] || [ "$UPSTREAM_SHA" = "master" ] || [ "$UPSTREAM_SHA" = "main" ]; then
     UPSTREAM_SHA=$(api_tags 2>/dev/null | jq -r --arg t "$UPSTREAM_TAG" '.[]? | select(.name==$t) | .commit.sha')
   fi
+  TAG_CLASS=$(classify_tag "$UPSTREAM_TAG")
 
   # 往回找：认版本
   VERSION="UNKNOWN"
@@ -135,11 +160,32 @@ if have_jq; then
   n=0
   while IFS=$'\t' read -r tg dg; do
     n=$((n+1))
+    # 只让 semver 参与"落后计数"：非版本 tag（latest / untagged-*）
+    # 不是可部署版本，混进来会把 behind_count 算错。
+    [ "$(classify_tag "$tg")" = "semver" ] || continue
     if [ "$dg" = "$SELF_SHA" ]; then VERSION="$tg"; behind=$((n-1)); break; fi
     if [ "$n" -ge "$LOOKBACK" ]; then break; fi
   done <<EOF
 $(printf '%s' "$RELS" | jq -r --arg a "$ASSET" '.[]? | .tag_name as $t | (.assets[]? | select(.name==$a) | ($t + "\t" + ((.digest // "") | sub("^sha256:";""))))')
 EOF
+
+  # --- tag 形态盘点：草稿 / untagged 残留 ---
+  # 扫全部 tag ref 的名字，不限 semver。untagged-* 只存在于 git refs，
+  # /releases 看不到它，所以必须单独查。
+  ALL_TAGS=$($GH "repos/$REPO/tags?per_page=100" 2>/dev/null | jq -r '.[].name' 2>/dev/null)
+  # grep -c 在无匹配时输出 "0" 且退出码非 0，原写法把 "0" 和 echo 的 "0"
+  # 拼成两行、连同换行一起进了变量——TSV 因此多出一列。
+  # 统一用 awk 计数，永远只输出一个数字。
+  UNTAGGED_TAGS=$(printf '%s\n' "$ALL_TAGS" | awk '/^untagged-/{c++} END{print c+0}')
+  ORPHAN_TAGS=$(printf '%s\n' "$ALL_TAGS" | awk '/^v0\.0\.0-/{c++} END{print c+0}')
+  # 其它非版本 tag：只报**数量**，不把名单塞进 TSV。
+  # 本仓实测有 36 个 v0.0.0-*，逐个列出会让整行读不下去，
+  # 而机器消费方只需要"有多少个异常形态"这个数。
+  OTHER_COUNT=$(printf '%s\n' "$ALL_TAGS" | awk '!/^untagged-/ && !/^v0\.0\.0-/ && !/^v[0-9]+\.[0-9]+\.[0-9]+$/{c++} END{print c+0}')
+
+  # 草稿 release：/releases 对草稿可见（draft=true），单列出来。
+  DRAFT_TAGS=$($GH "repos/$REPO/releases?per_page=$LOOKBACK" 2>/dev/null | jq -r '[.[]? | select(.draft==true) | .tag_name] | join(",")' 2>/dev/null)
+  [ -n "$DRAFT_TAGS" ] || DRAFT_TAGS="none"
 else
   echo "ERROR: need jq (or install and re-run) for GitHub API parsing" >&2; exit 5
 fi
@@ -178,18 +224,33 @@ if [ "$JSON_OUT" = "1" ]; then
         --arg upstream_tag "$UPSTREAM_TAG" --arg upstream_sha "$UPSTREAM_SHA" \
         --arg upstream_digest "$UPSTREAM_DIGEST" --arg upstream_size "${UPSTREAM_SIZE:-}" \
         --arg behind "${behind:-}" --arg status "$STATUS" --arg detail "$DETAIL" \
+        --arg tag_class "${TAG_CLASS:-unknown}" --arg draft "${DRAFT_TAGS:-none}" \
+        --arg untagged "${UNTAGGED_TAGS:-0}" --arg orphan "${ORPHAN_TAGS:-0}" --arg other "${OTHER_COUNT:-0}" \
         '{host:$host,binary:$binary,size_bytes:($size|tonumber? // 0),sha256:$sha256,
           version:$version,upstream_tag:$upstream_tag,upstream_sha:$upstream_sha,
           upstream_digest:$upstream_digest,upstream_size:($upstream_size|tonumber? // 0),
-          behind_count:($behind|tonumber? // null),status:$status,detail:$detail}'
+          behind_count:($behind|tonumber? // null),status:$status,detail:$detail,
+          tag_class:$tag_class,draft_releases:$draft,untagged_count:($untagged|tonumber? // 0),
+          orphan_tag_count:($orphan|tonumber? // 0),other_tag_count:($other|tonumber? // 0)}'
 else
   [ "$QUIET" = "1" ] || {
     echo "# api-pack version-check  host=$HOST  repo=$REPO  asset=$ASSET"
-    echo "# fields: host binary size_bytes sha256 version upstream_tag upstream_sha upstream_digest behind_count status detail"
+    echo "# fields: host binary size_bytes sha256 version upstream_tag upstream_sha upstream_digest behind_count status detail tag_class draft_releases untagged_count orphan_tags other_tags"
+    echo "# tag_class(最新 release): semver=正常发布版本 | orphan=v0.0.0-<sha> 自动 tag | untagged=未收敛 Actions 产物 | other=其它"
+    if [ "$UNTAGGED_TAGS" -gt 0 ] 2>/dev/null; then
+      echo "# 注意：检出 $UNTAGGED_TAGS 个 untagged-* 残留 tag——它们不是发布版本，勿当作应部署版本"
+    fi
+    if [ "$DRAFT_TAGS" != "none" ]; then
+      echo "# 注意：存在草稿 release: $DRAFT_TAGS"
+    fi
+    if [ "$ORPHAN_TAGS" -gt 0 ] 2>/dev/null; then
+      echo "# 提示：$ORPHAN_TAGS 个 v0.0.0-<sha> 形态 tag（Actions 自动 tag，非人工发布版本，不参与落后计数）"
+    fi
   }
-  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
     "$HOST" "$BIN" "${SIZE:-0}" "$SELF_SHA" "$VERSION" "$UPSTREAM_TAG" \
-    "$UPSTREAM_SHA" "${UPSTREAM_DIGEST:-unknown}" "${behind:-UNKNOWN}" "$STATUS" "$DETAIL"
+    "$UPSTREAM_SHA" "${UPSTREAM_DIGEST:-unknown}" "${behind:-UNKNOWN}" "$STATUS" "$DETAIL" \
+    "${TAG_CLASS:-unknown}" "${DRAFT_TAGS:-none}" "${UNTAGGED_TAGS:-0}" "${ORPHAN_TAGS:-0}" "${OTHER_COUNT:-0}"
 fi
 
 case "$STATUS" in
