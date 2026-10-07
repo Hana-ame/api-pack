@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Hana-ame/api-pack/internal/service/kilo"
 	"github.com/Hana-ame/api-pack/internal/service/moonchan/bot"
 	"github.com/Hana-ame/api-pack/internal/service/opencode"
 	myfetch "github.com/Hana-ame/api-pack/pkg/fetch"
@@ -696,6 +697,10 @@ func Run(addr string) error {
 
 	// opencode zen free-tier 反代: /api/v2/opencode/*any?net=v4|v6|auto
 	opencode.Routes(r)
+
+	// Kilo 免费池(车道②)反代: /api/v2/kilo/*any?egress=auto|proxy|direct
+	// 必须走海外出口(KILO_EGRESS), CN 出口在 TLS 层即被 api.kilo.ai 掐断。
+	kilo.Routes(r)
 
 	return r.Run(addr)
 }
