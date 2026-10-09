@@ -8,6 +8,7 @@ __debug_bin*
 # ---- Secrets / artifacts (never commit) ----
 *.pem
 *.json
+!internal/service/ehviewer/static/manifest.json
 *.env
 *.bin
 *.db

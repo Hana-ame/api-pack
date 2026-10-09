@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#171717">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" type="image/png" sizes="192x192" href="data:image/png;base64,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">
+<title>Gallery Viewer</title>
+<style>
+:root{--bg:#0f0f0f;--card-bg:#1a1a1a;--card-hover:#222;--border:#2a2a2a;--text:#cfcfcf;--text-dim:#888;--accent:#d4a853;--accent-dim:#a07a35;--header-bg:#171717;--nav-bg:#1c1c1c;--tag-bg:#242424;--tag-text:#b0b0b0;--star:#f5c518}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow-x:hidden}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans','Helvetica Neue',Arial,sans-serif;background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased;scroll-behavior:smooth}
+body.noscroll{overflow:hidden}
+a{color:var(--accent);text-decoration:none}
+a:hover{color:var(--accent-dim)}
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
+::-webkit-scrollbar-thumb:hover{background:#444}
+
+/* Header */
+.header{position:sticky;top:0;z-index:100;background:var(--header-bg);border-bottom:1px solid var(--border);padding:0 16px}
+.header-inner{max-width:1200px;margin:0 auto;display:flex;align-items:center;height:52px;gap:12px}
+.header-logo{font-size:20px;font-weight:700;color:var(--accent);white-space:nowrap;letter-spacing:-0.5px}
+.header-logo span{color:var(--text-dim);font-weight:400}
+.header-search{flex:1;display:flex;align-items:center;gap:4px;max-width:520px}
+.header-search input{flex:1;height:34px;background:var(--card-bg);border:1px solid var(--border);border-radius:4px;padding:0 10px;color:var(--text);font-size:14px;outline:none;transition:border .2s}
+.header-search input:focus{border-color:var(--accent)}
+.header-search button{height:34px;padding:0 14px;background:var(--accent);border:none;border-radius:4px;color:#111;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap}
+.header-search button:hover{background:var(--accent-dim);color:#fff}
+
+/* Nav */
+.nav{position:sticky;top:52px;z-index:99;background:var(--nav-bg);border-bottom:1px solid var(--border);overflow-x:auto;overflow-y:hidden;scrollbar-width:thin}
+.nav::-webkit-scrollbar{height:2px}
+.nav-inner{display:flex;gap:0;padding:0 8px;height:40px;align-items:stretch;max-width:1200px;margin:0 auto}
+.nav-item{display:flex;align-items:center;padding:0 14px;font-size:12px;color:var(--text-dim);cursor:pointer;white-space:nowrap;border-bottom:2px solid transparent;transition:all .2s;text-transform:uppercase;letter-spacing:.5px;font-weight:500}
+.nav-item:hover{color:var(--text);background:rgba(255,255,255,.03)}
+.nav-item.active{color:var(--accent);border-bottom-color:var(--accent);background:rgba(212,168,83,.06)}
+.nav-item .badge{font-size:10px;margin-left:4px;color:var(--text-dim);opacity:.6}
+
+/* Toolbar */
+.toolbar{display:flex;align-items:center;gap:8px;padding:10px 16px;max-width:1200px;margin:0 auto;flex-wrap:wrap;border-bottom:1px solid var(--border)}
+.toolbar-group{display:flex;align-items:center;gap:6px}
+.toolbar-label{font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.4px;margin-right:4px}
+.toolbar-btn{height:30px;padding:0 10px;background:var(--tag-bg);border:1px solid var(--border);border-radius:4px;color:var(--tag-text);font-size:12px;cursor:pointer;transition:all .2s;display:flex;align-items:center;gap:4px}
+.toolbar-btn:hover{background:var(--card-hover);color:var(--text)}
+.toolbar-btn.active{background:var(--accent);border-color:var(--accent);color:#111}
+.toolbar-btn .star{color:var(--star)}
+.toolbar-spacer{flex:1}
+.toolbar-count{font-size:12px;color:var(--text-dim)}
+
+/* Gallery Grid */
+.gallery{padding:16px;max-width:1200px;margin:0 auto}
+.gallery-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px}
+@media(max-width:600px){.gallery-grid{grid-template-columns:repeat(2,1fr);gap:8px}}
+
+/* Card */
+.gallery-card{background:var(--card-bg);border:1px solid var(--border);border-radius:6px;overflow:hidden;transition:all .2s;cursor:pointer;display:flex;flex-direction:column}
+.gallery-card:hover{background:var(--card-hover);border-color:#444;transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,0,0,.4)}
+.gallery-card .thumb{position:relative;aspect-ratio:2/3;overflow:hidden;background:#111}
+.gallery-card .thumb img{width:100%;height:100%;object-fit:cover;display:block;transition:opacity .3s}
+.gallery-card .thumb img.lazy{opacity:0}
+.gallery-card .thumb img.loaded{opacity:1}
+.gallery-card .thumb .rating-badge{position:absolute;top:6px;right:6px;background:rgba(0,0,0,.7);color:var(--star);font-size:11px;padding:2px 6px;border-radius:3px;font-weight:600}
+.gallery-card .thumb .pages-badge{position:absolute;bottom:6px;right:6px;background:rgba(0,0,0,.7);color:var(--text);font-size:11px;padding:2px 6px;border-radius:3px}
+.gallery-card .thumb .category-tag{position:absolute;top:6px;left:6px;font-size:10px;padding:2px 6px;border-radius:3px;font-weight:600;text-transform:uppercase}
+.gallery-card .info{padding:8px 10px;flex:1;display:flex;flex-direction:column;gap:4px;min-height:0}
+.gallery-card .title{font-size:13px;font-weight:500;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;word-break:break-word}
+.gallery-card .meta{display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--text-dim);margin-top:auto;padding-top:4px}
+.gallery-card .meta .uploader{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:60%}
+.gallery-card .meta .stars{color:var(--star);font-size:10px;letter-spacing:1px}
+
+/* Loading / Empty */
+.loading-state,.empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;gap:12px}
+.loading-state .spinner{width:32px;height:32px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-state p,.empty-state p{font-size:14px;color:var(--text-dim)}
+.empty-state .icon{font-size:48px;opacity:.3}
+
+/* Toast */
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#222;color:var(--text);padding:10px 20px;border-radius:8px;font-size:13px;z-index:999;box-shadow:0 4px 20px rgba(0,0,0,.6);border:1px solid var(--border);opacity:0;transition:opacity .3s;pointer-events:none}
+.toast.show{opacity:1}
+
+/* Pagination */
+.pagination{display:flex;justify-content:center;align-items:center;gap:10px;padding:24px 16px 40px}
+.pagination button{height:36px;padding:0 16px;background:var(--card-bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:13px;cursor:pointer;transition:all .2s}
+.pagination button:hover:not(:disabled){background:var(--card-hover);border-color:#444}
+.pagination button:disabled{opacity:.3;cursor:default}
+.pagination .page-info{font-size:13px;color:var(--text-dim);min-width:80px;text-align:center}
+
+/* Footer */
+.footer{text-align:center;padding:20px;font-size:11px;color:var(--text-dim);border-top:1px solid var(--border)}
+.footer a{color:var(--accent-dim)}
+
+/* cat colors */
+.cat-Doujinshi{background:#6a1b9a;color:#fff}
+.cat-Manga{background:#1565c0;color:#fff}
+.cat-ArtistCG{background:#2e7d32;color:#fff}
+.cat-GameCG{background:#e65100;color:#fff}
+.cat-Western{background:#c62828;color:#fff}
+.cat-NonH{background:#4a148c;color:#fff}
+.cat-ImageSet{background:#00695c;color:#fff}
+.cat-Cosplay{background:#f9a825;color:#111}
+.cat-AsianPorn{background:#ad1457;color:#fff}
+.cat-Misc{background:#37474f;color:#fff}
+</style>
+</head>
+<body>
+<div class="header"><div class="header-inner"><div class="header-logo">EH<span>Viewer</span></div><div class="header-search"><input id="searchInput" type="text" placeholder="Search galleries..." autocomplete="off"><button id="searchBtn">Search</button></div></div></div>
+<nav class="nav"><div class="nav-inner" id="navBar"></div></nav>
+<div class="toolbar"><div class="toolbar-group"><span class="toolbar-label">Rating</span><button class="toolbar-btn" data-rating="2"><span class="star">★</span> 2+</button><button class="toolbar-btn" data-rating="3"><span class="star">★</span> 3+</button><button class="toolbar-btn" data-rating="4"><span class="star">★</span> 4+</button><button class="toolbar-btn" data-rating="5"><span class="star">★</span> 5</button></div><div class="toolbar-spacer"></div><div class="toolbar-group"><span class="toolbar-label" id="pageCount">0 galleries</span></div></div>
+<div class="gallery"><div class="gallery-grid" id="galleryGrid"></div></div>
+<div class="pagination"><button id="prevBtn" disabled>Prev</button><span class="page-info" id="pageInfo">Page 1</span><button id="nextBtn">Next</button></div>
+<div class="footer"><a href="https://e-hentai.org" target="_blank" rel="noopener">E-Hentai</a> · <a href="https://exhentai.org" target="_blank" rel="noopener">ExHentai</a> · Gallery Viewer · <span id="footerVer">v1.0</span></div>
+<div class="toast" id="toast"></div>
+<script>
+(function(){
+// ===== Config =====
+const CATEGORIES = [
+  {id:'0', name:'Uncategorized',color:'#37474f'},
+  {id:'1', name:'Doujinshi',color:'#6a1b9a'},
+  {id:'2', name:'Manga',color:'#1565c0'},
+  {id:'3', name:'Artist CG',color:'#2e7d32'},
+  {id:'4', name:'Game CG',color:'#e65100'},
+  {id:'5', name:'Western',color:'#c62828'},
+  {id:'6', name:'Non-H',color:'#4a148c'},
+  {id:'7', name:'Image Set',color:'#00695c'},
+  {id:'8', name:'Cosplay',color:'#f9a825'},
+  {id:'9', name:'Asian Porn',color:'#ad1457'},
+  {id:'10', name:'Misc',color:'#37474f'}
+];
+const PAGE_SIZE=24;
+const STORAGE_KEY='ehviewer_state';
+
+// ===== State =====
+let state = {
+  page: 0,
+  search: '',
+  category: -1,
+  rating: 0,
+  galleries: [],
+  total: 0,
+  loading: false
+};
+
+// ===== DOM refs =====
+const grid = document.getElementById('galleryGrid');
+const navBar = document.getElementById('navBar');
+const searchInput = document.getElementById('searchInput');
+const searchBtn = document.getElementById('searchBtn');
+const prevBtn = document.getElementById('prevBtn');
+const nextBtn = document.getElementById('nextBtn');
+const pageInfo = document.getElementById('pageInfo');
+const pageCount = document.getElementById('pageCount');
+const toastEl = document.getElementById('toast');
+const ratingBtns = document.querySelectorAll('[data-rating]');
+
+// ===== Toast =====
+let toastTimer;
+function toast(msg){
+  toastEl.textContent=msg;
+  toastEl.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>toastEl.classList.remove('show'),2000);
+}
+
+// ===== Mock data =====
+const MOCK_TITLES=[
+  '(C99) [Circle Name] Title Collection Vol.01','[Artist] Work Gallery 2024',
+  '[Doujin] Fantasy Adventure Ch.1-5','(C100) [Group] Summer Festival',
+  '[Artbook] Character Design Works','[Manga] The Lost Chapter',
+  '[CG Set] Visual Collection Vol.3','[Western] Digital Art Pack',
+  'Fanbox Collection 2024-10','[Pixiv] Monthly Ranking Oct',
+  '(C98) [Circle] Another Story','[Artist] Sketch Collection',
+  '[Doujin] Night Parade','(C101) [Group] Winter Wonderland',
+  '[Manga] Side Story Complete','[CG] Render Collection',
+  '[Artbook] Background Works','[Western] 3D Model Pack',
+  'Patreon Collection Sep 2024','[Pixiv] Best of 2024',
+  '[Doujin] Dreamscape Vol.2','(C97) [Circle] Summer Memories',
+  '[Artist] Digital Painting Guide','[CG Set] Character Pack Vol.5'
+];
+const MOCK_UPLOADERS=[
+  'artist_chan','circle_fanworks','doujin_group','pixiv_fanbox',
+  'patreon_creator','sketch_master','gallery_owner','cg_collector'
+];
+const CAT_IDS=[1,1,2,1,3,2,3,5,6,7,1,4,1,1,2,3,3,5,6,7,1,1,4,3];
+
+function randomMockGallery(i){
+  const idx=i%MOCK_TITLES.length;
+  const pages=Math.floor(Math.random()*80)+4;
+  const rating=Math.round((Math.random()*2+3)*10)/10;
+  const catId=CAT_IDS[idx%CAT_IDS.length];
+  const cat=CATEGORIES.find(c=>c.id==catId)||CATEGORIES[0];
+  return {
+    id: 9000000+i,
+    title: MOCK_TITLES[idx],
+    thumb: `https://picsum.photos/seed/eh${i}/400/600`,
+    category: cat.name,
+    catId: catId,
+    rating: rating,
+    pages: pages,
+    uploader: MOCK_UPLOADERS[i%MOCK_UPLOADERS.length],
+    posted: new Date(Date.now()-Math.random()*7*86400000).toISOString().split('T')[0],
+    fileSize: (Math.random()*80+10).toFixed(0)+' MB'
+  };
+}
+
+function generateMockGalleries(start,count){
+  const arr=[];
+  for(let i=0;i<count;i++) arr.push(randomMockGallery(start+i));
+  return arr;
+}
+
+// ===== API calls (mock) =====
+async function fetchGalleries(){
+  const gs=generateMockGalleries(state.page*PAGE_SIZE,PAGE_SIZE);
+  // filter
+  let filtered=gs;
+  if(state.search){
+    const q=state.search.toLowerCase();
+    filtered=gs.filter(g=>g.title.toLowerCase().includes(q));
+  }
+  if(state.rating>0){
+    filtered=filtered.filter(g=>g.rating>=state.rating);
+  }
+  if(state.category>0){
+    filtered=filtered.filter(g=>g.catId==state.category);
+  }
+  // If empty on filter, re-fetch some
+  if(filtered.length===0 && state.search){
+    filtered=[randomMockGallery(Date.now()%100000)];
+    filtered[0].title=`Results for "${state.search}"`;
+  }
+  await new Promise(r=>setTimeout(r,200));
+  return {
+    galleries: filtered,
+    total: Math.max(filtered.length,120)
+  };
+}
+
+async function loadPage(){
+  if(state.loading) return;
+  state.loading=true;
+  grid.innerHTML='<div class="loading-state"><div class="spinner"></div><p>Loading galleries...</p></div>';
+  try{
+    const data=await fetchGalleries();
+    state.galleries=data.galleries;
+    state.total=data.total;
+    renderGrid();
+    updatePagination();
+    pageCount.textContent=`${state.total} galleries`;
+    saveState();
+  }catch(e){
+    grid.innerHTML=`<div class="empty-state"><div class="icon">⚠️</div><p>Failed to load: ${e.message}</p></div>`;
+  }
+  state.loading=false;
+}
+
+// ===== Render =====
+function renderGrid(){
+  if(state.galleries.length===0){
+    grid.innerHTML='<div class="empty-state"><div class="icon">📂</div><p>No galleries found</p></div>';
+    return;
+  }
+  grid.innerHTML=state.galleries.map((g,i)=>{
+    const stars=Math.floor(g.rating);
+    const starStr='★'.repeat(stars)+'☆'.repeat(5-stars);
+    const catKey=g.category.replace(/[^a-zA-Z0-9]/g,'');
+    return `<div class="gallery-card" data-idx="${i}" onclick="openGallery(${g.id})">
+      <div class="thumb">
+        <img src="${g.thumb}" alt="${g.title}" loading="lazy" onload="this.classList.add('loaded')" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22400%22 height=%22600%22><rect fill=%22%231a1a1a%22 width=%22400%22 height=%22600%22/><text x=%22200%22 y=%22300%22 text-anchor=%22middle%22 fill=%22%23555%22 font-size=%2220%22>No Image</text></svg>'" class="lazy">
+        <div class="rating-badge">${g.rating.toFixed(1)}</div>
+        <div class="pages-badge">${g.pages}p</div>
+        <div class="category-tag cat-${catKey}">${g.category}</div>
+      </div>
+      <div class="info">
+        <div class="title">${g.title}</div>
+        <div class="meta"><span class="uploader">${g.uploader}</span><span class="stars">${starStr}</span></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ===== Pagination =====
+function updatePagination(){
+  const totalPages=Math.ceil(state.total/PAGE_SIZE);
+  pageInfo.textContent=`Page ${state.page+1} of ${Math.max(totalPages,1)}`;
+  prevBtn.disabled=state.page<=0;
+  nextBtn.disabled=state.page>=totalPages-1||totalPages<=1;
+}
+
+prevBtn.addEventListener('click',()=>{
+  if(state.page>0){state.page--;loadPage();}
+});
+nextBtn.addEventListener('click',()=>{
+  state.page++;loadPage();
+});
+
+// ===== Navigation =====
+function buildNav(){
+  navBar.innerHTML='<div class="nav-item" data-cat="-1">All</div>'+
+    CATEGORIES.map(c=>`<div class="nav-item" data-cat="${c.id}">${c.name}</div>`).join('');
+  navBar.querySelectorAll('.nav-item').forEach(el=>{
+    el.addEventListener('click',()=>{
+      navBar.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+      el.classList.add('active');
+      state.category=parseInt(el.dataset.cat);
+      state.page=0;
+      loadPage();
+    });
+  });
+  navBar.querySelector('[data-cat="-1"]').classList.add('active');
+}
+
+// ===== Search =====
+function doSearch(){
+  const q=searchInput.value.trim();
+  state.search=q;
+  state.page=0;
+  loadPage();
+}
+searchBtn.addEventListener('click',doSearch);
+searchInput.addEventListener('keydown',e=>{if(e.key==='Enter')doSearch()});
+
+// ===== Rating filter =====
+ratingBtns.forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    const r=parseInt(btn.dataset.rating);
+    if(state.rating===r){
+      state.rating=0;
+      ratingBtns.forEach(b=>b.classList.remove('active'));
+    }else{
+      state.rating=r;
+      ratingBtns.forEach(b=>{
+        b.classList.toggle('active',parseInt(b.dataset.rating)<=r);
+      });
+    }
+    state.page=0;
+    loadPage();
+  });
+});
+
+// ===== Gallery open =====
+window.openGallery=function(id){
+  const g=state.galleries.find(x=>x.id===id);
+  if(!g){toast('Gallery info not loaded');return;}
+  // Show a simple detail overlay
+  const overlay=document.createElement('div');
+  overlay.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.85);z-index:200;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;overflow-y:auto;backdrop-filter:blur(8px)';
+  overlay.innerHTML=`<div style="max-width:500px;width:100%;background:var(--card-bg);border-radius:12px;padding:24px;border:1px solid var(--border);position:relative">
+    <button onclick="this.parentElement.parentElement.remove();document.body.classList.remove('noscroll')" style="position:absolute;top:12px;right:12px;background:none;border:none;color:var(--text-dim);font-size:20px;cursor:pointer;width:32px;height:32px;display:flex;align-items:center;justify-content:center;border-radius:50%">✕</button>
+    <img src="${g.thumb}" alt="" style="width:100%;max-height:300px;object-fit:cover;border-radius:8px;margin-bottom:16px">
+    <h2 style="font-size:18px;margin-bottom:8px;line-height:1.3">${g.title}</h2>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+      <span style="background:var(--tag-bg);padding:4px 10px;border-radius:4px;font-size:12px;color:var(--accent)">${g.category}</span>
+      <span style="background:var(--tag-bg);padding:4px 10px;border-radius:4px;font-size:12px;color:var(--star)">${'★'.repeat(Math.floor(g.rating))} ${g.rating.toFixed(1)}</span>
+      <span style="background:var(--tag-bg);padding:4px 10px;border-radius:4px;font-size:12px">${g.pages} pages</span>
+      <span style="background:var(--tag-bg);padding:4px 10px;border-radius:4px;font-size:12px">${g.fileSize}</span>
+    </div>
+    <p style="font-size:13px;color:var(--text-dim);margin-bottom:8px">Uploaded by <strong style="color:var(--text)">${g.uploader}</strong> on ${g.posted}</p>
+    <a href="https://e-hentai.org/g/${g.id}" target="_blank" rel="noopener" style="display:block;text-align:center;padding:10px;background:var(--accent);color:#111;border-radius:6px;font-weight:600;font-size:14px;margin-top:8px">Open in E-Hentai ↗</a>
+  </div>`;
+  document.body.appendChild(overlay);
+  document.body.classList.add('noscroll');
+  overlay.addEventListener('click',e=>{
+    if(e.target===overlay){overlay.remove();document.body.classList.remove('noscroll');}
+  });
+};
+
+// ===== State persistence =====
+function saveState(){
+  try{
+    const s={page:state.page,search:state.search,category:state.category,rating:state.rating};
+    localStorage.setItem(STORAGE_KEY,JSON.stringify(s));
+  }catch(e){/* ignore */}
+}
+function loadState(){
+  try{
+    const raw=localStorage.getItem(STORAGE_KEY);
+    if(!raw) return;
+    const s=JSON.parse(raw);
+    if(typeof s.search==='string') state.search=s.search;
+    if(typeof s.category==='number') state.category=s.category;
+    if(typeof s.rating==='number') state.rating=s.rating;
+    if(typeof s.page==='number'&&s.page>=0) state.page=s.page;
+  }catch(e){/* ignore */}
+}
+
+// ===== Init =====
+function init(){
+  loadState();
+  buildNav();
+  if(state.search) searchInput.value=state.search;
+  if(state.category>0){
+    navBar.querySelectorAll('.nav-item').forEach(n=>{
+      n.classList.toggle('active',parseInt(n.dataset.cat)===state.category);
+    });
+  }
+  if(state.rating>0){
+    ratingBtns.forEach(b=>{
+      b.classList.toggle('active',parseInt(b.dataset.rating)<=state.rating);
+    });
+  }
+  // Register SW
+  if('serviceWorker' in navigator){
+    navigator.serviceWorker.register('/sw.js').catch(()=>{});
+  }
+  loadPage();
+}
+init();
+})();
+</script>
+</body>
+</html>

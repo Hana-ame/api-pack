@@ -14,6 +14,7 @@ import (
 	"github.com/Hana-ame/api-pack/internal/proxy"
 	"github.com/Hana-ame/api-pack/internal/service/bilibili"
 	"github.com/Hana-ame/api-pack/internal/service/chatto"
+	"github.com/Hana-ame/api-pack/internal/service/ehviewer"
 	"github.com/Hana-ame/api-pack/internal/service/moonchan"
 	"github.com/Hana-ame/api-pack/internal/service/qwen"
 	"github.com/Hana-ame/api-pack/pkg/debug"
@@ -266,6 +267,9 @@ func Run() {
 			},
 		})
 	})
+
+	// ehviewer SPA (模仿 EHViewer 界面的 PWA 应用)
+	startIfEnv("EHVIEWER", func() { ehviewer.Run(os.Getenv("EHVIEWER")) }) // 127.26.10.9:8080
 
 	// --- 各业务服务，env 值即监听地址 ---
 	startIfEnv("SHIJIMA", func() { moonchan.Run(os.Getenv("SHIJIMA")) })     // 127.25.5.18:8080
