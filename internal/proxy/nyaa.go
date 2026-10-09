@@ -14,7 +14,6 @@ import (
 	"net/http/cookiejar"
 	"net/url"
 	"os"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -79,11 +78,6 @@ func NyaaProxy() {
 
 		header := tools.NewHeader(c.Request.Header)
 		header.Del("Cookie")
-
-		if !slices.Contains([]string{"CN", ""}, c.Request.Header.Get("Cf-Ipcountry")) {
-			c.Redirect(http.StatusFound, "https://"+host+path)
-			return
-		}
 
 		resp, err := mf.Fetch(
 			c.Request.Method, "https://"+host+path,
