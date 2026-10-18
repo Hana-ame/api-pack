@@ -427,7 +427,8 @@ func TwimgProxyV2(addr string) error {
 	// 图片走本体反代（StreamProxy 自带背压 + 客户端断开级联取消）
 	imageProxy := StreamProxy("https://pbs.twimg.com", headerProcesser)
 	// 视频也走本体反代：直接自己代理访问资源，任何情况下都访问；不 302 跳转，不使用 CF Country
-	videoProxy := StreamProxy("https://video.twimg.com", headerProcesser)
+	// 用 StreamVideoProxy（video_stream.go）：视频专属流式反代，支持 Range/断点续传，首帧快
+	videoProxy := StreamVideoProxy("https://video.twimg.com", headerProcesser)
 
 	v2Handler := func(c *gin.Context) {
 		// URL.Path 不含 query，所以 /abc.mp4?tag=8 这类带参视频也能命中
