@@ -103,10 +103,10 @@ func TwimgProxy(addr string) error {
 			}
 		},
 		Transport: &http.Transport{
-			MaxIdleConns:        100,
-			MaxConnsPerHost:     200,
-			IdleConnTimeout:     90 * time.Second,
-			TLSHandshakeTimeout: 5 * time.Second,
+			MaxIdleConns:          100,
+			MaxConnsPerHost:       200,
+			IdleConnTimeout:       90 * time.Second,
+			TLSHandshakeTimeout:   5 * time.Second,
 			ResponseHeaderTimeout: 20 * time.Second,
 		},
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
@@ -426,12 +426,13 @@ func TwimgProxyV2(addr string) error {
 	}
 	// 图片走本体反代（StreamProxy 自带背压 + 客户端断开级联取消）
 	imageProxy := StreamProxy("https://pbs.twimg.com", headerProcesser)
+	// 视频也走本体反代：直接自己代理访问资源，任何情况下都访问；不 302 跳转，不使用 CF Country
+	videoProxy := StreamProxy("https://video.twimg.com", headerProcesser)
 
 	v2Handler := func(c *gin.Context) {
 		// URL.Path 不含 query，所以 /abc.mp4?tag=8 这类带参视频也能命中
 		if strings.HasSuffix(strings.ToLower(c.Request.URL.Path), ".mp4") {
-			c.Header("Cache-Control", "no-cache, no-store, private")
-			c.Redirect(http.StatusFound, "https://twimg.moonchan.xyz"+c.Request.URL.String())
+			videoProxy(c)
 			return
 		}
 		imageProxy(c)
