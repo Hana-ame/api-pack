@@ -424,8 +424,11 @@ func TwimgProxyV2(addr string) error {
 		h.Set("Referer", "https://x.com")
 		return h
 	}
-	// 图片走本体反代（StreamProxy 自带背压 + 客户端断开级联取消）
-	imageProxy := StreamProxy("https://pbs.twimg.com", headerProcesser)
+// 图片走本体反代（StreamVideoProxy 自带 Range 透传 + 200→206 改写 + 中途截断 + 背压）
+	// 用 StreamVideoProxy 而非 StreamProxy：当 nginx slice 1m 发 Range: bytes=0-1048575 时，
+	// 上游若无视 Range 回全量 200，本层主动改写为 206 并只读请求范围内的字节——
+	// 杜绝「只要 1MB 却被灌 618MB」的浪费
+	imageProxy := StreamVideoProxy("https://pbs.twimg.com", headerProcesser)
 	// 视频也走本体反代：直接自己代理访问资源，任何情况下都访问；不 302 跳转，不使用 CF Country
 	// 用 StreamVideoProxy（video_stream.go）：视频专属流式反代，支持 Range/断点续传，首帧快
 	videoProxy := StreamVideoProxy("https://video.twimg.com", headerProcesser)
