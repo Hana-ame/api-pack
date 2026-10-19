@@ -424,7 +424,7 @@ func TwimgProxyV2(addr string) error {
 		h.Set("Referer", "https://x.com")
 		return h
 	}
-// 图片走本体反代（StreamVideoProxy 自带 Range 透传 + 200→206 改写 + 中途截断 + 背压）
+	// 图片走本体反代（StreamVideoProxy 自带 Range 透传 + 200→206 改写 + 中途截断 + 背压）
 	// 用 StreamVideoProxy 而非 StreamProxy：当 nginx slice 1m 发 Range: bytes=0-1048575 时，
 	// 上游若无视 Range 回全量 200，本层主动改写为 206 并只读请求范围内的字节——
 	// 杜绝「只要 1MB 却被灌 618MB」的浪费
