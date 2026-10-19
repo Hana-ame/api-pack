@@ -18,12 +18,17 @@ type ProxyParams struct {
 	Referer string `json:"referer"`
 	Scheme  string `json:"scheme"`
 	Origin  string `json:"origin"`
+	// Query 是目标 URL 的原始 query string（不含前导 "?"），按原样拼回上游请求，
+	// 保证 params 编码方式还原出的 URL 与原始 URL（含 searchParams）逐字节一致。
+	Query string `json:"query,omitempty"`
 }
 
 // RootProxyHandler 通用 HTTP 反向代理：
 // 通过 proxy_host（或 X-Host 头）指定目标，proxy_scheme/X-Scheme 指定协议；
 // proxy_origin/referer/cookie（或对应 X-* 头）覆盖发往上游的对应请求头。
-// 支持 params 查询参数，接受 base64 编码的 JSON: {"host":"...","referer":"...","scheme":"...","origin":"..."}
+// 支持 params 查询参数，接受 base64 编码的 JSON: {"host":"...","referer":"...","scheme":"...","origin":"...","query":"..."}
+// 其中 query 是目标 URL 的原始 query string，会被原样拼回上游请求；这样调用方可以把
+// 原始 URL 的全部 searchParams 都塞进 params（URL 上只留一个 params 参数）而仍逐字节还原原 URL。
 func RootProxyHandler(c *gin.Context) {
 	path := c.Request.URL.Path
 
@@ -71,9 +76,20 @@ func RootProxyHandler(c *gin.Context) {
 	search.Del("proxy_scheme")
 	search.Del("params")
 
-	targetURL := fmt.Sprintf("%s://%s%s", scheme, host, path)
+	// params.query 承载原始 URL 的完整 query string，按原样使用（不 Encode，保留顺序与转义），
+	// 保证还原出的上游 URL 与原始 URL 完全一致；URL 上额外的非代理 query 追加在其后。
+	targetQuery := params.Query
 	if len(search) > 0 {
-		targetURL += "?" + search.Encode()
+		if targetQuery != "" {
+			targetQuery += "&" + search.Encode()
+		} else {
+			targetQuery = search.Encode()
+		}
+	}
+
+	targetURL := fmt.Sprintf("%s://%s%s", scheme, host, path)
+	if targetQuery != "" {
+		targetURL += "?" + targetQuery
 	}
 
 	// --- 构造请求 ---
@@ -143,7 +159,9 @@ func RootProxyHandler(c *gin.Context) {
 			if v := tools.Or(c.Query("proxy_cookie"), c.GetHeader("X-Cookie")); v != "" {
 				carry.Set("proxy_cookie", v)
 			}
-			c.Writer.Header().Set("Location", tools.RewriteLocation(loc, c.Request.Host, clientScheme, host, scheme, c.Request.URL.Path, search, carry))
+			// base query 用真实生效的上游 query（含 params.query），保证相对重定向解析正确
+			baseQuery, _ := url.ParseQuery(targetQuery)
+			c.Writer.Header().Set("Location", tools.RewriteLocation(loc, c.Request.Host, clientScheme, host, scheme, c.Request.URL.Path, baseQuery, carry))
 		}
 	}
 
@@ -407,6 +425,25 @@ func generateProxyGeneratorHTML() string {
                 .replace(/=/g, '');
         }
         
+        // 取原始 URL 的 query 原文（保留参数顺序与转义），剔除代理专用参数（proxy_* 与 params）
+        function rawQueryWithoutProxy(urlObj) {
+            const raw = urlObj.search.charAt(0) === '?' ? urlObj.search.slice(1) : urlObj.search;
+            if (!raw) return '';
+            const kept = [];
+            raw.split('&').forEach(part => {
+                if (!part) return;
+                let key = part.split('=')[0];
+                try {
+                    key = decodeURIComponent(key.replace(/\+/g, ' '));
+                } catch (e) {
+                    // 非法转义时按原文比较
+                }
+                if (key.startsWith('proxy_') || key === 'params') return;
+                kept.push(part);
+            });
+            return kept.join('&');
+        }
+        
         // 自动检测域名并设置 Referer
         function detectReferer(url) {
             try {
@@ -463,9 +500,12 @@ func generateProxyGeneratorHTML() string {
             
             try {
                 const urlObj = new URL(targetUrl);
-                const host = urlObj.hostname;
-                const path = urlObj.pathname + urlObj.search;
+                const host = urlObj.host; // 含端口，保证还原出的 URL 与原始 URL 一致
+                const pathOnly = urlObj.pathname; // 不含 search，search 统一由下面处理
                 const scheme = urlObj.protocol.replace(':', '');
+                
+                // 原始 URL 的 query 原文（保留参数顺序与转义，剔除代理专用参数）
+                const originalQuery = rawQueryWithoutProxy(urlObj);
                 
                 // 自动检测 Referer
                 let referer = detectReferer(targetUrl);
@@ -477,17 +517,14 @@ func generateProxyGeneratorHTML() string {
                 if (referer) {
                     traditionalParams.push('proxy_referer=' + encodeURIComponent(referer));
                 }
+                if (originalQuery) {
+                    traditionalParams.push(originalQuery);
+                }
                 
-                // 保留原有的查询参数（排除代理专用参数）
-                urlObj.searchParams.forEach((value, key) => {
-                    if (!key.startsWith('proxy_') && key !== 'params') {
-                        traditionalParams.push(encodeURIComponent(key) + '=' + encodeURIComponent(value));
-                    }
-                });
+                const traditionalUrl = window.location.origin + pathOnly + '?' + traditionalParams.join('&');
                 
-                const traditionalUrl = window.location.origin + path + '?' + traditionalParams.join('&');
-                
-                // 构建 Params 编码 URL
+                // 构建 Params 编码 URL：原始 URL 的全部 searchParams 都放进 params 里，
+                // URL 上只保留一个 params 参数，服务端据此逐字节还原原 URL
                 const paramsObj = {
                     host: host,
                     scheme: scheme
@@ -495,22 +532,14 @@ func generateProxyGeneratorHTML() string {
                 if (referer) {
                     paramsObj.referer = referer;
                 }
+                if (originalQuery) {
+                    paramsObj.query = originalQuery;
+                }
                 
                 const paramsJson = JSON.stringify(paramsObj);
                 const paramsBase64 = urlSafeBase64Encode(paramsJson);
                 
-                // 保留原有的查询参数
-                let otherParams = [];
-                urlObj.searchParams.forEach((value, key) => {
-                    if (!key.startsWith('proxy_') && key !== 'params') {
-                        otherParams.push(encodeURIComponent(key) + '=' + encodeURIComponent(value));
-                    }
-                });
-                
-                let paramsUrl = window.location.origin + path + '?params=' + paramsBase64;
-                if (otherParams.length > 0) {
-                    paramsUrl += '&' + otherParams.join('&');
-                }
+                const paramsUrl = window.location.origin + pathOnly + '?params=' + paramsBase64;
                 
                 // 显示结果
                 document.getElementById('traditionalUrl').textContent = traditionalUrl;

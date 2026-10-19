@@ -13,7 +13,8 @@ The `params` parameter should contain a URL-safe base64-encoded JSON object with
   "host": "example.com",
   "referer": "https://referrer.com",
   "scheme": "https",
-  "origin": "https://origin.com"
+  "origin": "https://origin.com",
+  "query": "quality=85&mode=1"
 }
 ```
 
@@ -23,6 +24,7 @@ The `params` parameter should contain a URL-safe base64-encoded JSON object with
 - **referer** (string): The Referer header value to send to the target
 - **scheme** (string): The protocol scheme (http or https)
 - **origin** (string): The Origin header value to send to the target
+- **query** (string): The target URL's raw query string, **without** the leading `?`. It is appended to the upstream request verbatim (order and escaping preserved), so a link with a single `params=` can still reproduce the original URL byte-for-byte. Non-proxy query parameters passed directly on the proxy URL are appended after it.
 
 ### Why URL-safe Base64?
 
@@ -100,6 +102,26 @@ You can use online tools to encode your JSON:
 2. Use a URL-safe base64 encoder (or regular base64 then replace `+` with `-`, `/` with `_`, and remove `=`)
 3. Append to your URL as `?params=<encoded_value>`
 
+### Example 5: Single `params` carrying the whole original query
+
+The homepage generator puts **all** original search parameters into the `params` JSON
+(`query` field) and emits a link with exactly one `params`; decoding it reproduces the
+original URL, query included:
+
+```text
+# Original URL
+https://example.com/a/b.png?b=2&a=1
+
+# Generated proxy URL (only one params=)
+http://proxy.moonchan.xyz/a/b.png?params=eyJob3N0IjoiZXhhbXBsZS5jb20iLCJzY2hlbWUiOiJodHRwcyIsInF1ZXJ5IjoiYj0yJmE9MSJ9
+
+# Decoded params JSON
+{"host":"example.com","scheme":"https","query":"b=2&a=1"}
+
+# Upstream request
+GET /a/b.png?b=2&a=1   (byte-for-byte identical to the original)
+```
+
 ## Priority
 
 The parameters follow this priority order (highest to lowest):
@@ -114,7 +136,7 @@ This means you can still use the traditional individual parameters, and they wil
 ## Behavior
 
 - The `params` parameter is automatically removed from the forwarded request (not passed to the target server)
-- Other query parameters and the path remain unchanged and are forwarded as-is
+- Other query parameters and the path remain unchanged and are forwarded as-is; when `query` is present in the params JSON it is sent first, verbatim, followed by those extra parameters
 - If the JSON is malformed or base64 decoding fails, the params are silently ignored
 - Empty or missing fields in the JSON are treated as if they weren't provided
 - Supports both padded (`URLEncoding`) and unpadded (`RawURLEncoding`) URL-safe base64
@@ -125,4 +147,4 @@ This means you can still use the traditional individual parameters, and they wil
 2. **URL-safe**: No need for additional URL encoding, uses `-` and `_` instead of `+` and `/`
 3. **Easier to generate programmatically**: Just create a JSON object and encode it
 4. **Backward compatible**: All existing query parameters and headers still work
-5. **Flexible**: Can provide any combination of host, referer, scheme, and origin
+5. **Flexible**: Can provide any combination of host, referer, scheme, origin, and query
