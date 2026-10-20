@@ -257,7 +257,7 @@ func (p *ProxyHandler) accessControlMiddleware() gin.HandlerFunc {
 		acceptLang := strings.ToLower(c.GetHeader("accept-language"))
 		if c.Query("redirect_to") != "image" && // 允许重定向啊，傻逼ai。26.02.15
 			!strings.Contains(acceptLang, "zh") && !slices.Contains([]string{"CN"}, country) {
-			c.Redirect(302, "https://810114.xyz")
+			c.Redirect(302, "https://chatto.moonchan.xyz")
 			// c.String(http.StatusForbidden, "Restricted Region: "+country)
 			c.Abort()
 			return
