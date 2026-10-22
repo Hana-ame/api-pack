@@ -404,13 +404,35 @@ func (t *qpsTracker) record() int {
 	return len(t.times)
 }
 
+// allowedRefererHosts 允许访问的 Referer 域名白名单（防盗链）。
+// 非白名单来源（含空 Referer / 解析失败）的请求一律 302 到 video.twimg.com 同 path。
+var allowedRefererHosts = map[string]struct{}{
+	"x.moonchan.xyz":  {},
+	"x.810114.xyz":    {},
+	"xx.810114.xyz":   {},
+	"x.4545810.xyz":   {},
+	"xx.4545810.xyz":  {},
+}
+
+// isAllowedReferer 判断请求 Referer 是否来自白名单域名（精确 hostname 匹配，自动剥端口）。
+// 空 Referer / 解析失败 / 不在白名单 → false（将被 302 重定向到 video.twimg.com）。
+func isAllowedReferer(r *http.Request) bool {
+	referer := r.Header.Get("Referer")
+	if referer == "" {
+		return false
+	}
+	u, err := url.Parse(referer)
+	if err != nil {
+		return false
+	}
+	_, ok := allowedRefererHosts[u.Hostname()]
+	return ok
+}
+
 // TwimgProxyV2 twimg 反代（部署于 pbs.moonchan.xyz）：
-//   - 仅扩展名为 .mp4 的请求（视频）302 重定向到 twimg.moonchan.xyz，保留 path+query，禁缓存
-//   - 其余请求（.jpg / 无扩展名 / query 形如 format=jpg 的图片）一律由本体直接反代
-//     pbs.twimg.com，不做任何 302，也不看 Cf-Ipcountry
-//   - 视频不再参与本体反代：StreamVideoProxy / 分流计数 / 每 IP 配额那套代码
-//     目前未被 handler 调用（保留供后续恢复，详见 divertManager、videoGate）
-//   - StreamProxy 基于 request context，客户端断开会级联取消上游请求，避免流量空跑
+//   - Referer 白名单防盗链：非白名单来源（含空 Referer）302 到 video.twimg.com 同 path+query
+//   - 白名单来源：.mp4 由本体反代 video.twimg.com，其余由本体反代 pbs.twimg.com（均不走 302）
+//   - StreamVideoProxy 自带 Range 透传 + 200→206 改写 + 中途截断 + 背压 + 客户端断开级联取消
 func TwimgProxyV2(addr string) error {
 	if addr == "" {
 		addr = "127.26.8.10:8080"
@@ -434,6 +456,12 @@ func TwimgProxyV2(addr string) error {
 	videoProxy := StreamVideoProxy("https://video.twimg.com", headerProcesser)
 
 	v2Handler := func(c *gin.Context) {
+		// Referer 白名单防盗链：非白名单来源（含空 Referer）直接 302 到 video.twimg.com 同 path+query
+		if !isAllowedReferer(c.Request) {
+			c.Header("Cache-Control", "no-cache, no-store, private")
+			c.Redirect(http.StatusFound, "https://video.twimg.com"+c.Request.URL.String())
+			return
+		}
 		// URL.Path 不含 query，所以 /abc.mp4?tag=8 这类带参视频也能命中
 		if strings.HasSuffix(strings.ToLower(c.Request.URL.Path), ".mp4") {
 			videoProxy(c)

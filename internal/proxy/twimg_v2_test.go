@@ -16,14 +16,9 @@ func sleepStart(t *testing.T, port string) {
 // 注意：分流配置（twimg_v2.json / TWIMG_V2_CONFIG）与 videoGate 的接线已被移除，
 // TwimgProxyV2 不再读取配置，因此这里不再有写配置文件的帮助函数
 
-// 发一个请求（默认带 Cf-Ipcountry: CN）；不跟随 302，直接看 Location
-func request(t *testing.T, url string, timeout time.Duration) (*http.Response, error) {
-	t.Helper()
-	return requestWithCountry(t, url, "CN", timeout)
-}
-
-// requestWithCountry 带指定 Cf-Ipcountry 发请求；country 为空串表示不带该头
-func requestWithCountry(t *testing.T, url, country string, timeout time.Duration) (*http.Response, error) {
+// requestWithReferer 带指定 Cf-Ipcountry 与 Referer 发请求；不跟随 302，直接看 Location。
+// country / referer 为空串表示不带该头。
+func requestWithReferer(t *testing.T, url, country, referer string, timeout time.Duration) (*http.Response, error) {
 	t.Helper()
 	hc := &http.Client{
 		Timeout: timeout,
@@ -35,6 +30,9 @@ func requestWithCountry(t *testing.T, url, country string, timeout time.Duration
 	if country != "" {
 		req.Header.Set("Cf-Ipcountry", country)
 	}
+	if referer != "" {
+		req.Header.Set("Referer", referer)
+	}
 	resp, err := hc.Do(req)
 	if err != nil {
 		return nil, err
@@ -44,66 +42,60 @@ func requestWithCountry(t *testing.T, url, country string, timeout time.Duration
 	return resp, nil
 }
 
-// 视频（.mp4）一律 302 到 twimg.moonchan.xyz：保留原 path+query、禁缓存、
-// 扩展名大小写不敏感；query 不影响判定（URL.Path 不含 query）
-func TestTwimgV2Video302(t *testing.T) {
-	go TwimgProxyV2("127.0.0.1:18081")
-	sleepStart(t, "18081")
+// Referer 白名单防盗链（TwimgProxyV2 v2Handler）：
+//   - 非白名单 Referer（含空 / 未知域名）→ 302 到 https://video.twimg.com<path>?<query>，
+//     对 .mp4 与图片一视同仁，且不分 Cf-Ipcountry
+//   - 白名单 Referer → 本体反代（不 302；上游不可达时超时，亦证明未被 302）
+func TestTwimgV2RefererGate(t *testing.T) {
+	go TwimgProxyV2("127.0.0.1:18091")
+	sleepStart(t, "18091")
 
-	for _, p := range []string{
-		"/tweet_video/1.mp4",
-		"/tweet_video/1.mp4?tag=8&x=1",
+	paths := []string{
+		"/tweet_video/1.mp4?tag=8",
 		"/ext_tw_video/123/pu/vid/320x180/abc.mp4?tag=12",
 		"/amplify_video/456/vid/avc1/720x1280/xyz.MP4",
-	} {
-		resp, err := request(t, "http://127.0.0.1:18081"+p, time.Second)
-		if err != nil {
-			t.Fatalf("%s 应 302,却报错: %v", p, err)
-		}
-		if resp.StatusCode != 302 {
-			t.Fatalf("%s 应 302, got %d", p, resp.StatusCode)
-		}
-		if loc, want := resp.Header.Get("Location"), "https://twimg.moonchan.xyz"+p; loc != want {
-			t.Fatalf("%s Location=%s,期望 %s", p, loc, want)
-		}
-		if cc := resp.Header.Get("Cache-Control"); cc == "" {
-			t.Fatal("302 必须带 Cache-Control 禁止缓存")
+		"/foo.jpg",
+		"/media/abc?format=jpg&name=large",
+		"/profile_images/1/x.png",
+	}
+
+	// 非白名单来源（含空 Referer）一律 302 到 video.twimg.com 同 path+query
+	for _, referer := range []string{"", "https://example.com/", "https://evil.com/x"} {
+		for _, country := range []string{"CN", "US", ""} {
+			for _, p := range paths {
+				resp, err := requestWithReferer(t, "http://127.0.0.1:18091"+p, country, referer, time.Second)
+				if err != nil {
+					t.Fatalf("referer=%q country=%q %s 应 302,却报错: %v", referer, country, p, err)
+				}
+				if resp.StatusCode != 302 {
+					t.Fatalf("referer=%q country=%q %s 应 302, got %d", referer, country, p, resp.StatusCode)
+				}
+				if loc, want := resp.Header.Get("Location"), "https://video.twimg.com"+p; loc != want {
+					t.Fatalf("referer=%q %s Location=%s,期望 %s", referer, p, loc, want)
+				}
+				if cc := resp.Header.Get("Cache-Control"); cc == "" {
+					t.Fatal("302 必须带 Cache-Control 禁止缓存")
+				}
+			}
 		}
 	}
-}
 
-// 视频 302 与地区无关：CN / 非 CN / 无 Cf-Ipcountry 都是同一个 Location
-func TestTwimgV2VideoRedirectIgnoresCountry(t *testing.T) {
-	go TwimgProxyV2("127.0.0.1:18084")
-	sleepStart(t, "18084")
-
-	for _, country := range []string{"CN", "US", "JP", ""} {
-		resp, err := requestWithCountry(t, "http://127.0.0.1:18084/tweet_video/1.mp4?x=1", country, time.Second)
-		if err != nil {
-			t.Fatalf("country=%q 应 302,却报错: %v", country, err)
-		}
-		if resp.StatusCode != 302 || resp.Header.Get("Location") != "https://twimg.moonchan.xyz/tweet_video/1.mp4?x=1" {
-			t.Fatalf("country=%q 302 错误: %d %s", country, resp.StatusCode, resp.Header.Get("Location"))
-		}
+	// 白名单来源 → 不 302（本体反代；上游不可达时超时,符合预期）
+	whitelist := []string{
+		"https://x.moonchan.xyz/u/foo",
+		"https://x.810114.xyz/",
+		"https://xx.810114.xyz:443/",
+		"https://x.4545810.xyz/media",
+		"https://xx.4545810.xyz/",
 	}
-}
-
-// 图片绝不做 302：.jpg / 无扩展名 / query 形如 format=jpg 一律本体反代 pbs.twimg.com,
-// 且不分地区。上游在本机不可达 -> 请求被反代挂住直到客户端超时,这正好证明没被 302
-// （一旦拿到 302 就是回归：曾经 d81e812 把所有请求无条件 302 到 twimg.moonchan.xyz）
-func TestTwimgV2ImageProxiedNever302(t *testing.T) {
-	go TwimgProxyV2("127.0.0.1:18087")
-	sleepStart(t, "18087")
-
-	paths := []string{"/foo.jpg", "/media/abc", "/media/abc?format=jpg&name=large", "/profile_images/1/x.png"}
-	for _, country := range []string{"CN", "US", "JP", ""} {
+	for _, referer := range whitelist {
 		for _, p := range paths {
-			resp, err := requestWithCountry(t, "http://127.0.0.1:18087"+p, country, 500*time.Millisecond)
+			resp, err := requestWithReferer(t, "http://127.0.0.1:18091"+p, "", referer, 500*time.Millisecond)
 			if err != nil {
-				continue // 反代上游不可达 -> 超时,符合预期
+				continue // 反代上游不可达 -> 超时,证明没被 302
 			}
 			if resp.StatusCode == 302 {
-				t.Fatalf("图片 %s (country=%q) 不应 302,Location=%s", p, country, resp.Header.Get("Location"))
+				t.Fatalf("白名单 referer=%q %s 不应 302,Location=%s", referer, p, resp.Header.Get("Location"))
 			}
 		}
 	}
