@@ -407,11 +407,11 @@ func (t *qpsTracker) record() int {
 // allowedRefererHosts 允许访问的 Referer 域名白名单（防盗链）。
 // 非白名单来源（含空 Referer / 解析失败）的请求一律 302 到 video.twimg.com 同 path。
 var allowedRefererHosts = map[string]struct{}{
-	"x.moonchan.xyz":  {},
-	"x.810114.xyz":    {},
-	"xx.810114.xyz":   {},
-	"x.4545810.xyz":   {},
-	"xx.4545810.xyz":  {},
+	"x.moonchan.xyz": {},
+	"x.810114.xyz":   {},
+	"xx.810114.xyz":  {},
+	"x.4545810.xyz":  {},
+	"xx.4545810.xyz": {},
 }
 
 // isAllowedReferer 判断请求 Referer 是否来自白名单域名（精确 hostname 匹配，自动剥端口）。
@@ -427,6 +427,26 @@ func isAllowedReferer(r *http.Request) bool {
 	}
 	_, ok := allowedRefererHosts[u.Hostname()]
 	return ok
+}
+
+// videoThumbPrefixes video.twimg.com 上的视频缩略图路径前缀（图片，非视频文件）。
+// 这类 thumb 与 pbs.twimg.com 无关，必须回源 video.twimg.com；
+// 且用户钦定：不做 Referer 防盗链 302，直接本体反代（同其他图片一样代理）。
+var videoThumbPrefixes = []string{
+	"/amplify_video_thumb/",
+	"/ext_tw_video_thumb/",
+	"/tweet_video_thumb/",
+}
+
+// isVideoThumbPath 判断请求路径是否为 video.twimg.com 的视频缩略图
+// （形如 https://video.twimg.com/amplify_video_thumb/...）。
+func isVideoThumbPath(path string) bool {
+	for _, p := range videoThumbPrefixes {
+		if strings.HasPrefix(path, p) {
+			return true
+		}
+	}
+	return false
 }
 
 // TwimgProxyV2 twimg 反代（部署于 pbs.moonchan.xyz）：
@@ -456,6 +476,13 @@ func TwimgProxyV2(addr string) error {
 	videoProxy := StreamVideoProxy("https://video.twimg.com", headerProcesser)
 
 	v2Handler := func(c *gin.Context) {
+		// 视频缩略图（形如 video.twimg.com/amplify_video_thumb/...）：
+		// 用户钦定不做 Referer 防盗链 302，直接本体反代 video.twimg.com，
+		// 与其他图片一样由代理直接回源取字节（不把客户端引到原始 twimg）。
+		if isVideoThumbPath(c.Request.URL.Path) {
+			videoProxy(c)
+			return
+		}
 		// Referer 白名单防盗链：非白名单来源（含空 Referer）直接 302 到 video.twimg.com 同 path+query
 		if !isAllowedReferer(c.Request) {
 			c.Header("Cache-Control", "no-cache, no-store, private")

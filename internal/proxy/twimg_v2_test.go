@@ -46,10 +46,13 @@ func requestWithReferer(t *testing.T, url, country, referer string, timeout time
 //   - 非白名单 Referer（含空 / 未知域名）→ 302 到 https://video.twimg.com<path>?<query>，
 //     对 .mp4 与图片一视同仁，且不分 Cf-Ipcountry
 //   - 白名单 Referer → 本体反代（不 302；上游不可达时超时，亦证明未被 302）
+//   - 视频缩略图（videoThumbPrefixes，形如 video.twimg.com/amplify_video_thumb/...）例外：
+//     用户钦定不做防盗链 302，任何 Referer（含空）都直接本体反代 video.twimg.com
 func TestTwimgV2RefererGate(t *testing.T) {
 	go TwimgProxyV2("127.0.0.1:18091")
 	sleepStart(t, "18091")
 
+	// 非 thumb 路径：仍受 Referer 白名单闸门约束
 	paths := []string{
 		"/tweet_video/1.mp4?tag=8",
 		"/ext_tw_video/123/pu/vid/320x180/abc.mp4?tag=12",
@@ -96,6 +99,25 @@ func TestTwimgV2RefererGate(t *testing.T) {
 			}
 			if resp.StatusCode == 302 {
 				t.Fatalf("白名单 referer=%q %s 不应 302,Location=%s", referer, p, resp.Header.Get("Location"))
+			}
+		}
+	}
+
+	// 视频缩略图（amplify_video_thumb / ext_tw_video_thumb / tweet_video_thumb）：
+	// 任何 Referer（含空 / 未知域名）都不 302，直接本体反代 video.twimg.com
+	thumbPaths := []string{
+		"/amplify_video_thumb/1766434622528984/p/img/thumb.jpg?name=orig",
+		"/ext_tw_video_thumb/123/pu/img/abc.jpg?name=small",
+		"/tweet_video_thumb/456.jpg",
+	}
+	for _, referer := range []string{"", "https://example.com/", "https://x.moonchan.xyz/u/foo", "https://evil.com/x"} {
+		for _, p := range thumbPaths {
+			resp, err := requestWithReferer(t, "http://127.0.0.1:18091"+p, "", referer, 500*time.Millisecond)
+			if err != nil {
+				continue // 反代上游不可达 -> 超时,证明没被 302
+			}
+			if resp.StatusCode == 302 {
+				t.Fatalf("thumb 路径 referer=%q %s 不应 302,Location=%s", referer, p, resp.Header.Get("Location"))
 			}
 		}
 	}
