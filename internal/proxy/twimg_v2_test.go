@@ -42,30 +42,32 @@ func requestWithReferer(t *testing.T, url, country, referer string, timeout time
 	return resp, nil
 }
 
-// Referer 白名单防盗链（TwimgProxyV2 v2Handler）：
-//   - 非白名单 Referer（含空 / 未知域名）→ 302 到 https://video.twimg.com<path>?<query>，
-//     对 .mp4 与图片一视同仁，且不分 Cf-Ipcountry
-//   - 白名单 Referer → 本体反代（不 302；上游不可达时超时，亦证明未被 302）
-//   - 视频缩略图（videoThumbPrefixes，形如 video.twimg.com/amplify_video_thumb/...）例外：
-//     用户钦定不做防盗链 302，任何 Referer（含空）都直接本体反代 video.twimg.com
+// Referer 白名单防盗链（TwimgProxyV2 v2Handler）——用户钦定（2026-10-29）：
+//   - 图片（非 .mp4，含视频缩略图）绝不允许 302：无论 Referer（含空/非白名单）、
+//     无论 Cf-Ipcountry（CN/非 CN），一律本体反代回源（200 内容），不分流不跳转
+//   - .mp4 视频仍保留 Referer 白名单防盗链：非白名单来源（含空/未知域名）→ 302 到
+//     https://video.twimg.com<path>?<query>；白名单来源 → 本体反代（不 302）
 func TestTwimgV2RefererGate(t *testing.T) {
 	go TwimgProxyV2("127.0.0.1:18091")
 	sleepStart(t, "18091")
 
-	// 非 thumb 路径：仍受 Referer 白名单闸门约束
-	paths := []string{
+	// .mp4 视频路径：仍受 Referer 白名单闸门约束（非白名单 → 302）
+	mp4Paths := []string{
 		"/tweet_video/1.mp4?tag=8",
 		"/ext_tw_video/123/pu/vid/320x180/abc.mp4?tag=12",
 		"/amplify_video/456/vid/avc1/720x1280/xyz.MP4",
+	}
+	// 图片路径（非 .mp4）：用户钦定绝不允许 302，无论 Referer / Cf-Ipcountry
+	imagePaths := []string{
 		"/foo.jpg",
 		"/media/abc?format=jpg&name=large",
 		"/profile_images/1/x.png",
 	}
 
-	// 非白名单来源（含空 Referer）一律 302 到 video.twimg.com 同 path+query
+	// 非白名单来源（含空 Referer）：.mp4 仍 302 到 video.twimg.com 同 path+query
 	for _, referer := range []string{"", "https://example.com/", "https://evil.com/x"} {
 		for _, country := range []string{"CN", "US", ""} {
-			for _, p := range paths {
+			for _, p := range mp4Paths {
 				resp, err := requestWithReferer(t, "http://127.0.0.1:18091"+p, country, referer, time.Second)
 				if err != nil {
 					t.Fatalf("referer=%q country=%q %s 应 302,却报错: %v", referer, country, p, err)
@@ -80,10 +82,20 @@ func TestTwimgV2RefererGate(t *testing.T) {
 					t.Fatal("302 必须带 Cache-Control 禁止缓存")
 				}
 			}
+			// 图片：无论 Referer / Cf-Ipcountry 都绝不允许 302（本体反代；上游不可达时超时,符合预期）
+			for _, p := range imagePaths {
+				resp, err := requestWithReferer(t, "http://127.0.0.1:18091"+p, country, referer, 500*time.Millisecond)
+				if err != nil {
+					continue // 反代上游不可达 -> 超时,证明没被 302
+				}
+				if resp.StatusCode == 302 {
+					t.Fatalf("图片 referer=%q country=%q %s 不应 302,Location=%s", referer, country, p, resp.Header.Get("Location"))
+				}
+			}
 		}
 	}
 
-	// 白名单来源 → 不 302（本体反代；上游不可达时超时,符合预期）
+	// 白名单来源 → .mp4 不 302（本体反代；上游不可达时超时,符合预期）
 	whitelist := []string{
 		"https://x.moonchan.xyz/u/foo",
 		"https://x.810114.xyz/",
@@ -92,7 +104,7 @@ func TestTwimgV2RefererGate(t *testing.T) {
 		"https://xx.4545810.xyz/",
 	}
 	for _, referer := range whitelist {
-		for _, p := range paths {
+		for _, p := range append(append([]string{}, mp4Paths...), imagePaths...) {
 			resp, err := requestWithReferer(t, "http://127.0.0.1:18091"+p, "", referer, 500*time.Millisecond)
 			if err != nil {
 				continue // 反代上游不可达 -> 超时,证明没被 302

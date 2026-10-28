@@ -450,8 +450,9 @@ func isVideoThumbPath(path string) bool {
 }
 
 // TwimgProxyV2 twimg 反代（部署于 pbs.moonchan.xyz）：
-//   - Referer 白名单防盗链：非白名单来源（含空 Referer）302 到 video.twimg.com 同 path+query
-//   - 白名单来源：.mp4 由本体反代 video.twimg.com，其余由本体反代 pbs.twimg.com（均不走 302）
+//   - 图片（非 .mp4，含视频缩略图）：用户钦定绝不允许 302，无论 Referer / Cf-Ipcountry
+//     一律本体反代 pbs.twimg.com（视频缩略图回源 video.twimg.com），直接返回 200 内容
+//   - .mp4 视频：保留 Referer 白名单防盗链——非白名单来源（含空 Referer）302 到 video.twimg.com 同 path+query
 //   - StreamVideoProxy 自带 Range 透传 + 200→206 改写 + 中途截断 + 背压 + 客户端断开级联取消
 func TwimgProxyV2(addr string) error {
 	if addr == "" {
@@ -483,18 +484,21 @@ func TwimgProxyV2(addr string) error {
 			videoProxy(c)
 			return
 		}
-		// Referer 白名单防盗链：非白名单来源（含空 Referer）直接 302 到 video.twimg.com 同 path+query
+		// 图片（非 .mp4）：用户钦定（2026-10-29）绝不允许 302——
+		// 无论 Referer（含空/非白名单）、无论 Cf-Ipcountry（含 CN 与非 CN），
+		// 一律由本体反代 pbs.twimg.com 直接回源，返回 200 内容，绝不把客户端引到原始 twimg。
+		// URL.Path 不含 query，所以 /abc.mp4?tag=8 这类带参视频也能命中；非 .mp4 全按图片处理。
+		if !strings.HasSuffix(strings.ToLower(c.Request.URL.Path), ".mp4") {
+			imageProxy(c)
+			return
+		}
+		// .mp4 视频：保留 Referer 白名单防盗链——非白名单来源（含空 Referer）302 到 video.twimg.com 同 path+query
 		if !isAllowedReferer(c.Request) {
 			c.Header("Cache-Control", "no-cache, no-store, private")
 			c.Redirect(http.StatusFound, "https://video.twimg.com"+c.Request.URL.String())
 			return
 		}
-		// URL.Path 不含 query，所以 /abc.mp4?tag=8 这类带参视频也能命中
-		if strings.HasSuffix(strings.ToLower(c.Request.URL.Path), ".mp4") {
-			videoProxy(c)
-			return
-		}
-		imageProxy(c)
+		videoProxy(c)
 	}
 	r.GET("/*any", v2Handler)
 	r.HEAD("/*any", v2Handler)
