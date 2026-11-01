@@ -660,6 +660,8 @@ func Run(addr string) error {
 
 	r.Use(middleware.CORSMiddleware())
 	r.Use(middleware.ProxyMiddleware())
+	// 敏感版块（bid=46/48/103）对搜索引擎爬虫返回空数据，阻止收录
+	r.Use(middleware.BlockBotMiddleware())
 
 	// r.POST("/groq", handler.GroqHandler)
 
