@@ -332,8 +332,10 @@ func (s *server) dispatch(from *client, msg map[string]any) {
 	typ, _ := msg["type"].(string)
 	switch typ {
 	case msgHeartbeat:
-		// 刷新由读循环的 SetReadDeadline 完成；回 PONG 让客户端知道链路活着。
-		from.send(map[string]any{"type": msgHeartbeat})
+		// 刷新由读循环的 SetReadDeadline 完成。
+		// 注意：**不回 PONG**。peerjs 1.5.4 的 _handleMessage 没有 HEARTBEAT
+		// case，收到会落到 default 分支并 warn "malformed message"；它的
+		// _sendHeartbeat 只是保活，不需要应答。原实现回包反而制造噪音。
 		// 心跳可见性：首次 + 每 60s 打一条，能区分「没收到心跳」与「收到了但不回」。
 		s.reg.mu.Lock()
 		n := s.reg.hbSamples[from.id] + 1
