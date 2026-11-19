@@ -46,8 +46,11 @@ const (
 	defaultListen = "127.0.0.1:9600"
 	defaultKey    = "peerjs"
 	defaultPath   = "/"
-	// 客户端心跳间隔 5s（peerjs 默认 pingInterval）；15s 无消息即判死并释放 ID。
-	idleTimeout = 15 * time.Second
+	// 客户端心跳间隔 5s（peerjs 默认 pingInterval）。读超时给足余量：
+	// 15s 太紧——CF 橙云中转 + TLS 抖动 + 客户端首次心跳调度延迟，实测会造成
+	// 每 7s 一次误判断线（Lost connection to server）并触发自我顶替风暴。
+	// 30s = 6 个心跳周期，仍远小于旧云端 35 分钟的残留期，快速过期语义不变。
+	idleTimeout = 30 * time.Second
 	writeWait   = 10 * time.Second
 	pongWait    = idleTimeout
 	maxMsgSize  = 1 << 20 // 单帧上限 1MB（SDP 可能较大）
@@ -136,10 +139,12 @@ type registry struct {
 	expired   atomic.Uint64
 	key       string
 	discovery bool
+	// hbSamples peerId -> 心跳计数（仅用于节流日志，不参与逻辑）
+	hbSamples map[string]int
 }
 
 func newRegistry(key string, discovery bool) *registry {
-	return &registry{clients: make(map[string]*client), key: key, discovery: discovery}
+	return &registry{clients: make(map[string]*client), key: key, discovery: discovery, hbSamples: make(map[string]int)}
 }
 
 // claim 注册新连接。已有同 ID → 顶掉旧的（用户明确要求的行为）。
@@ -294,7 +299,7 @@ func (s *server) handleSignal(w http.ResponseWriter, r *http.Request) {
 	log.Printf("[pm-signal] peer %s: OPEN（%s）", shortID(id),
 		map[bool]string{true: "顶替旧连接", false: "新注册"}[replaced])
 
-	// 读超时即过期：客户端每 5s 发 HEARTBEAT，读循环续期；15s 无消息即判死。
+	// 读超时即过期：客户端每 5s 发 HEARTBEAT，读循环续期；无消息超过 pongWait 即判死。
 	_ = conn.SetReadDeadline(time.Now().Add(pongWait))
 
 	func() {
@@ -329,6 +334,14 @@ func (s *server) dispatch(from *client, msg map[string]any) {
 	case msgHeartbeat:
 		// 刷新由读循环的 SetReadDeadline 完成；回 PONG 让客户端知道链路活着。
 		from.send(map[string]any{"type": msgHeartbeat})
+		// 心跳可见性：首次 + 每 60s 打一条，能区分「没收到心跳」与「收到了但不回」。
+		s.reg.mu.Lock()
+		n := s.reg.hbSamples[from.id] + 1
+		s.reg.hbSamples[from.id] = n
+		s.reg.mu.Unlock()
+		if n == 1 || n%12 == 0 {
+			log.Printf("[pm-signal] peer %s: HEARTBEAT #%d（链路存活）", shortID(from.id), n)
+		}
 		return
 	case msgLeave:
 		s.reg.release(from)
