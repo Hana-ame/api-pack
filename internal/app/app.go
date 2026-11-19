@@ -16,6 +16,7 @@ import (
 	"github.com/Hana-ame/api-pack/internal/service/chatto"
 	"github.com/Hana-ame/api-pack/internal/service/ehviewer"
 	"github.com/Hana-ame/api-pack/internal/service/moonchan"
+	"github.com/Hana-ame/api-pack/internal/service/pmsignal"
 	"github.com/Hana-ame/api-pack/internal/service/qwen"
 	"github.com/Hana-ame/api-pack/pkg/debug"
 	middleware "github.com/Hana-ame/api-pack/pkg/ginutil/middleware"
@@ -274,6 +275,9 @@ func Run() {
 	// --- 各业务服务，env 值即监听地址 ---
 	startIfEnv("SHIJIMA", func() { moonchan.Run(os.Getenv("SHIJIMA")) })     // 127.25.5.18:8080
 	startIfEnv("CHATTO_REG", func() { chatto.Run(os.Getenv("CHATTO_REG")) }) // 127.26.8.2:8080
+	// peer-message 自托管 PeerJS 信令：env 值即监听地址。
+	// 语义：同 Peer ID 新连接直接顶掉旧的；15s 无心跳即释放 ID（快速过期）。
+	startIfEnv("PM_SIGNAL", func() { pmsignal.Run(os.Getenv("PM_SIGNAL")) }) // 127.25.23.7:8080
 
 	// go EhProxy() //127.25.23.6:8080
 	// go pastejson.Run(os.Getenv("PASTEJSON"), os.Getenv("PASTEJSON_CONN_STR")) // 127.25.9.10:8080
