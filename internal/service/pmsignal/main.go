@@ -444,7 +444,12 @@ func (s *server) dispatch(from *client, msg map[string]any) {
 	// HEARTBEAT/LEAVE 不在此列（上面已处理）。
 	if !s.social.isFriend(from.id, dst) {
 		log.Printf("[pm-signal] 信令门禁：%s → %s 非好友，拒绝转发 %s（先加好友）", shortID(from.id), shortID(dst), typ)
-		from.send(map[string]any{"type": msgError, "src": dst, "payload": map[string]any{"msg": "not-friends: add friend first (POST /friends/" + from.id + ")"}})
+		// 拒绝帧绝不能用 ERROR 类型：peerjs 客户端的 _handleMessage 收到 ERROR 会
+		// _abort(ServerError) —— 永久销毁整条信令连接（peer.open=false），之后
+		// daemon 的所有 connectTo 静默失效（实测：重新加好友后通道永不重建，
+		// 双方 friend.online=false，直到重启 daemon）。这里回 EXPIRE：peerjs 把它
+		// 归类为 peer-unavailable（目标离线），对客户端无害且语义贴近「现在不可达」。
+		from.send(map[string]any{"type": msgExpire, "src": dst})
 		return
 	}
 	// 补 src 后原样转发，并回 ACK 语义由客户端自行处理（无需额外 ACK 帧）。

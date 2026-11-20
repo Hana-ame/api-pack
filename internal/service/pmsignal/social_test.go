@@ -216,13 +216,14 @@ func TestSignalingFriendGate(t *testing.T) {
 		return m
 	}
 
-	// 非好友 OFFER → 拒绝（ERROR not-friends）
+	// 非好友 OFFER → 拒绝（EXPIRE，不能用 ERROR：peerjs 客户端收到 ERROR 会
+	// _abort 整条信令连接，导致 daemon 永久失联——2026-11-20 实测踩坑）
 	m := sendOffer(connA, idB)
-	if m["type"] != "ERROR" {
-		t.Fatalf("non-friend OFFER should be rejected, got %v", m)
+	if m["type"] != "EXPIRE" {
+		t.Fatalf("non-friend OFFER should be rejected with EXPIRE, got %v", m)
 	}
-	if payload, _ := m["payload"].(map[string]any); !strings.Contains(payload["msg"].(string), "not-friends") {
-		t.Fatalf("expected not-friends error, got %v", m)
+	if m["src"] != idB {
+		t.Fatalf("EXPIRE src should be the target, got %v", m)
 	}
 
 	// 加好友（A 添加 B，对等即成立）
