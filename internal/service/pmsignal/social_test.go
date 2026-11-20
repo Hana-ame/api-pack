@@ -139,15 +139,18 @@ func TestProfilePatchRequiresOwnerToken(t *testing.T) {
 	if code != 401 {
 		t.Fatalf("expected 401 with wrong token, got %d", code)
 	}
-	// 正确凭据 → 改成功
+	// 正确凭据 → 改成功（canControl 是纯 P2P 字段，服务器应忽略它而不是保存）
 	code, out := apiReq(t, ts, "PATCH", "/profile", `{"name":"Alice2","canControl":true}`,
 		map[string]string{"X-Peer-Id": idA, "X-Peer-Token": "tokA"})
 	if code != 200 || !out["ok"].(bool) {
 		t.Fatalf("patch failed: %d %v", code, out)
 	}
 	prof := out["profile"].(map[string]any)
-	if prof["name"] != "Alice2" || prof["canControl"] != true {
+	if prof["name"] != "Alice2" {
 		t.Fatalf("patch result wrong: %v", prof)
+	}
+	if _, has := prof["canControl"]; has {
+		t.Fatalf("服务器不应保存/回显 canControl（纯 P2P 字段）: %v", prof)
 	}
 	// 单查验证
 	_, got := apiReq(t, ts, "GET", "/profile?id="+idA, "", nil)
@@ -285,4 +288,30 @@ func TestGreetingPushOnReconnect(t *testing.T) {
 	if payload["event"] != "greet" || payload["text"] != "offline msg" {
 		t.Fatalf("greet notice wrong: %v", payload)
 	}
+}
+
+// 控制权限是纯 P2P 语义：服务器不存、不广播、不参与校验。
+// 任何人调 discover/recommend/profile/friends 都不能探测「谁能控制谁」。
+func TestCanControlNeverExposed(t *testing.T) {
+	ts := newTestServer(t)
+	// A 尝试把自己的 canControl 塞进 profile（旧客户端的字段）
+	_ = wsDial(t, ts, idA, "tokA", `{"name":"A","canControl":true,"allowGreet":true}`)
+	_, _ = apiReq(t, ts, "PATCH", "/profile", `{"name":"A2","canControl":true}`,
+		map[string]string{"X-Peer-Id": idA, "X-Peer-Token": "tokA"})
+	_ = wsDial(t, ts, idB, "tokB", `{"name":"B"}`)
+
+	leak := func(name string, body map[string]any) {
+		raw, _ := json.Marshal(body)
+		if strings.Contains(string(raw), "anControl") {
+			t.Fatalf("%s 泄漏了控制权限字段: %s", name, string(raw))
+		}
+	}
+	_, disc := apiReq(t, ts, "GET", "/discover", "", nil)
+	leak("discover", disc)
+	_, rec := apiReq(t, ts, "GET", "/recommend", "", nil)
+	leak("recommend", rec)
+	_, prof := apiReq(t, ts, "GET", "/profile?id="+idA, "", nil)
+	leak("profile", prof)
+	_, fr := apiReq(t, ts, "GET", "/friends", "", map[string]string{"X-Peer-Id": idA})
+	leak("friends", fr)
 }

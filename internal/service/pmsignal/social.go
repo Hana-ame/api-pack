@@ -11,9 +11,11 @@
 //     转发**（信令层执行）。非好友的 OFFER 一律拒绝——没有信令就没有 WebRTC
 //     通道，物理上无法「无限发消息」。好友关系由 POST /friends/{id} 建立，
 //     双方任一添加即算（对等模型，简化握手）。
-//  6. 好友可以设置权限是否能控制本地 session：这是 daemon/客户端侧语义，
-//     服务器只透传 profile.friended 列表与 capability 标记（allowRemoteControl），
-//     实际强制在 daemon（见 peer-message 侧 friend.canControlSession）。
+//  6. 好友可以设置权限是否能控制本地 session：**纯 P2P 语义，服务器完全不参与**。
+//     授权状态只存在各端 daemon 的 friend.canControlSession 字段里（默认 false），
+//     既不上报服务器、也不出现在 discover/recommend/profile 的任何响应里——
+//     别人无法从服务器探测「你能控制谁 / 谁能控制你」。控制请求走已建立的
+//     WebRTC 通道，服务端看不到内容。
 package pmsignal
 
 import (
@@ -28,11 +30,12 @@ import (
 
 // socialProfile 一个 peer 的公开档案。全部字段有界，防滥用。
 type socialProfile struct {
-	Name       string `json:"name"`                 // 展示名（≤32）
-	Bio        string `json:"bio,omitempty"`        // 简介（≤200）
-	Tags       string `json:"tags,omitempty"`       // 逗号分隔标签（≤100）
-	AllowGreet bool   `json:"allowGreet"`           // 是否接受陌生人打招呼（默认 true）
-	CanControl bool   `json:"canControl"`           // 好友是否可控制本地 session（由本人设置）
+	Name       string `json:"name"`           // 展示名（≤32）
+	Bio        string `json:"bio,omitempty"`  // 简介（≤200）
+	Tags       string `json:"tags,omitempty"` // 逗号分隔标签（≤100）
+	AllowGreet bool   `json:"allowGreet"`     // 是否接受陌生人打招呼（默认 true）
+	// 注意：**没有 canControl 字段**。控制本地 session 的权限是纯 P2P 语义，
+	// 只存在各端 daemon 的 friend 对象上，服务器不存、不广播、不参与校验。
 	Visibility string `json:"visibility,omitempty"` // online | offline（服务器填）
 }
 
@@ -87,9 +90,6 @@ func sanitizeProfile(raw map[string]any) *socialProfile {
 	p.Tags = str("tags", 100)
 	if v, ok := raw["allowGreet"].(bool); ok {
 		p.AllowGreet = v
-	}
-	if v, ok := raw["canControl"].(bool); ok {
-		p.CanControl = v
 	}
 	return p
 }
@@ -241,7 +241,6 @@ func (ss *socialState) recommend(onlineIDs []string, me string, limit int) []map
 			entry["bio"] = p.Bio
 			entry["tags"] = p.Tags
 			entry["allowGreet"] = p.AllowGreet
-			entry["canControl"] = p.CanControl
 		} else {
 			entry["name"] = ""
 			entry["allowGreet"] = true
@@ -300,7 +299,6 @@ func (ss *socialState) friendsOf(id string, onlineSet map[string]bool) []map[str
 		entry := map[string]any{"peerId": fid, "online": onlineSet[fid]}
 		if p, ok := ss.profiles[fid]; ok {
 			entry["name"] = p.Name
-			entry["canControl"] = p.CanControl
 		}
 		out = append(out, entry)
 	}
