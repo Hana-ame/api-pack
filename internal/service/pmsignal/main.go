@@ -53,7 +53,11 @@ const (
 	idleTimeout = 30 * time.Second
 	writeWait   = 10 * time.Second
 	pongWait    = idleTimeout
-	maxMsgSize  = 1 << 20 // 单帧上限 1MB（SDP 可能较大）
+	// wsPingInterval 协议层 ping 周期。CF 橙云对 WS 有 ~100s 空闲上限，且不转发
+	// 应用层帧时也可能掐连接；RFC 6455 的 ping/pong 是 CF 官方推荐的保活手段。
+	// 25s 远小于 100s，同时短于 idleTimeout 以便 pong 失败能被及时判定。
+	wsPingInterval = 25 * time.Second
+	maxMsgSize     = 1 << 20 // 单帧上限 1MB（SDP 可能较大）
 )
 
 // 消息类型常量（与 peerjs ServerMessageType 一致，字符串枚举）。
@@ -299,10 +303,45 @@ func (s *server) handleSignal(w http.ResponseWriter, r *http.Request) {
 	log.Printf("[pm-signal] peer %s: OPEN（%s）", shortID(id),
 		map[bool]string{true: "顶替旧连接", false: "新注册"}[replaced])
 
+	// ── WS 协议层保活（RFC 6455 ping/pong）────────────────────────────
+	// 应用层 HEARTBEAT 是 peerjs 自己的 5s 心跳；协议层 ping 是给中间设备（CF、
+	// 运营商 NAT）看的，防止它们因「空闲」掐掉长连接。两者互不替代。
+	// 收到 pong 即续读超时；ping 循环用 WriteControl 并发安全地写控制帧。
+	conn.SetPongHandler(func(string) error {
+		return conn.SetReadDeadline(time.Now().Add(pongWait))
+	})
+	pingDone := make(chan struct{})
+	var pingOnce sync.Once
+	stopPing := func() { pingOnce.Do(func() { close(pingDone) }) }
+	go func() {
+		ticker := time.NewTicker(wsPingInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-pingDone:
+				return
+			case <-ticker.C:
+				// 走 cl 的统一写锁：send() 用 SetWriteDeadline 后 WriteMessage，
+				// 与 WriteControl 的 deadline 参数操作同一个 conn 写状态，不加锁会
+				// 互相踩（gorilla 只保证 WriteControl 可与其他「已加锁的」写并发）。
+				// 25s 一次，锁竞争可忽略。
+				cl.writeMu.Lock()
+				deadline := time.Now().Add(writeWait)
+				err := cl.conn.WriteControl(websocket.PingMessage, []byte(time.Now().Format(time.RFC3339)), deadline)
+				cl.writeMu.Unlock()
+				if err != nil {
+					stopPing()
+					return
+				}
+			}
+		}
+	}()
+
 	// 读超时即过期：客户端每 5s 发 HEARTBEAT，读循环续期；无消息超过 pongWait 即判死。
 	_ = conn.SetReadDeadline(time.Now().Add(pongWait))
 
 	func() {
+		defer stopPing()
 		defer s.reg.release(cl)
 		defer func() { _ = conn.Close() }()
 		for {
