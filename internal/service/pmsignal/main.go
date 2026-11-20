@@ -147,6 +147,19 @@ type registry struct {
 	hbSamples map[string]int
 }
 
+// verifyOwner 校验「peer 凭据」：id 在线且 token 与其当前连接一致。
+// 社交层 HTTP API（PATCH /profile、POST/DELETE /friends、POST /greet）
+// 用它确认操作者身份；不在线即拒绝（凭据随连接存亡）。
+func (g *registry) verifyOwner(id, token string) bool {
+	if id == "" || token == "" {
+		return false
+	}
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+	c := g.clients[id]
+	return c != nil && c.token == token
+}
+
 func newRegistry(key string, discovery bool) *registry {
 	return &registry{clients: make(map[string]*client), key: key, discovery: discovery, hbSamples: make(map[string]int)}
 }
@@ -211,19 +224,28 @@ func shortID(id string) string {
 // server HTTP + WS 装配。
 type server struct {
 	reg      *registry
+	social   *socialState
 	path     string // 例如 "/"（与客户端 options.path 对齐）
 	upgrader websocket.Upgrader
 }
 
 func (s *server) routes() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", s.handleRoot)
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{
 			"ok": true, "online": s.reg.count(),
 			"opened": s.reg.opened.Load(), "replaced": s.reg.replaced.Load(), "expired": s.reg.expired.Load(),
 		})
 	})
+	// 社交层（发现/推荐/profile/好友/打招呼）。
+	mux.HandleFunc("/discover", s.handleSocial)
+	mux.HandleFunc("/recommend", s.handleSocial)
+	mux.HandleFunc("/profile", s.handleSocial)
+	mux.HandleFunc("/friends", s.handleSocial)
+	mux.HandleFunc("/friends/", s.handleSocial)
+	mux.HandleFunc("/greet", s.handleSocial)
+	mux.HandleFunc("/greetings", s.handleSocial)
+	mux.HandleFunc("/", s.handleRoot)
 	return mux
 }
 
@@ -303,6 +325,20 @@ func (s *server) handleSignal(w http.ResponseWriter, r *http.Request) {
 	log.Printf("[pm-signal] peer %s: OPEN（%s）", shortID(id),
 		map[bool]string{true: "顶替旧连接", false: "新注册"}[replaced])
 
+	// 社交层：登记档案（连接 URL ?profile=<urlencoded JSON> 可带初始档案）。
+	var prof *socialProfile
+	if rawProf := q.Get("profile"); rawProf != "" {
+		var raw map[string]any
+		if err := json.Unmarshal([]byte(rawProf), &raw); err == nil {
+			prof = sanitizeProfile(raw)
+		}
+	}
+	s.social.onConnect(id, prof)
+	// 新连接先补发离线期间的打招呼（收件箱在服务器，不随连接丢）。
+	for _, g := range s.social.drainGreetings(id) {
+		cl.send(map[string]any{"type": "SOCIAL-NOTICE", "src": g.From, "payload": map[string]any{"event": "greet", "text": g.Text}})
+	}
+
 	// ── WS 协议层保活（RFC 6455 ping/pong）────────────────────────────
 	// 应用层 HEARTBEAT 是 peerjs 自己的 5s 心跳；协议层 ping 是给中间设备（CF、
 	// 运营商 NAT）看的，防止它们因「空闲」掐掉长连接。两者互不替代。
@@ -342,6 +378,7 @@ func (s *server) handleSignal(w http.ResponseWriter, r *http.Request) {
 
 	func() {
 		defer stopPing()
+		defer s.social.onDisconnect(cl.id)
 		defer s.reg.release(cl)
 		defer func() { _ = conn.Close() }()
 		for {
@@ -401,6 +438,15 @@ func (s *server) dispatch(from *client, msg map[string]any) {
 		from.send(map[string]any{"type": msgExpire, "src": dst})
 		return
 	}
+	// 好友门禁（用户裁定：加好友后才能无限发信息）：
+	// WebRTC 通道靠 OFFER/ANSWER/CANDIDATE 建立；非好友一律拒发。
+	// 没有信令就没有通道，物理上无法绕过（消息本身走 P2P，不经本服务器）。
+	// HEARTBEAT/LEAVE 不在此列（上面已处理）。
+	if !s.social.isFriend(from.id, dst) {
+		log.Printf("[pm-signal] 信令门禁：%s → %s 非好友，拒绝转发 %s（先加好友）", shortID(from.id), shortID(dst), typ)
+		from.send(map[string]any{"type": msgError, "src": dst, "payload": map[string]any{"msg": "not-friends: add friend first (POST /friends/" + from.id + ")"}})
+		return
+	}
 	// 补 src 后原样转发，并回 ACK 语义由客户端自行处理（无需额外 ACK 帧）。
 	target.send(map[string]any{"type": typ, "src": from.id, "payload": payload})
 }
@@ -448,8 +494,9 @@ func Run(addr string) {
 	}
 
 	srv := &server{
-		reg:  newRegistry(key, discovery),
-		path: path,
+		reg:    newRegistry(key, discovery),
+		social: newSocialState(),
+		path:   path,
 		upgrader: websocket.Upgrader{
 			ReadBufferSize:  4096,
 			WriteBufferSize: 4096,
