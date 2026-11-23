@@ -311,7 +311,15 @@ func Run() {
 	//   "catch-all wildcard '*any' in new path '/*any' conflicts with existing path segment 'api'"
 	// NoRoute 是 gin 官方给的兜底, 不占路由节点, 和静态路由任意顺序都共存。
 	// 行为不变: 没匹配到路由的请求同样交给 rootProxyHandler。
-	r.NoRoute(proxy.RootProxyHandler)
+	//
+	// 目标 host 白名单: 默认仅允许 *.sinaimg.com 与 ehgt.org（只放行本站实际要用的图床,
+	// 防止本代理被当成任意目标开放代理刷流量）。env PROXY_ALLOW_HOSTS 可覆盖（逗号分隔,
+	// "*" 表示放开任意 host）。
+	allowSpec := os.Getenv("PROXY_ALLOW_HOSTS")
+	if allowSpec == "" {
+		allowSpec = "*.sinaimg.com,ehgt.org"
+	}
+	r.NoRoute(proxy.RootProxyHandlerAllowHosts(proxy.ParseHostAllowlist(allowSpec)))
 
 	r.Run(os.Getenv("PROXY"))
 }

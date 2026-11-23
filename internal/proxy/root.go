@@ -30,6 +30,18 @@ type ProxyParams struct {
 // 其中 query 是目标 URL 的原始 query string，会被原样拼回上游请求；这样调用方可以把
 // 原始 URL 的全部 searchParams 都塞进 params（URL 上只留一个 params 参数）而仍逐字节还原原 URL。
 func RootProxyHandler(c *gin.Context) {
+	rootProxyHandler(c, nil)
+}
+
+// RootProxyHandlerAllowHosts 返回仅允许 allowlist 命中目标 host 的 root 代理 handler。
+// allowed 为 nil 时不限制（等同 RootProxyHandler）。
+func RootProxyHandlerAllowHosts(allowed *HostAllowlist) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		rootProxyHandler(c, allowed)
+	}
+}
+
+func rootProxyHandler(c *gin.Context, allowed *HostAllowlist) {
 	path := c.Request.URL.Path
 
 	// 解析 params 参数（URL-safe base64 编码的 JSON）
@@ -61,6 +73,12 @@ func RootProxyHandler(c *gin.Context) {
 		} else {
 			c.Redirect(http.StatusFound, "https://moonchan.xyz/")
 		}
+		return
+	}
+
+	// 目标 host 白名单：非白名单一律 403，防止本代理被当成任意目标开放代理刷流量。
+	if allowed != nil && !allowed.Match(host) {
+		c.String(http.StatusForbidden, "Proxy Error: target host %q is not allowed", host)
 		return
 	}
 
