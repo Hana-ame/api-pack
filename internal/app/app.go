@@ -58,9 +58,9 @@ func Run() {
 	debug.LogLevel = debug.Trace
 
 	// --- twimg/pbs 分流（本分支保留的模块）---
-	startIfEnv("TWIMG", func() { proxy.TwimgProxy(os.Getenv("TWIMG")) })         // 127.25.9.15:8080
+	// 只保留 TwimgProxyV2（pbs/twimg 图片 + video 特殊处理）；
+	// 旧版 TwimgProxy / PximgProxy 已随"其他模块"移除。
 	startIfEnv("TWIMG_V2", func() { proxy.TwimgProxyV2(os.Getenv("TWIMG_V2")) }) // 127.26.8.10:8080
-	startIfEnv("PXIMG", func() { proxy.PximgProxy(os.Getenv("PXIMG")) })         // 127.25.9.16:8080
 
 	// --- proxy.moonchan.xyz（root 代理）---
 	// 127.24.11.16:8080 (由 r.Run(os.Getenv("PROXY")) 监听)
