@@ -47,3 +47,16 @@ func TestHostAllowlistNil(t *testing.T) {
 		t.Error("空配置应返回 nil")
 	}
 }
+
+// TestHostAllowlistEmptyRejectsAll 锁定"默认拒绝一切"安全默认:
+// 空 allowlist（&HostAllowlist{}）必须不匹配任何 host, 而不是像 nil 那样放行。
+// 这是 app.go 里 PROXY_ALLOW_HOSTS 未配置时的默认行为。
+func TestHostAllowlistEmptyRejectsAll(t *testing.T) {
+	al := &HostAllowlist{}
+	cases := []string{"wx1.sinaimg.com", "ehgt.org", "github.com", "raw.githubusercontent.com", "evil.com", "localhost"}
+	for _, h := range cases {
+		if al.Match(h) {
+			t.Errorf("空 allowlist 应拒绝 %q, 却放行了", h)
+		}
+	}
+}

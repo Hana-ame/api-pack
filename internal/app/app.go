@@ -8,16 +8,7 @@ import (
 
 	_ "github.com/joho/godotenv/autoload"
 
-	"github.com/Hana-ame/api-pack/internal/exhentai"
-	"github.com/Hana-ame/api-pack/internal/exhentai/modify"
-	"github.com/Hana-ame/api-pack/internal/exhentai/stream"
 	"github.com/Hana-ame/api-pack/internal/proxy"
-	"github.com/Hana-ame/api-pack/internal/service/bilibili"
-	"github.com/Hana-ame/api-pack/internal/service/chatto"
-	"github.com/Hana-ame/api-pack/internal/service/ehviewer"
-	"github.com/Hana-ame/api-pack/internal/service/moonchan"
-	"github.com/Hana-ame/api-pack/internal/service/pmsignal"
-	"github.com/Hana-ame/api-pack/internal/service/qwen"
 	"github.com/Hana-ame/api-pack/pkg/debug"
 	middleware "github.com/Hana-ame/api-pack/pkg/ginutil/middleware"
 	tools "github.com/Hana-ame/api-pack/pkg/utils"
@@ -36,18 +27,17 @@ func localTCPAddrFromEnv() *net.TCPAddr {
 
 // startIfEnv 是所有「按 env 门控启动服务」的唯一入口：
 // env 非空则异步运行 fn（fn 内部自行读取实际监听地址）。
-// 重构前这里混用三种写法：os.Getenv(x)!=""、tools.HasEnv(x)、以及不开门控
-// 直接 go X.Run(os.Getenv(x)) 靠 Run 内部空地址兜底；统一成此函数。
 func startIfEnv(envKey string, fn func()) {
 	if tools.HasEnv(envKey) {
 		go fn()
 	}
 }
 
-// Run 装配并启动全部服务(原根 main 的职责)。
+// Run 装配并启动 proxy/twimg/pbs 分流服务（原根 main 的职责）。
+// 本分支只保留 proxy.moonchan.xyz（root 代理）与 twimg/pbs 分流，
+// 其余模块（LLM 反代、ehviewer、chatto、pmsignal、qwen、exhentai 等）全部移除。
 func Run() {
 
-	// 我不行了。
 	http.DefaultClient = &http.Client{
 		Transport: &http.Transport{
 			DialContext: (&net.Dialer{
@@ -67,244 +57,18 @@ func Run() {
 
 	debug.LogLevel = debug.Trace
 
-	// --- 固定监听地址、env 仅作开关 ---
-	startIfEnv("NYAA_PROXY", proxy.NyaaProxy)       // 127.25.23.4:8080
-	startIfEnv("SUKEBEI_PROXY", proxy.SukebeiProxy) // 127.25.23.5:8080
-
-	// --- OpenAI 兼容 / CORS 反代路由 ---
-	startIfEnv("GROQ_PROXY", func() {
-		proxy.RunProxyRouter(os.Getenv("GROQ_PROXY"), proxy.ProxyConfig{
-			Name:          "groq",
-			Endpoint:      "https://api.groq.com",
-			APIKey:        os.Getenv("GROQ_API_KEY"),
-			FreeModelsAll: true,
-			MaskedHeaders: []string{
-				"Authorization",
-				"X-Api-Key",
-				"Cookie",
-			},
-		})
-	})
-	startIfEnv("SILICONFLOW_PROXY", func() {
-		proxy.RunProxyRouter(os.Getenv("SILICONFLOW_PROXY"), proxy.ProxyConfig{
-			Name:     "siliconflow",
-			Endpoint: "https://api.siliconflow.cn",
-			APIKey:   os.Getenv("SILICONFLOW_API_KEY"),
-			FreeModels: map[string]bool{
-				"Qwen/Qwen3.5-4B":                         true,
-				"PaddlePaddle/PaddleOCR-VL-1.5":           true,
-				"deepseek-ai/DeepSeek-R1-Distill-Qwen-7B": true,
-				"THUDM/GLM-4.1V-9B-Thinking":              true,
-				"PaddlePaddle/PaddleOCR-VL":               true,
-				"deepseek-ai/DeepSeek-OCR":                true,
-				"Qwen/Qwen3-8B":                           true,
-				"tencent/Hunyuan-MT-7B":                   true,
-				"deepseek-ai/DeepSeek-R1-0528-Qwen3-8B":   true,
-				"THUDM/GLM-Z1-9B-0414":                    true,
-				"Qwen/Qwen2.5-7B-Instruct":                true,
-				"BAAI/bge-m3":                             true,
-				"BAAI/bge-reranker-v2-m3":                 true,
-				"THUDM/GLM-4-9B-0414":                     true,
-				"internlm/internlm2_5-7b-chat":            true,
-			},
-			MaskedHeaders: []string{
-				"Authorization",
-				"X-Api-Key",
-				"Cookie",
-			},
-		})
-	})
-	// Gemini (Google AI Studio / generativelanguage.googleapis.com) CORS 反代:
-	// 客户端不带头时按模型注入 GEMINI_API_KEY（AI Studio key）:
-	//   gemma-4-31b-it / gemma-4-26b-a4b-it 命中即注入, 其余模型走透传(客户端自带 Bearer)。
-	// Endpoint 不含 /v1beta, 客户端路径原样透传:
-	//   OpenAI 兼容  /v1beta/openai/chat/completions
-	//   原生 REST    /v1beta/models/<model>:generateContent
-	// 注: FreeModels 非空时的两个 400 副作用(属既有行为, 见 generic_proxy.go):
-	//   ① 非 JSON 请求体(GET /v1beta/openai/models) -> 400 "invalid JSON";
-	//   ② 原生 REST /v1beta/models/<m>:generateContent(model 在 URL 不在 body) -> 400
-	//      "model field is required"。本代理请走 OpenAI 兼容路径 /v1beta/openai/。
-	// DropBodyKeys: Google 严格 OpenAI 兼容端点拒绝 OpenAI 专有字段(实测
-	//   store/stream_options -> 400 "Unknown name"), 转发前剥掉顶层键。
-	startIfEnv("GEMINI_PROXY", func() {
-		proxy.RunProxyRouter(os.Getenv("GEMINI_PROXY"), proxy.ProxyConfig{
-			Name:     "gemini",
-			Endpoint: "https://generativelanguage.googleapis.com",
-			APIKey:   os.Getenv("GEMINI_API_KEY"),
-			FreeModels: map[string]bool{
-				"gemma-4-31b-it":     true,
-				"gemma-4-26b-a4b-it": true,
-			},
-			DropBodyKeys: []string{
-				"store",
-				"stream_options",
-			},
-			MaskedHeaders: []string{
-				"Authorization",
-				"X-Api-Key",
-				"Cookie",
-			},
-		})
-	})
-	// SenseNova 生图 API (token.sensenova.cn) CORS 转发:
-	// 只对 sensenova-u1.5-lite/u1-fast 两个模型在客户端未传 key 时注入 APIKey,
-	// 其他情况透传客户端的 Authorization (FreeModels 模式)。
-	startIfEnv("SENSENOVA_PROXY", func() {
-		proxy.RunProxyRouter(os.Getenv("SENSENOVA_PROXY"), proxy.ProxyConfig{
-			Name:     "sensenova",
-			Endpoint: "https://token.sensenova.cn",
-			APIKey:   os.Getenv("SENSENOVA_API_KEY"),
-			FreeModels: map[string]bool{
-				"sensenova-u1.5-lite":      true,
-				"sensenova-u1-fast":        true,
-				"sensenova-6.8-flash-lite": true,
-			},
-			Timeout: 180 * time.Second,
-			MaskedHeaders: []string{
-				"Authorization",
-				"X-Api-Key",
-				"Cookie",
-			},
-		})
-	})
-	// SCNet (api.scnet.cn) GLM 系列 OpenAI 兼容端点:
-	// 纯 CORS 透传反代(不注入 key,客户端自带 Bearer)。
-	// Endpoint 不含 /v1,客户端 /api/llm/v1/chat/completions 原样透传为
-	// https://api.scnet.cn/api/llm/v1/chat/completions。
-	startIfEnv("SCNET_PROXY", func() {
-		proxy.RunProxyRouter(os.Getenv("SCNET_PROXY"), proxy.ProxyConfig{
-			Name:     "scnet",
-			Endpoint: "https://api.scnet.cn",
-			Timeout:  180 * time.Second,
-			MaskedHeaders: []string{
-				"Authorization",
-				"X-Api-Key",
-				"Cookie",
-			},
-		})
-	})
-	// Xingyue (api.xingyueapi.com) OpenAI 兼容端点 CORS 反代:
-	// Endpoint 不含 /v1, 客户端 /v1/chat/completions 原样透传为
-	// https://api.xingyueapi.com/v1/chat/completions。
-	// env:
-	//   XINGYUE_PROXY            监听地址(启动开关)
-	//   XINGYUE_INBOUND_TOKEN    前置入站 auth 检查(单人自用)的正确入站 token;
-	//                            空 = fail-closed, xingyue 代理不启动
-	//   XINGYUE_MODEL_TOKENS     出站 model token 组, spec 格式 "<source>[#<jsonpath>]":
-	//                              /root/.secrets/xingyue-tokens.json#$.xingyue.tokens
-	//                              env://XINGYUE_MODEL_TOKENS_JSON#$.xingyue.tokens
-	//                            命中模型的请求上游 Authorization 被强制改写(组内轮转),
-	//                            文件形态 mtime/大小变化 5s 内热重载, 轮换 token 不重启。
-	startIfEnv("XINGYUE_PROXY", func() {
-		var tokens *proxy.ModelTokenTable
-		if spec := os.Getenv("XINGYUE_MODEL_TOKENS"); spec != "" {
-			t, err := proxy.NewModelTokenTable(spec)
-			if err != nil {
-				// 宁可不启动也不带错 key 上线: 只跳过本代理, 不影响进程内其他服务
-				debug.E("xingyue", "模型 token 表加载失败, xingyue 代理不启动: "+err.Error())
-				return
-			}
-			tokens = t
-			debug.I("xingyue", "模型 token 表就绪: "+t.Describe())
-		}
-		if os.Getenv("XINGYUE_INBOUND_TOKEN") == "" {
-			// fail-closed: 设了 XINGYUE_PROXY 但没给入站 token, 宁可不启动也不裸奔
-			debug.E("xingyue", "XINGYUE_INBOUND_TOKEN 未设置: xingyue 代理不启动(fail-closed)")
-			return
-		}
-		proxy.RunProxyRouter(os.Getenv("XINGYUE_PROXY"), proxy.ProxyConfig{
-			Name:         "xingyue",
-			Endpoint:     "https://api.xingyueapi.com",
-			Timeout:      180 * time.Second,
-			InboundToken: os.Getenv("XINGYUE_INBOUND_TOKEN"),
-			ModelTokens:  tokens,
-			MaskedHeaders: []string{
-				"Authorization",
-				"X-Api-Key",
-				"Cookie",
-			},
-		})
-	})
-	// Maomaoai (api.maomaoai.pro, New API 网关) OpenAI 兼容端点 CORS 反代:
-	// 与 xingyue 同款——单人入站门禁 + 按模型注入不同出站 token + token 表热重载。
-	// Endpoint 不含 /v1, 客户端 /v1/chat/completions 原样透传为
-	// https://api.maomaoai.pro/v1/chat/completions。
-	// env:
-	//   MAOMAOAI_PROXY            监听地址(启动开关)
-	//   MAOMAOAI_INBOUND_TOKEN    前置入站 auth 检查(单人自用)的正确入站 token;
-	//                             空 = fail-closed, maomaoai 代理不启动
-	//   MAOMAOAI_MODEL_TOKENS     出站 model token 组, spec 格式 "<source>[#<jsonpath>]":
-	//                               /root/.secrets/maomaoai-tokens.json#$.maomaoai.tokens
-	//                               env://MAOMAOAI_MODEL_TOKENS_JSON#$.maomaoai.tokens
-	//                             命中模型的请求上游 Authorization 被强制改写(组内轮转),
-	//                             文件形态 mtime/大小变化 5s 内热重载, 轮换 token 不重启。
-	startIfEnv("MAOMAOAI_PROXY", func() {
-		var tokens *proxy.ModelTokenTable
-		if spec := os.Getenv("MAOMAOAI_MODEL_TOKENS"); spec != "" {
-			t, err := proxy.NewModelTokenTable(spec)
-			if err != nil {
-				// 宁可不启动也不带错 key 上线: 只跳过本代理, 不影响进程内其他服务
-				debug.E("maomaoai", "模型 token 表加载失败, maomaoai 代理不启动: "+err.Error())
-				return
-			}
-			tokens = t
-			debug.I("maomaoai", "模型 token 表就绪: "+t.Describe())
-		}
-		if os.Getenv("MAOMAOAI_INBOUND_TOKEN") == "" {
-			// fail-closed: 设了 MAOMAOAI_PROXY 但没给入站 token, 宁可不启动也不裸奔
-			debug.E("maomaoai", "MAOMAOAI_INBOUND_TOKEN 未设置: maomaoai 代理不启动(fail-closed)")
-			return
-		}
-		proxy.RunProxyRouter(os.Getenv("MAOMAOAI_PROXY"), proxy.ProxyConfig{
-			Name:         "maomaoai",
-			Endpoint:     "https://api.maomaoai.pro",
-			Timeout:      180 * time.Second,
-			InboundToken: os.Getenv("MAOMAOAI_INBOUND_TOKEN"),
-			ModelTokens:  tokens,
-			MaskedHeaders: []string{
-				"Authorization",
-				"X-Api-Key",
-				"Cookie",
-			},
-		})
-	})
-
-	// ehviewer SPA (模仿 EHViewer 界面的 PWA 应用)
-	startIfEnv("EHVIEWER", func() { ehviewer.Run(os.Getenv("EHVIEWER")) }) // 127.26.10.9:8080
-
-	// --- 各业务服务，env 值即监听地址 ---
-	startIfEnv("SHIJIMA", func() { moonchan.Run(os.Getenv("SHIJIMA")) })     // 127.25.5.18:8080
-	startIfEnv("CHATTO_REG", func() { chatto.Run(os.Getenv("CHATTO_REG")) }) // 127.26.8.2:8080
-	// peer-message 自托管 PeerJS 信令：env 值即监听地址。
-	// 语义：同 Peer ID 新连接直接顶掉旧的；15s 无心跳即释放 ID（快速过期）。
-	startIfEnv("PM_SIGNAL", func() { pmsignal.Run(os.Getenv("PM_SIGNAL")) }) // 127.26.11.20:8080（生产 VPS；本地测试因 kb-server 占 *:8080，需改用非 8080 端口）
-
-	// go EhProxy() //127.25.23.6:8080
-	// go pastejson.Run(os.Getenv("PASTEJSON"), os.Getenv("PASTEJSON_CONN_STR")) // 127.25.9.10:8080
-
+	// --- twimg/pbs 分流（本分支保留的模块）---
 	startIfEnv("TWIMG", func() { proxy.TwimgProxy(os.Getenv("TWIMG")) })         // 127.25.9.15:8080
 	startIfEnv("TWIMG_V2", func() { proxy.TwimgProxyV2(os.Getenv("TWIMG_V2")) }) // 127.26.8.10:8080
 	startIfEnv("PXIMG", func() { proxy.PximgProxy(os.Getenv("PXIMG")) })         // 127.25.9.16:8080
 
-	startIfEnv("ECHO_JSON", proxy.EchoJSON) // 127.25.23.101:8080
-
-	startIfEnv("QWEN_PROXY", func() { qwen.Run(os.Getenv("QWEN_PROXY")) }) // 127.25.12.16:8080
-
-	startIfEnv("EX_PROXY", func() { exhentai.Run(os.Getenv("EX_PROXY")) })
-	startIfEnv("EX_STREAM", func() { stream.Run(os.Getenv("EX_STREAM")) })
-	startIfEnv("EX_MODIFY", func() { modify.Run(os.Getenv("EX_MODIFY")) }) // env: EXHENTAI_ENDPOINT
-
-	// proxy.moonchan.xyz
+	// --- proxy.moonchan.xyz（root 代理）---
 	// 127.24.11.16:8080 (由 r.Run(os.Getenv("PROXY")) 监听)
-	// 创建 Gin 引擎
 	r := gin.Default()
 
 	// 设置 CORS 头
 	r.Use(middleware.CORSMiddleware())
 	r.Use(middleware.ProxyMiddleware())
-
-	// 2. 路由处理函数
-	bilibili.Register(r) // /api/v2/bili 封面 + 页面
 
 	// 注意: 不能用 r.Any("/*any", ...)。gin 的 radix tree 不允许 root 级 catch-all
 	// 与任何静态路由共存, 两者顺序都会 panic:
@@ -312,14 +76,16 @@ func Run() {
 	// NoRoute 是 gin 官方给的兜底, 不占路由节点, 和静态路由任意顺序都共存。
 	// 行为不变: 没匹配到路由的请求同样交给 rootProxyHandler。
 	//
-	// 目标 host 白名单: 默认仅允许 *.sinaimg.com 与 ehgt.org（只放行本站实际要用的图床,
-	// 防止本代理被当成任意目标开放代理刷流量）。env PROXY_ALLOW_HOSTS 可覆盖（逗号分隔,
-	// "*" 表示放开任意 host）。
+	// 目标 host 白名单: 默认不允许任何 host（空 allowlist，拒绝一切），防止本代理被
+	// 当成任意目标开放代理刷流量。env PROXY_ALLOW_HOSTS 显式配置后按配置生效（逗号分隔,
+	// "*" 表示放开任意 host）。注意: 空/纯分隔符配置解析为 nil 在 Match 里等同不限制,
+	// 所以"默认拒绝一切"必须用非 nil 的空 allowlist, 不能依赖 ParseHostAllowlist("")。
 	allowSpec := os.Getenv("PROXY_ALLOW_HOSTS")
 	if allowSpec == "" {
-		allowSpec = "*.sinaimg.com,ehgt.org"
+		r.NoRoute(proxy.RootProxyHandlerAllowHosts(&proxy.HostAllowlist{}))
+	} else {
+		r.NoRoute(proxy.RootProxyHandlerAllowHosts(proxy.ParseHostAllowlist(allowSpec)))
 	}
-	r.NoRoute(proxy.RootProxyHandlerAllowHosts(proxy.ParseHostAllowlist(allowSpec)))
 
 	r.Run(os.Getenv("PROXY"))
 }
